@@ -11,24 +11,28 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { Armazem } = require('./armazem');
+// regras de navegação (o que fica na aba do jogo e nas janelas de login), com teste em regras.test.js
+const { DA_CONTA, DO_GOOGLE, permitido: permitidoNo } = require('./regras');
 
 const JOGO = process.env.LUPA_JOGO || 'https://lolidle.com/jogar';
+const ORIGEM_JOGO = new URL(JOGO).origin;
+const permitido = (url, atual) => permitidoNo(url, atual, ORIGEM_JOGO);
+// a sessão do Lupa Online (tokens) fica só no processo principal, com o envio.js: nenhuma página lê, grava ou recebe
+const PRIVADAS = new Set(['nuvem:sessao']);
+const semPrivadas = (o) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => !PRIVADAS.has(k)));
 const ALTURA_CASCA = 44, LARGURA_PAINEL = 380;
 const LUPA = path.join(__dirname, 'lupa');
 const ICONE = path.join(__dirname, 'icone.png');
-// páginas que o jogo abre numa janela e que precisam da mesma partição (login do Google, Twitch e Discord); o resto
-// vai para o navegador do sistema
-const DA_CONTA = /^https:\/\/((www\.)?lolidle\.com\/|accounts\.google\.com\/|id\.twitch\.tv\/|discord\.com\/(api\/)?oauth2\/)/;
-const DO_JOGO = /^https:\/\/((www\.)?lolidle\.com|accounts\.google\.com|[a-z0-9-]+\.google\.com|id\.twitch\.tv|discord\.com)\//;
 
 if (!app.requestSingleInstanceLock()) app.exit(0);
 app.setAppUserModelId('com.iguinhowill.lupa');
 Menu.setApplicationMenu(null);
 // a identificação vira a de um Chrome comum; nas páginas do Google (login), a de um Firefox: o Google recusa login em
-// Chromium embutido ("esse navegador ou app pode não ser seguro"), e o shim-jogo.js esconde o navigator.userAgentData
-const UA_CHROME = app.userAgentFallback.replace(/\s(Electron|lupa|Lupa)\/\S+/g, '');
+// Chromium embutido ("esse navegador ou app pode não ser seguro"). Aqui troca o cabeçalho; o shim-jogo.js faz o
+// JavaScript da página ver o mesmo Firefox
+const nomeNoUa = app.getName().replace(/[^\w.-]/g, '').replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
+const UA_CHROME = app.userAgentFallback.replace(new RegExp(`\\s(Electron|${nomeNoUa}|lupa|Lupa)\\/\\S+`, 'g'), '');
 const UA_FIREFOX = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0';
-const DO_GOOGLE = /^https:\/\/([a-z0-9-]+\.)*(google\.com|gstatic\.com|googleusercontent\.com)\//;
 app.userAgentFallback = UA_CHROME;
 
 let armazem, janela, casca, painel, central, mini = null;
@@ -40,6 +44,16 @@ const abas = [
 let pref = { ativa: 'conta1', painelAberto: true, nomes: {} };
 let atualizacao = { tipo: app.isPackaged ? 'procurando' : 'dev' };
 
+// aberto pelo Windows ao iniciar: vem com este argumento e começa minimizado (o mesmo args precisa ir no get e no set)
+const AO_INICIAR = ['--ao-iniciar'];
+const iniciaComWindows = () => app.isPackaged && app.getLoginItemSettings({ args: AO_INICIAR }).openAtLogin;
+// a 0.6.0 registrava sem o argumento: a entrada continua abrindo o app, mas sem ele a chave aparecia desligada e o app
+// não começava minimizado. Regrava com o argumento (mesmo nome de entrada, então substitui).
+function migrarInicio() {
+  if (app.isPackaged && app.getLoginItemSettings().executableWillLaunchAtLogin && !iniciaComWindows()) {
+    app.setLoginItemSettings({ openAtLogin: true, args: AO_INICIAR });
+  }
+}
 const prefs = (preload, extra = {}) => ({ preload, contextIsolation: true, sandbox: true, nodeIntegration: false, ...extra });
 const abaAtiva = () => abas.find((a) => a.id === pref.ativa) || abas[0];
 const abaDe = (wc) => abas.find((a) => a.view?.webContents === wc);
@@ -104,24 +118,57 @@ function mostrarJanela() {
 function criarJogo(a) {
   const ses = session.fromPartition(a.particao);
   ses.setPermissionRequestHandler((_wc, perm, ok) => ok(['notifications', 'fullscreen', 'clipboard-sanitized-write'].includes(perm)));
-  ses.webRequest.onBeforeSendHeaders({ urls: ['https://*.google.com/*', 'https://*.gstatic.com/*', 'https://*.googleusercontent.com/*'] }, (d, cb) => {
+  ses.webRequest.onBeforeSendHeaders({ urls: ['https://*.google.com/*', 'https://*.google.com.br/*', 'https://*.gstatic.com/*', 'https://*.googleusercontent.com/*', 'https://*.youtube.com/*'] }, (d, cb) => {
     const cab = { ...d.requestHeaders, 'User-Agent': UA_FIREFOX };
     for (const k of Object.keys(cab)) if (/^sec-ch-ua/i.test(k)) delete cab[k];
     cb({ requestHeaders: cab });
   });
   a.view = new WebContentsView({ webPreferences: prefs(path.join(__dirname, 'gerado', 'preload-jogo.js'), { partition: a.particao }) });
   const wc = a.view.webContents;
-  wc.on('did-start-navigation', (d) => { if (d.isMainFrame) wc.setUserAgent(DO_GOOGLE.test(d.url) ? UA_FIREFOX : UA_CHROME); });
+  proteger(wc);
   const tema = fs.readFileSync(path.join(LUPA, 'tema.css'), 'utf8');
   wc.on('dom-ready', () => { if (/^https?:\/\/((www\.)?lolidle\.com|127\.0\.0\.1|localhost)[:/]/.test(wc.getURL())) wc.insertCSS(tema).catch(() => {}); });
-  wc.setWindowOpenHandler(({ url }) => {
-    if (DA_CONTA.test(url)) return { action: 'allow', overrideBrowserWindowOptions: { width: 560, height: 760, autoHideMenuBar: true, icon: ICONE } };
-    if (/^https?:\/\//.test(url)) shell.openExternal(url);
-    return { action: 'deny' };
-  });
-  wc.on('will-navigate', (e, url) => { if (!DO_JOGO.test(url) && !url.startsWith(JOGO.replace(/\/jogar$/, ''))) { e.preventDefault(); shell.openExternal(url); } });
   wc.loadURL(JOGO);
   janela.contentView.addChildView(a.view);
+}
+
+const externo = (url) => { if (/^https?:\/\//.test(url)) shell.openExternal(url); };
+const janelasDeLogin = new WeakSet();
+// Vale para a aba do jogo e para cada janela de login que ela abre (as duas sem barra de endereço): só o jogo e os
+// logins; o resto abre no navegador do sistema (origem exata: "lolidle.com.outro.site" não passa). Todo link e todo
+// redirecionamento é conferido, porque um redirecionamento aberto (google.com/url?q=, OAuth com client_id de outro)
+// levaria qualquer página para dentro dela. Entre páginas de login o salto segue (NO_LOGIN, no regras.js); um login
+// corporativo com provedor de fora não funciona aqui dentro e abre no navegador.
+function proteger(wc, inicial = '') {
+  // `salto` é o endereço atual da navegação, inclusive no meio de uma cadeia de redirecionamentos. O User-Agent só troca
+  // quando a navegação começa (o "Tentar novamente" do Google); o "Entrar com Google" chega por redirecionamento, e aí
+  // quem garante o Firefox é o cabeçalho (onBeforeSendHeaders) e o shim-jogo.js. Não trocar no did-redirect-navigation:
+  // o setUserAgent no meio do redirecionamento trava o processo principal (Electron 44)
+  let salto = inicial;      // a janela de login aberta com ctrl/clique do meio já começa a carregar antes de chegar aqui
+  wc.on('did-start-navigation', (d) => {
+    if (!d.isMainFrame) return;
+    if (!d.isSameDocument) salto = d.url;      // pushState/hash não é salto de cadeia nenhuma
+    wc.setUserAgent(DO_GOOGLE.test(d.url) ? UA_FIREFOX : UA_CHROME);
+  });
+  wc.on('did-redirect-navigation', (d) => { if (d.isMainFrame) salto = d.url; });      // só guarda
+  const barrar = (e) => {
+    e.preventDefault();
+    externo(e.url);
+    // janela de login que nem chegou a mostrar nada: fecha em vez de ficar em branco
+    if (janelasDeLogin.has(wc) && !wc.getURL()) setImmediate(() => BrowserWindow.fromWebContents(wc)?.close());
+  };
+  wc.on('will-navigate', (e) => { if (e.isMainFrame && !permitido(e.url, wc.getURL())) barrar(e); });
+  wc.on('will-redirect', (e) => { if (e.isMainFrame && !permitido(e.url, salto)) barrar(e); });
+  // o login que o jogo abre numa janela fica na mesma partição (a sessão volta para a conta) e ganha as mesmas regras;
+  // uma janela de login não abre outra: vai para o navegador
+  wc.setWindowOpenHandler(({ url }) => {
+    if (DA_CONTA.test(url) && !janelasDeLogin.has(wc)) {
+      return { action: 'allow', overrideBrowserWindowOptions: { width: 560, height: 760, autoHideMenuBar: true, icon: ICONE } };
+    }
+    externo(url);
+    return { action: 'deny' };
+  });
+  wc.on('did-create-window', (filha, { url }) => { janelasDeLogin.add(filha.webContents); proteger(filha.webContents, url); });
 }
 
 function criarJanela() {
@@ -141,11 +188,12 @@ function criarJanela() {
   abas.find((a) => a.id === 'central').view = central;
   janela.contentView.addChildView(painel);
   janela.contentView.addChildView(central);
-  for (const v of [casca, painel, central]) v.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+  for (const v of [casca, painel, central]) v.webContents.setWindowOpenHandler(({ url }) => { externo(url); return { action: 'deny' }; });
   janela.on('resize', arrumar);
   janela.on('closed', () => { janela = null; app.quit(); });
   arrumar();
-  janela.show();
+  if (process.argv.includes(AO_INICIAR[0])) janela.minimize();      // oculta, já aparece direto minimizada
+  else janela.show();
 }
 
 // a aba ativa ocupa a área abaixo da casca; num jogo, o painel da Lupa fica à direita
@@ -194,7 +242,7 @@ function rotulo(a) {
 const estadoCasca = () => ({
   abas: abas.map((a) => ({ id: a.id, tipo: a.tipo, rotulo: rotulo(a) })),
   ativa: pref.ativa, painelAberto: pref.painelAberto, versao: app.getVersion(), atualizacao,
-  iniciarComWindows: app.isPackaged && app.getLoginItemSettings().openAtLogin
+  instalado: app.isPackaged, iniciarComWindows: iniciaComWindows()
 });
 function avisarCasca() { if (casca && !casca.webContents.isDestroyed()) casca.webContents.send('casca:mudou', estadoCasca()); }
 
@@ -221,14 +269,16 @@ function atualizar() {
 // ---------- IPC (ver ARQUITETURA.md) ----------
 let envio;
 function ligarIpc() {
-  ipcMain.handle('armazem:get', (_e, c) => armazem.get(c));
+  ipcMain.on('lupa:uaFirefox', (e) => { e.returnValue = UA_FIREFOX; });      // síncrono: o preload das páginas do Google
+  ipcMain.handle('armazem:get', (_e, c) => semPrivadas(armazem.get(c)));
   ipcMain.handle('armazem:set', (e, obj) => {
+    obj = semPrivadas(obj);
     // a primeira ficha lida numa aba diz de quem é a conta
-    const a = abaDe(e.sender), nome = a && Object.keys(obj || {}).find((k) => k.startsWith('estado:'))?.slice(7);
+    const a = abaDe(e.sender), nome = a && Object.keys(obj).find((k) => k.startsWith('estado:'))?.slice(7);
     if (nome && pref.nomes[a.id] !== nome) { pref.nomes[a.id] = nome; salvarPref(); avisarCasca(); if (a === abaAtiva()) escolherNoPainel(); }
     armazem.set(obj);
   });
-  ipcMain.handle('armazem:remove', (_e, c) => armazem.remove(c));
+  ipcMain.handle('armazem:remove', (_e, c) => armazem.remove([].concat(c || []).filter((k) => !PRIVADAS.has(k))));
   ipcMain.handle('lupa:mensagem', (e, msg) => {
     if (msg?.tipo === 'ola') return undefined;
     if (msg?.tipo === 'aviso') { avisar(msg, abaDe(e.sender)); return undefined; }
@@ -238,7 +288,7 @@ function ligarIpc() {
     const u = String(url || '');
     if (/central\.html#mini$/.test(u)) abrirMini();
     else if (/^file:.*central\.html(#.*)?$/.test(u)) { ativar('central'); mostrarJanela(); }
-    else if (/^https?:\/\//.test(u)) shell.openExternal(u);
+    else externo(u);
   });
   ipcMain.handle('casca:estado', () => estadoCasca());
   ipcMain.handle('casca:ativar', (_e, id) => ativar(id));
@@ -246,14 +296,17 @@ function ligarIpc() {
   ipcMain.handle('casca:recarregar', () => { const a = abaAtiva(); if (a.tipo === 'jogo') a.view.webContents.reload(); });
   ipcMain.handle('casca:procurar', () => procurar());
   ipcMain.handle('casca:atualizar', () => atualizar());
-  ipcMain.handle('casca:iniciarComWindows', (_e, sim) => { if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!sim }); avisarCasca(); });
+  ipcMain.handle('casca:iniciarComWindows', (_e, sim) => { if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!sim, args: AO_INICIAR }); avisarCasca(); });
 
   // cada mudança do armazém vai para o envio.js e para as páginas da Lupa (jogos, painel, Central, mini)
   armazem.on('mudou', (mud) => {
     for (const fn of ouvintesMud) { try { fn(mud, 'local'); } catch {} }
-    const alvos = [...abas.map((a) => a.view), painel].map((v) => v?.webContents);
-    if (mini && !mini.isDestroyed()) alvos.push(mini.webContents);
-    for (const wc of alvos) if (wc && !wc.isDestroyed()) wc.send('armazem:mudou', mud);
+    const pub = semPrivadas(mud);
+    if (Object.keys(pub).length) {
+      const alvos = [...abas.map((a) => a.view), painel].map((v) => v?.webContents);
+      if (mini && !mini.isDestroyed()) alvos.push(mini.webContents);
+      for (const wc of alvos) if (wc && !wc.isDestroyed()) wc.send('armazem:mudou', pub);
+    }
     if ('config' in mud) aplicarAcordado();
   });
 }
@@ -266,6 +319,7 @@ app.whenReady().then(() => {
   armazem = new Armazem(path.join(app.getPath('userData'), 'lupa-dados.json'));
   pref = { ...pref, ...(armazem.get('app:pref')['app:pref'] || {}) };
   ligarIpc();
+  migrarInicio();
   envio = iniciarEnvio();
   criarJanela();
   aplicarAcordado();

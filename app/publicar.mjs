@@ -27,7 +27,8 @@ if (faltando.length) {
   falhar(`faltam arquivos para a versão ${versao}:\n  ${faltando.join('\n  ')}\nRode "npm run dist" antes.`);
 }
 const yml = readFileSync(arquivos[2], 'utf8');
-if (!new RegExp(`^version:\s*['"]?${versao.replace(/\./g, '\.')}['"]?\s*$`, 'm').test(yml)) {
+// comparação por linha (numa RegExp montada com template string, o "\s" e o "\." perdiam a barra)
+if (!yml.split(/\r?\n/).some((l) => l.replace(/['"\s]/g, '') === `version:${versao}`)) {
   falhar(`o latest.yml não cita a versão ${versao}. Rode "npm run dist" de novo.`);
 }
 console.log(`Conferido: versão ${versao}, instalador, blockmap e latest.yml presentes.`);
