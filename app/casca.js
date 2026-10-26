@@ -101,7 +101,7 @@
     elRecarregar.disabled = !jogo;
     elWindows.setAttribute('aria-pressed', String(!!estado.iniciarComWindows));
     // na versão de desenvolvimento (npm start) quem roda é o electron.exe da pasta: não dá para registrar no Windows
-    const instalado = estado.atualizacao?.tipo !== 'dev';
+    const instalado = !!estado.instalado;
     elWindows.disabled = !instalado;
     elWindows.title = instalado ? 'Abrir a Lupa minimizada quando o Windows iniciar' : 'Só funciona no app instalado (esta é a versão de desenvolvimento)';
     desenharAtualizacao();

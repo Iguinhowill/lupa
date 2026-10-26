@@ -34,6 +34,12 @@ const nomeNoUa = app.getName().replace(/[^\w.-]/g, '').replace(/[.*+?^${}()|[\]\
 const UA_CHROME = app.userAgentFallback.replace(new RegExp(`\\s(Electron|${nomeNoUa}|lupa|Lupa)\\/\\S+`, 'g'), '');
 const UA_FIREFOX = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0';
 const DO_GOOGLE = /^https:\/\/([a-z0-9-]+\.)*(google\.com(\.br)?|gstatic\.com|googleusercontent\.com|youtube\.com)\//;
+// a aba do jogo fica no jogo e nos logins; de uma página do Google, segue a cadeia do login (passa por youtube.com)
+function permitido(url, atual) {
+  let origem = '';
+  try { origem = new URL(url).origin; } catch {}
+  return DO_JOGO.test(url) || origem === ORIGEM_JOGO || (DO_GOOGLE.test(atual || '') && DO_GOOGLE.test(url));
+}
 app.userAgentFallback = UA_CHROME;
 
 let armazem, janela, casca, painel, central, mini = null;
@@ -48,6 +54,13 @@ let atualizacao = { tipo: app.isPackaged ? 'procurando' : 'dev' };
 // aberto pelo Windows ao iniciar: vem com este argumento e começa minimizado (o mesmo args precisa ir no get e no set)
 const AO_INICIAR = ['--ao-iniciar'];
 const iniciaComWindows = () => app.isPackaged && app.getLoginItemSettings({ args: AO_INICIAR }).openAtLogin;
+// a 0.6.0 registrava sem o argumento: a entrada continua abrindo o app, mas sem ele a chave aparecia desligada e o app
+// não começava minimizado. Regrava com o argumento (mesmo nome de entrada, então substitui).
+function migrarInicio() {
+  if (app.isPackaged && app.getLoginItemSettings().executableWillLaunchAtLogin && !iniciaComWindows()) {
+    app.setLoginItemSettings({ openAtLogin: true, args: AO_INICIAR });
+  }
+}
 const prefs = (preload, extra = {}) => ({ preload, contextIsolation: true, sandbox: true, nodeIntegration: false, ...extra });
 const abaAtiva = () => abas.find((a) => a.id === pref.ativa) || abas[0];
 const abaDe = (wc) => abas.find((a) => a.view?.webContents === wc);
@@ -130,14 +143,15 @@ function criarJogo(a) {
     if (/^https?:\/\//.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
-  // fora do jogo e dos logins, abre no navegador do sistema (origem exata: "lolidle.com.outro.site" não passa)
-  wc.on('will-navigate', (e, url) => {
-    let origem = '';
-    try { origem = new URL(url).origin; } catch {}
-    if (DO_JOGO.test(url) || origem === ORIGEM_JOGO) return;
+  // fora do jogo e dos logins, abre no navegador do sistema (origem exata: "lolidle.com.outro.site" não passa), seja
+  // um link na página (will-navigate) ou um redirecionamento do servidor (will-redirect)
+  const conferirDestino = (e) => {
+    if (!e.isMainFrame || permitido(e.url, wc.getURL())) return;
     e.preventDefault();
-    if (/^https?:\/\//.test(url)) shell.openExternal(url);
-  });
+    if (/^https?:\/\//.test(e.url)) shell.openExternal(e.url);
+  };
+  wc.on('will-navigate', conferirDestino);
+  wc.on('will-redirect', conferirDestino);
   wc.loadURL(JOGO);
   janela.contentView.addChildView(a.view);
 }
@@ -163,7 +177,7 @@ function criarJanela() {
   janela.on('resize', arrumar);
   janela.on('closed', () => { janela = null; app.quit(); });
   arrumar();
-  if (process.argv.includes(AO_INICIAR[0])) { janela.showInactive(); janela.minimize(); }
+  if (process.argv.includes(AO_INICIAR[0])) janela.minimize();      // oculta, já aparece direto minimizada
   else janela.show();
 }
 
@@ -213,7 +227,7 @@ function rotulo(a) {
 const estadoCasca = () => ({
   abas: abas.map((a) => ({ id: a.id, tipo: a.tipo, rotulo: rotulo(a) })),
   ativa: pref.ativa, painelAberto: pref.painelAberto, versao: app.getVersion(), atualizacao,
-  iniciarComWindows: iniciaComWindows()
+  instalado: app.isPackaged, iniciarComWindows: iniciaComWindows()
 });
 function avisarCasca() { if (casca && !casca.webContents.isDestroyed()) casca.webContents.send('casca:mudou', estadoCasca()); }
 
@@ -290,6 +304,7 @@ app.whenReady().then(() => {
   armazem = new Armazem(path.join(app.getPath('userData'), 'lupa-dados.json'));
   pref = { ...pref, ...(armazem.get('app:pref')['app:pref'] || {}) };
   ligarIpc();
+  migrarInicio();
   envio = iniciarEnvio();
   criarJanela();
   aplicarAcordado();

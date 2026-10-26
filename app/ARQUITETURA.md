@@ -28,8 +28,15 @@ pode dar `require('electron')` (ipcRenderer, contextBridge).
 `BaseWindow` com `WebContentsView`s:
 
 - **casca**: faixa no topo, 44 px de altura, largura toda (`casca.html`).
-- **jogo** (uma por conta, `conta1` e `conta2`): partição `persist:conta1`/`persist:conta2` (login separado),
-  `backgroundThrottling: false`, carrega `https://lolidle.com/jogar`. Ocupa a área abaixo da casca, menos o painel.
+- **jogo** (uma por conta, `conta1` e `conta2`): partição `persist:conta1`/`persist:conta2` (login separado), carrega
+  `https://lolidle.com/jogar`. Ocupa a área abaixo da casca, menos o painel. A economia de segundo plano do Chromium
+  fica ligada: o jogo caça escondido pelo relógio próprio dele, e o Mercado aberto atualiza ~1 vez por minuto.
+  A aba só navega na origem exata do jogo e nos logins (`will-navigate` e `will-redirect`); o resto abre no
+  navegador do sistema.
+- **login do Google**: o Google recusa login em Chromium embutido. Nas páginas do Google (e youtube.com, que entra
+  na cadeia do login) o app é um Firefox: o `main.js` troca o User-Agent e tira os cabeçalhos `sec-ch-ua*`, e o
+  `shim-jogo.js` faz o JavaScript da página ver o mesmo Firefox (sem `userAgentData` nem `window.chrome`), de forma
+  síncrona antes do primeiro script da página (`contextBridge.executeInMainWorld`, UA pelo canal `lupa:uaFirefox`).
 - **painel**: `lupa/painel.html`, 380 px à direita, aparece só na aba de um jogo e se `painelAberto`.
 - **central**: `lupa/central.html`, área toda abaixo da casca, só na aba Central.
 - **mini janela**: `BrowserWindow` 380×620 sempre por cima, `lupa/central.html#mini` (preload-lupa).
@@ -49,6 +56,9 @@ Armazém (todas as páginas com preload da Lupa e o shim do jogo):
 | `armazem:remove` | invoke | `string` ou `string[]` → `undefined` |
 | `armazem:mudou` | main → página | `{ [chave]: { oldValue, newValue } }` (área sempre `local`) |
 
+Chave privada: `nuvem:sessao` (os tokens do Lupa Online) só existe no processo principal, para o envio.js. O
+`armazem:get` não a devolve, o `armazem:set`/`remove` a ignoram e o `armazem:mudou` não a manda para nenhuma página.
+
 Lupa:
 
 | Canal | Tipo | Entrada → saída |
@@ -56,6 +66,7 @@ Lupa:
 | `lupa:mensagem` | invoke | o mesmo `msg` do `chrome.runtime.sendMessage` (`ola`, `aviso`, `nuvem-entrar`, `nuvem-sair`, `nuvem-enviar`) → a resposta do ouvinte |
 | `lupa:abrir` | invoke | `url`: termina em `central.html` → vai para a aba Central; `central.html#mini` → mini janela; `http(s)` de fora → navegador do sistema |
 | `lupa:escolher` | main → painel | `nome` do personagem da aba ativa (o painel passa a mostrar esse) |
+| `lupa:uaFirefox` | sendSync | → o User-Agent de Firefox (só o preload das páginas do Google usa) |
 
 Casca:
 
@@ -67,7 +78,7 @@ Casca:
 | `casca:recarregar` | invoke | recarrega o jogo da aba ativa |
 | `casca:procurar` | invoke | procura atualização agora |
 | `casca:atualizar` | invoke | `disponivel` → baixa; `pronta` → fecha, instala e abre de novo |
-| `casca:iniciarComWindows` | invoke | `boolean` |
+| `casca:iniciarComWindows` | invoke | `boolean`: registra no Windows com o argumento `--ao-iniciar`, que faz o app abrir minimizado. Só no app instalado (`instalado`); na versão de desenvolvimento a chave fica desabilitada. Na partida, uma entrada antiga sem o argumento (da 0.6.0) é regravada com ele |
 | `casca:mudou` | main → casca | `Estado` |
 
 ```
@@ -77,6 +88,7 @@ Estado = {
   painelAberto: boolean,
   versao: '0.6.0',
   atualizacao: { tipo: 'dev' | 'procurando' | 'em-dia' | 'disponivel' | 'baixando' | 'pronta' | 'erro', versao?, pct?, msg? },
+  instalado: boolean,          // app.isPackaged: false no npm start
   iniciarComWindows: boolean
 }
 ```
