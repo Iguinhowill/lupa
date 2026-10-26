@@ -1,0 +1,10 @@
+.playwright-mcp/
+node_modules/
+app/dist/
+app/lupa/
+app/gerado/
+site/dist/
+.vercel/
+.env*
+*.log
+Thumbs.db
