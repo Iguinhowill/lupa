@@ -20,12 +20,9 @@ const semPrivadas = (o) => Object.fromEntries(Object.entries(o || {}).filter(([k
 const ALTURA_CASCA = 44, LARGURA_PAINEL = 380;
 const LUPA = path.join(__dirname, 'lupa');
 const ICONE = path.join(__dirname, 'icone.png');
-// páginas que o jogo abre numa janela e que precisam da mesma partição (login do Google, Twitch e Discord); o resto
-// vai para o navegador do sistema
-const DA_CONTA = /^https:\/\/((www\.)?lolidle\.com\/|accounts\.google\.com\/|id\.twitch\.tv\/|discord\.com\/(api\/)?oauth2\/)/;
-// por link direto: o jogo e as portas de entrada dos logins. Do Google, só os subdomínios de conta (sites., docs. e
-// script.google.com hospedam páginas de terceiros); do Discord, só o OAuth e o login (não as páginas de convite)
-const DO_JOGO = /^https:\/\/((www\.)?lolidle\.com\/|(accounts|myaccount|gds)\.google\.com\/|id\.twitch\.tv\/|discord\.com\/((api\/)?oauth2|login)([/?#]|$))/;
+// regras de navegação (o que fica na aba do jogo e nas janelas de login), com teste em regras.test.js
+const { DA_CONTA, DO_GOOGLE, permitido: permitidoNo } = require('./regras');
+const permitido = (url, atual) => permitidoNo(url, atual, ORIGEM_JOGO);
 
 if (!app.requestSingleInstanceLock()) app.exit(0);
 app.setAppUserModelId('com.iguinhowill.lupa');
@@ -36,17 +33,6 @@ Menu.setApplicationMenu(null);
 const nomeNoUa = app.getName().replace(/[^\w.-]/g, '').replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
 const UA_CHROME = app.userAgentFallback.replace(new RegExp(`\\s(Electron|${nomeNoUa}|lupa|Lupa)\\/\\S+`, 'g'), '');
 const UA_FIREFOX = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0';
-const DO_GOOGLE = /^https:\/\/([a-z0-9-]+\.)*(google\.com(\.br)?|gstatic\.com|googleusercontent\.com|youtube\.com)\//;
-// páginas de login entre as quais um login anda sozinho (o do Google passa pelo accounts.youtube.com; a Twitch manda
-// para a página de login dela e volta pelo passport-callback); só as de conta, não o youtube.com, o googleusercontent.com
-// ou a Twitch inteiros. Limitação aceita: a partir do /login, o site da Twitch troca de página por pushState, que não
-// passa por aqui
-const NO_LOGIN = /^https:\/\/((accounts|myaccount|gds)\.google\.com(\.br)?\/|accounts\.youtube\.com\/|(id|passport)\.twitch\.tv\/|www\.twitch\.tv\/(login|passport-callback)([/?#]|$)|discord\.com\/((api\/)?oauth2|login)([/?#]|$))/;
-const origemDe = (url) => { try { return new URL(url).origin; } catch { return ''; } };
-// a aba do jogo fica no jogo e nos logins; de uma página de login, pode seguir para outra página de login
-function permitido(url, atual) {
-  return DO_JOGO.test(url) || origemDe(url) === ORIGEM_JOGO || (NO_LOGIN.test(atual || '') && NO_LOGIN.test(url));
-}
 app.userAgentFallback = UA_CHROME;
 
 let armazem, janela, casca, painel, central, mini = null;
@@ -153,12 +139,12 @@ const janelasDeLogin = new WeakSet();
 // redirecionamento é conferido, porque um redirecionamento aberto (google.com/url?q=, OAuth com client_id de outro)
 // levaria qualquer página para dentro dela. Entre páginas de login o salto segue (NO_LOGIN); um login corporativo com
 // provedor de fora não funciona aqui dentro e abre no navegador.
-function proteger(wc) {
+function proteger(wc, inicial = '') {
   // `salto` é o endereço atual da navegação, inclusive no meio de uma cadeia de redirecionamentos. O User-Agent só troca
   // quando a navegação começa (o "Tentar novamente" do Google); o "Entrar com Google" chega por redirecionamento, e aí
   // quem garante o Firefox é o cabeçalho (onBeforeSendHeaders) e o shim-jogo.js. Não trocar no did-redirect-navigation:
   // o setUserAgent no meio do redirecionamento trava o processo principal (Electron 44)
-  let salto = '';
+  let salto = inicial;      // a janela de login aberta com ctrl/clique do meio já começa a carregar antes de chegar aqui
   wc.on('did-start-navigation', (d) => {
     if (!d.isMainFrame) return;
     if (!d.isSameDocument) salto = d.url;      // pushState/hash não é salto de cadeia nenhuma
@@ -182,7 +168,7 @@ function proteger(wc) {
     externo(url);
     return { action: 'deny' };
   });
-  wc.on('did-create-window', (filha) => { janelasDeLogin.add(filha.webContents); proteger(filha.webContents); });
+  wc.on('did-create-window', (filha, { url }) => { janelasDeLogin.add(filha.webContents); proteger(filha.webContents, url); });
 }
 
 function criarJanela() {
@@ -202,7 +188,7 @@ function criarJanela() {
   abas.find((a) => a.id === 'central').view = central;
   janela.contentView.addChildView(painel);
   janela.contentView.addChildView(central);
-  for (const v of [casca, painel, central]) v.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//.test(url)) shell.openExternal(url); return { action: 'deny' }; });
+  for (const v of [casca, painel, central]) v.webContents.setWindowOpenHandler(({ url }) => { externo(url); return { action: 'deny' }; });
   janela.on('resize', arrumar);
   janela.on('closed', () => { janela = null; app.quit(); });
   arrumar();
@@ -302,7 +288,7 @@ function ligarIpc() {
     const u = String(url || '');
     if (/central\.html#mini$/.test(u)) abrirMini();
     else if (/^file:.*central\.html(#.*)?$/.test(u)) { ativar('central'); mostrarJanela(); }
-    else if (/^https?:\/\//.test(u)) shell.openExternal(u);
+    else externo(u);
   });
   ipcMain.handle('casca:estado', () => estadoCasca());
   ipcMain.handle('casca:ativar', (_e, id) => ativar(id));
