@@ -23,7 +23,9 @@ const ICONE = path.join(__dirname, 'icone.png');
 // páginas que o jogo abre numa janela e que precisam da mesma partição (login do Google, Twitch e Discord); o resto
 // vai para o navegador do sistema
 const DA_CONTA = /^https:\/\/((www\.)?lolidle\.com\/|accounts\.google\.com\/|id\.twitch\.tv\/|discord\.com\/(api\/)?oauth2\/)/;
-const DO_JOGO = /^https:\/\/((www\.)?lolidle\.com|accounts\.google\.com|[a-z0-9-]+\.google\.com|id\.twitch\.tv|discord\.com)\//;
+// subdomínios de conta do Google (accounts, myaccount, gds...), menos o www: o google.com/url?q= redireciona para qualquer
+// lugar
+const DO_JOGO = /^https:\/\/((www\.)?lolidle\.com|(?!www\.)[a-z0-9-]+\.google\.com|id\.twitch\.tv|discord\.com)\//;
 
 if (!app.requestSingleInstanceLock()) app.exit(0);
 app.setAppUserModelId('com.iguinhowill.lupa');
@@ -37,7 +39,7 @@ const UA_FIREFOX = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20
 const DO_GOOGLE = /^https:\/\/([a-z0-9-]+\.)*(google\.com(\.br)?|gstatic\.com|googleusercontent\.com|youtube\.com)\//;
 // páginas de login entre as quais um login anda sozinho (o do Google passa pelo accounts.youtube.com; a Twitch manda
 // para a página de login dela); só as de conta, não o youtube.com ou o googleusercontent.com inteiros
-const NO_LOGIN = /^https:\/\/((accounts|myaccount)\.google\.com(\.br)?|accounts\.youtube\.com|([a-z0-9-]+\.)?twitch\.tv|discord\.com)\//;
+const NO_LOGIN = /^https:\/\/((accounts|myaccount|gds)\.google\.com(\.br)?|accounts\.youtube\.com|(id|www)\.twitch\.tv|discord\.com)\//;
 const origemDe = (url) => { try { return new URL(url).origin; } catch { return ''; } };
 // a aba do jogo fica no jogo e nos logins; de uma página de login, pode seguir para outra página de login
 function permitido(url, atual) {
@@ -149,12 +151,13 @@ function criarJogo(a) {
     if (/^https?:\/\//.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
-  // fora do jogo e dos logins, abre no navegador do sistema (origem exata: "lolidle.com.outro.site" não passa).
-  // Um link na página é sempre conferido; um redirecionamento, só quando quem o manda é o servidor do jogo (o risco é o
-  // lolidle.com mandar a aba para fora). Os saltos dados pelos servidores de login seguem, como num navegador.
+  // fora do jogo e dos logins, abre no navegador do sistema (origem exata: "lolidle.com.outro.site" não passa). Todo
+  // link e todo redirecionamento é conferido: a aba não tem barra de endereço, e um redirecionamento aberto (o
+  // google.com/url?q=, por exemplo) levaria qualquer página para dentro dela. Entre páginas de login o salto segue
+  // (NO_LOGIN); um login corporativo com provedor de fora não funciona aqui dentro e abre no navegador.
   const barrar = (e) => { e.preventDefault(); if (/^https?:\/\//.test(e.url)) shell.openExternal(e.url); };
   wc.on('will-navigate', (e) => { if (e.isMainFrame && !permitido(e.url, wc.getURL())) barrar(e); });
-  wc.on('will-redirect', (e) => { if (e.isMainFrame && origemDe(salto) === ORIGEM_JOGO && !permitido(e.url, salto)) barrar(e); });
+  wc.on('will-redirect', (e) => { if (e.isMainFrame && !permitido(e.url, salto)) barrar(e); });
   wc.loadURL(JOGO);
   janela.contentView.addChildView(a.view);
 }

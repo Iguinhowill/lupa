@@ -31,9 +31,11 @@ pode dar `require('electron')` (ipcRenderer, contextBridge).
 - **jogo** (uma por conta, `conta1` e `conta2`): partição `persist:conta1`/`persist:conta2` (login separado), carrega
   `https://lolidle.com/jogar`. Ocupa a área abaixo da casca, menos o painel. A economia de segundo plano do Chromium
   fica ligada: o jogo caça escondido pelo relógio próprio dele, e o Mercado aberto atualiza ~1 vez por minuto.
-  A aba só navega na origem exata do jogo e nos logins; o resto abre no navegador do sistema. Links da página
-  (`will-navigate`) são sempre conferidos; redirecionamentos (`will-redirect`), só os que o servidor do jogo manda —
-  os saltos dados pelos servidores de login (Google, Twitch, Discord) seguem, como num navegador.
+  A aba só navega na origem exata do jogo e nos logins; o resto abre no navegador do sistema. Todo link
+  (`will-navigate`) e todo redirecionamento (`will-redirect`) é conferido, contra o endereço atual da cadeia: a aba
+  não tem barra de endereço, e um redirecionamento aberto levaria qualquer página para dentro dela. Entre páginas de
+  login (`NO_LOGIN`: contas do Google, accounts.youtube.com, Twitch, Discord) o salto segue. Login corporativo com
+  provedor de fora (SSO de empresa no Google) não funciona na aba: abre no navegador.
 - **login do Google**: o Google recusa login em Chromium embutido. Nas páginas do Google (e youtube.com, que entra
   na cadeia do login) o app é um Firefox: o `main.js` troca o User-Agent e tira os cabeçalhos `sec-ch-ua*`, e o
   `shim-jogo.js` faz o JavaScript da página ver o mesmo Firefox (sem `userAgentData` nem `window.chrome`), de forma
