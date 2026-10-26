@@ -1,0 +1,189 @@
+/* Lupa · tema da lateral do LoL Idle
+   Só aparência: recolore os painéis e botões do próprio jogo, que continuam funcionando igual.
+   Nada aqui vale sem as classes que o painel liga em <html> (lupa-tema, lupa-sem-bonus, lupa-sem-redes). */
+
+html.lupa-tema #lateral {
+  --painel: #161922;
+  --painel-2: #1d212c;
+  --luz: #2a303d;
+  --sombra: #08090c;
+  --texto: #e7e9ee;
+  --fraco: #a3aab7;
+  --latao: #e0b05a;
+  --latao-claro: #f3d08a;
+  --latao-escuro: #2a303d;
+  --lupa-cartao: #1d212c;
+  --lupa-borda: #2a303d;
+  --lupa-borda-forte: #3d4556;
+  --lupa-fonte: "Segoe UI", system-ui, sans-serif;
+  font-family: var(--lupa-fonte);
+}
+
+/* ---------- painéis ---------- */
+html.lupa-tema #lateral .painel {
+  background: #161922 !important;
+  border: 1px solid var(--lupa-borda) !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
+}
+html.lupa-tema #lateral .painel > header {
+  background: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  border-bottom: 1px solid var(--lupa-borda) !important;
+  font-family: var(--lupa-fonte) !important;
+  color: var(--texto) !important;
+}
+html.lupa-tema #lateral #painel-local > header,
+html.lupa-tema #lateral #direita > .aba-conteudo > header,
+html.lupa-tema #lateral #direita .rotulo {
+  font-size: 11.5px !important;
+  font-weight: 600 !important;
+  letter-spacing: .1em !important;
+  text-transform: uppercase;
+  color: var(--fraco) !important;
+}
+html.lupa-tema #lateral #st-nome { font-family: var(--lupa-fonte) !important; font-weight: 700 !important; font-size: 16px !important; text-shadow: none !important; color: var(--texto) !important; }
+
+/* ---------- botões do jogo (menos os de item e habilidade, que têm arte própria) ---------- */
+html.lupa-tema #lateral :is(.botao, #cartao-redes > button, #controle-som button, #controle-som .seletor-idioma button, #painel-status > header button, #st-guilda, #buff-twitch, #buff-kick, #buff-voto, #buff-guilda, #buff-barao, #buff-disciplina, .ficha-ouro, .ficha-dia, .ficha-gemas, .ficha-poder, .rastreio) {
+  background: var(--lupa-cartao) !important;
+  background-image: none !important;
+  border: 1px solid var(--lupa-borda) !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  color: var(--texto) !important;
+  font-family: var(--lupa-fonte) !important;
+  clip-path: none !important;
+  filter: none !important;
+}
+html.lupa-tema #lateral :is(.botao, #cartao-redes > button, #controle-som button, #painel-status > header button, #st-guilda, #buff-twitch, #buff-kick, #buff-guilda):hover {
+  border-color: var(--lupa-borda-forte) !important;
+  background: #232836 !important;
+}
+html.lupa-tema #lateral :is(.botao, #cartao-redes > button, #painel-status > header button, #buff-twitch, #buff-kick, #buff-voto, #buff-guilda, #st-guilda)::before,
+html.lupa-tema #lateral :is(.botao, #cartao-redes > button, #painel-status > header button, #buff-twitch, #buff-kick, #buff-voto, #buff-guilda, #st-guilda)::after {
+  display: none !important;
+}
+html.lupa-tema #lateral .botao { font-size: 13px !important; font-weight: 600 !important; }
+html.lupa-tema #lateral .botao .tecla { background: #2b3140 !important; color: var(--latao-claro) !important; border: 0 !important; box-shadow: none !important; border-radius: 4px; }
+
+/* os 4 botões grandes do Local: cartões escuros com o ícone do jogo à esquerda */
+html.lupa-tema #lateral .local-grandes > .botao-hex { min-height: 44px !important; }
+html.lupa-tema #lateral .local-grandes > .botao-hex .rot { font-family: var(--lupa-fonte) !important; font-size: 13.5px !important; font-weight: 600 !important; text-shadow: none !important; color: var(--texto) !important; }
+html.lupa-tema #lateral .local-grandes > .botao-hex:hover .rot { color: var(--latao-claro) !important; }
+
+/* faixa Discord/Twitch/Kick/Voto: fundo neutro, a cor da marca só no texto */
+html.lupa-tema #lateral #cartao-redes > button span { color: var(--texto) !important; font-weight: 600; }
+html.lupa-tema #lateral #cartao-redes > button em {
+  background: none !important; border: 0 !important; box-shadow: none !important; text-shadow: none !important;
+  font-style: normal; font-weight: 600; font-family: var(--lupa-fonte) !important;
+}
+html.lupa-tema #lateral #abrir-discord em { color: #a9b4ff !important; }
+html.lupa-tema #lateral #abrir-twitch em { color: #c9a7ff !important; }
+html.lupa-tema #lateral #abrir-kick em { color: #7fe07f !important; }
+html.lupa-tema #lateral #abrir-voto em { color: var(--latao-claro) !important; }
+
+/* bônus ativos: linhas discretas, valor em dourado */
+html.lupa-tema #lateral :is(#buff-twitch, #buff-kick, #buff-voto, #buff-guilda, #buff-barao, #buff-disciplina) {
+  font-size: 13px !important; font-weight: 500 !important; color: var(--fraco) !important; padding: 4px 10px !important;
+}
+html.lupa-tema #lateral :is(#buff-twitch, #buff-kick, #buff-voto, #buff-guilda, #buff-barao, #buff-disciplina) b { color: var(--latao-claro) !important; text-shadow: none !important; }
+
+/* ouro, diamantes, gemas e poder */
+html.lupa-tema #lateral .ficha-ouro b, html.lupa-tema #lateral .ficha-poder b { color: var(--latao-claro) !important; text-shadow: none !important; font-family: var(--lupa-fonte) !important; }
+html.lupa-tema #lateral :is(.ficha-dia, .ficha-gemas) :is(b, small) { text-shadow: none !important; font-family: var(--lupa-fonte) !important; }
+
+/* ---------- abas de baixo e chat ---------- */
+html.lupa-tema #lateral #direita > .abas button,
+html.lupa-tema #lateral #console .aba {
+  background: transparent !important;
+  border: 0 !important;
+  border-bottom: 2px solid transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+  color: var(--fraco) !important;
+  font-family: var(--lupa-fonte) !important;
+  font-weight: 600 !important;
+}
+html.lupa-tema #lateral #direita > .abas button.ativa,
+html.lupa-tema #lateral #console .aba[aria-selected="true"],
+html.lupa-tema #lateral #console .aba.ativa {
+  color: var(--latao-claro) !important;
+  border-bottom-color: var(--latao) !important;
+}
+html.lupa-tema #lateral #direita > .abas { border-bottom: 1px solid var(--lupa-borda) !important; }
+html.lupa-tema #lateral #direita > .aba-conteudo,
+html.lupa-tema #lateral #console .canal {
+  background: #161922 !important;
+  background-image: none !important;
+  border-color: var(--lupa-borda) !important;
+  box-shadow: none !important;
+}
+html.lupa-tema #lateral #console .canal { font-family: var(--lupa-fonte) !important; font-size: 13px !important; }
+
+html.lupa-tema #lateral #direita > .abas button { font-size: 12.5px !important; }
+html.lupa-tema #lateral #console .aba { font-size: 13px !important; padding-top: 6px !important; padding-bottom: 6px !important; }
+
+/* nome do local, poder dos itens e topo da mochila */
+html.lupa-tema #lateral #local-nome { font-family: var(--lupa-fonte) !important; font-size: 14px !important; font-weight: 600 !important; text-shadow: none !important; }
+html.lupa-tema #lateral #direita > .aba-conteudo > header small { text-transform: none; letter-spacing: 0; font-weight: 400; }
+html.lupa-tema #lateral .equip-moldura { background: none !important; background-image: none !important; box-shadow: none !important; border: 0 !important; }
+html.lupa-tema #lateral .equip-poder {
+  background: var(--lupa-cartao) !important; border: 1px solid var(--lupa-borda) !important; border-radius: 8px !important; box-shadow: none !important;
+}
+html.lupa-tema #lateral .equip-poder span { font: 600 13px var(--lupa-fonte) !important; color: var(--fraco) !important; }
+html.lupa-tema #lateral .equip-poder b { font: 700 19px var(--lupa-fonte) !important; color: var(--latao-claro) !important; text-shadow: none !important; }
+html.lupa-tema #lateral .mochila-topo > span:first-child { font: 600 11.5px var(--lupa-fonte) !important; letter-spacing: .1em; text-transform: uppercase; color: var(--fraco) !important; text-shadow: none !important; }
+html.lupa-tema #lateral .mochila-filtro { font: 500 12.5px var(--lupa-fonte) !important; color: var(--fraco) !important; text-shadow: none !important; }
+html.lupa-tema #lateral #cartao-redes > button em { font-size: 12px !important; }
+
+/* ---------- modo enxuto (cada um liga separado no painel) ---------- */
+html.lupa-sem-bonus #lateral :is(#buff-twitch, #buff-kick, #buff-voto, #buff-guilda) { display: none !important; }
+html.lupa-sem-redes #lateral #cartao-redes { display: none !important; }
+
+/* ---------- lateral recolhível (vale com ou sem o tema) ---------- */
+html.lupa-lateral-fechada body:not(.gaveta) #lateral,
+html.lupa-lateral-fechada body:not(.gaveta) #lat-puxador { display: none !important; }
+html.lupa-lateral-fechada body:not(.gaveta) #cliente { grid-template-columns: minmax(0, 1fr) !important; max-width: none !important; }
+#painel-status.lupa-recolhido > .corpo,
+#painel-local.lupa-recolhido > .corpo,
+#direita.lupa-recolhido > .aba-conteudo { display: none !important; }
+#painel-local > header:has(> .lupa-recolher) { display: flex; align-items: center; gap: 6px; }
+
+/* aba presa na borda da tela (some na gaveta do celular) */
+body #lupa-aba-lateral {
+  all: unset; box-sizing: border-box; position: fixed !important; z-index: 2147483000; width: 30px; height: 96px;
+  display: flex !important; flex-direction: column; align-items: center; justify-content: space-between; padding: 8px 0;
+  background: #1d212c; border: 1px solid #3d4556; border-right: 0; border-radius: 8px 0 0 8px;
+  color: #a3aab7; font: 600 10px/1 "Segoe UI", system-ui, sans-serif; letter-spacing: .12em; cursor: pointer;
+}
+body #lupa-aba-lateral:hover { background: #232836; }
+body #lupa-aba-lateral > svg { color: #f3d08a; flex: none; transition: transform .15s; }
+html.lupa-lateral-fechada body #lupa-aba-lateral > svg { transform: rotate(180deg); }
+body #lupa-aba-lateral .lupa-aba-txt { writing-mode: vertical-rl; }
+body #lupa-aba-lateral .lupa-selo {
+  min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: #f0904a; color: #1a1208;
+  font: 700 10px/16px "Segoe UI", system-ui, sans-serif; letter-spacing: 0; text-align: center;
+}
+body #lupa-aba-lateral .lupa-selo[hidden] { display: none !important; }
+body #lupa-aba-lateral:focus-visible, #lateral button.lupa-recolher:focus-visible { outline: 2px solid #f3d08a !important; outline-offset: 1px !important; }
+body.gaveta #lupa-aba-lateral, body.gaveta #lateral .lupa-recolher, body.gaveta #lateral .lupa-resumo { display: none !important; }
+
+/* chevrons dos cards: seletor forte para vencer os botões do jogo e o tema */
+html body #lateral :is(#painel-status, #painel-local, #direita) button.lupa-recolher.lupa-recolher.lupa-recolher {
+  all: unset !important; box-sizing: border-box !important; flex: none !important; margin-left: auto !important;
+  width: 32px !important; height: 28px !important; display: inline-flex !important; align-items: center; justify-content: center;
+  background: transparent !important; border: 0 !important; box-shadow: none !important; border-radius: 6px !important;
+  color: #a3aab7 !important; cursor: pointer !important;
+}
+html body #lateral button.lupa-recolher.lupa-recolher.lupa-recolher:hover { color: #f3d08a !important; }
+html body #lateral button.lupa-recolher.lupa-recolher[aria-expanded="false"] > svg { transform: rotate(-90deg); }
+#lateral .lupa-resumo {
+  flex: 1 1 auto; min-width: 0; margin-left: 8px; font: 400 12.5px "Segoe UI", system-ui, sans-serif; letter-spacing: 0; text-transform: none;
+  color: #a3aab7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+#lateral .lupa-resumo:empty { display: none; }
+#lateral .lupa-resumo + .lupa-recolher { margin-left: 0 !important; }
