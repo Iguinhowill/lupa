@@ -35,9 +35,10 @@ pode dar `require('electron')` (ipcRenderer, contextBridge).
   A aba só navega na origem exata do jogo e nos logins; o resto abre no navegador do sistema. Todo link
   (`will-navigate`) e todo redirecionamento (`will-redirect`) é conferido, contra o endereço atual da cadeia: a aba
   não tem barra de endereço, e um redirecionamento aberto levaria qualquer página para dentro dela. Entre páginas de
-  login (`NO_LOGIN` no `regras.js`: contas do Google, accounts.youtube.com, o login da Twitch, o OAuth e o login do Discord) o salto
-  segue. As mesmas regras (`proteger`) valem para cada janela de login que o jogo abre (`target=_blank` que bate com
-  `DA_CONTA`, na mesma partição); uma janela de login não abre outra, e a que nem chega a mostrar nada fecha sozinha.
+  login (`NO_LOGIN` no `regras.js`: contas do Google, accounts.youtube.com, o login da Twitch, o OAuth e o login do
+  Discord) o salto segue. As mesmas regras (`proteger`) valem para cada janela de login que o jogo abre
+  (`target=_blank` que bate com `DA_CONTA`, na mesma partição); uma janela de login não abre outra, e a que nem chega a
+  mostrar nada fecha sozinha.
   Limitações aceitas: login corporativo com provedor de fora (SSO de empresa no Google) abre no navegador; a partir do
   `/login` da Twitch, o site dela troca de página por `pushState`, que não passa pelo filtro.
 - **login do Google**: o Google recusa login em Chromium embutido. Nas páginas do Google (e youtube.com, que entra

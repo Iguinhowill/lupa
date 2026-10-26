@@ -16,13 +16,13 @@ const { DA_CONTA, DO_GOOGLE, permitido: permitidoNo } = require('./regras');
 
 const JOGO = process.env.LUPA_JOGO || 'https://lolidle.com/jogar';
 const ORIGEM_JOGO = new URL(JOGO).origin;
+const permitido = (url, atual) => permitidoNo(url, atual, ORIGEM_JOGO);
 // a sessão do Lupa Online (tokens) fica só no processo principal, com o envio.js: nenhuma página lê, grava ou recebe
 const PRIVADAS = new Set(['nuvem:sessao']);
 const semPrivadas = (o) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => !PRIVADAS.has(k)));
 const ALTURA_CASCA = 44, LARGURA_PAINEL = 380;
 const LUPA = path.join(__dirname, 'lupa');
 const ICONE = path.join(__dirname, 'icone.png');
-const permitido = (url, atual) => permitidoNo(url, atual, ORIGEM_JOGO);
 
 if (!app.requestSingleInstanceLock()) app.exit(0);
 app.setAppUserModelId('com.iguinhowill.lupa');
@@ -137,8 +137,8 @@ const janelasDeLogin = new WeakSet();
 // Vale para a aba do jogo e para cada janela de login que ela abre (as duas sem barra de endereço): só o jogo e os
 // logins; o resto abre no navegador do sistema (origem exata: "lolidle.com.outro.site" não passa). Todo link e todo
 // redirecionamento é conferido, porque um redirecionamento aberto (google.com/url?q=, OAuth com client_id de outro)
-// levaria qualquer página para dentro dela. Entre páginas de login o salto segue (NO_LOGIN); um login corporativo com
-// provedor de fora não funciona aqui dentro e abre no navegador.
+// levaria qualquer página para dentro dela. Entre páginas de login o salto segue (NO_LOGIN, no regras.js); um login
+// corporativo com provedor de fora não funciona aqui dentro e abre no navegador.
 function proteger(wc, inicial = '') {
   // `salto` é o endereço atual da navegação, inclusive no meio de uma cadeia de redirecionamentos. O User-Agent só troca
   // quando a navegação começa (o "Tentar novamente" do Google); o "Entrar com Google" chega por redirecionamento, e aí
