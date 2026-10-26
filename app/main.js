@@ -29,16 +29,19 @@ if (!app.requestSingleInstanceLock()) app.exit(0);
 app.setAppUserModelId('com.iguinhowill.lupa');
 Menu.setApplicationMenu(null);
 // a identificação vira a de um Chrome comum; nas páginas do Google (login), a de um Firefox: o Google recusa login em
-// Chromium embutido ("esse navegador ou app pode não ser seguro"), e o shim-jogo.js esconde o navigator.userAgentData
+// Chromium embutido ("esse navegador ou app pode não ser seguro"). Aqui troca o cabeçalho; o shim-jogo.js faz o
+// JavaScript da página ver o mesmo Firefox
 const nomeNoUa = app.getName().replace(/[^\w.-]/g, '').replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
 const UA_CHROME = app.userAgentFallback.replace(new RegExp(`\\s(Electron|${nomeNoUa}|lupa|Lupa)\\/\\S+`, 'g'), '');
 const UA_FIREFOX = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0';
 const DO_GOOGLE = /^https:\/\/([a-z0-9-]+\.)*(google\.com(\.br)?|gstatic\.com|googleusercontent\.com|youtube\.com)\//;
-// a aba do jogo fica no jogo e nos logins; de uma página do Google, segue a cadeia do login (passa por youtube.com)
+// páginas de login entre as quais um login anda sozinho (o do Google passa pelo accounts.youtube.com; a Twitch manda
+// para a página de login dela); só as de conta, não o youtube.com ou o googleusercontent.com inteiros
+const NO_LOGIN = /^https:\/\/((accounts|myaccount)\.google\.com(\.br)?|accounts\.youtube\.com|([a-z0-9-]+\.)?twitch\.tv|discord\.com)\//;
+const origemDe = (url) => { try { return new URL(url).origin; } catch { return ''; } };
+// a aba do jogo fica no jogo e nos logins; de uma página de login, pode seguir para outra página de login
 function permitido(url, atual) {
-  let origem = '';
-  try { origem = new URL(url).origin; } catch {}
-  return DO_JOGO.test(url) || origem === ORIGEM_JOGO || (DO_GOOGLE.test(atual || '') && DO_GOOGLE.test(url));
+  return DO_JOGO.test(url) || origemDe(url) === ORIGEM_JOGO || (NO_LOGIN.test(atual || '') && NO_LOGIN.test(url));
 }
 app.userAgentFallback = UA_CHROME;
 
@@ -135,7 +138,10 @@ function criarJogo(a) {
   // navegação que já começa no Google ("Tentar novamente"); o "Entrar com Google" chega por redirecionamento, e aí
   // quem garante o Firefox é o cabeçalho (acima) e o shim-jogo.js. Não trocar no did-redirect-navigation: o
   // setUserAgent no meio do redirecionamento trava o processo principal (Electron 44)
-  wc.on('did-start-navigation', (d) => { if (d.isMainFrame) wc.setUserAgent(DO_GOOGLE.test(d.url) ? UA_FIREFOX : UA_CHROME); });
+  // `salto` é o endereço atual da navegação, inclusive no meio de uma cadeia de redirecionamentos
+  let salto = '';
+  wc.on('did-start-navigation', (d) => { if (d.isMainFrame) { salto = d.url; wc.setUserAgent(DO_GOOGLE.test(d.url) ? UA_FIREFOX : UA_CHROME); } });
+  wc.on('did-redirect-navigation', (d) => { if (d.isMainFrame) salto = d.url; });      // só guarda: nada de setUserAgent aqui
   const tema = fs.readFileSync(path.join(LUPA, 'tema.css'), 'utf8');
   wc.on('dom-ready', () => { if (/^https?:\/\/((www\.)?lolidle\.com|127\.0\.0\.1|localhost)[:/]/.test(wc.getURL())) wc.insertCSS(tema).catch(() => {}); });
   wc.setWindowOpenHandler(({ url }) => {
@@ -143,15 +149,12 @@ function criarJogo(a) {
     if (/^https?:\/\//.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
-  // fora do jogo e dos logins, abre no navegador do sistema (origem exata: "lolidle.com.outro.site" não passa), seja
-  // um link na página (will-navigate) ou um redirecionamento do servidor (will-redirect)
-  const conferirDestino = (e) => {
-    if (!e.isMainFrame || permitido(e.url, wc.getURL())) return;
-    e.preventDefault();
-    if (/^https?:\/\//.test(e.url)) shell.openExternal(e.url);
-  };
-  wc.on('will-navigate', conferirDestino);
-  wc.on('will-redirect', conferirDestino);
+  // fora do jogo e dos logins, abre no navegador do sistema (origem exata: "lolidle.com.outro.site" não passa).
+  // Um link na página é sempre conferido; um redirecionamento, só quando quem o manda é o servidor do jogo (o risco é o
+  // lolidle.com mandar a aba para fora). Os saltos dados pelos servidores de login seguem, como num navegador.
+  const barrar = (e) => { e.preventDefault(); if (/^https?:\/\//.test(e.url)) shell.openExternal(e.url); };
+  wc.on('will-navigate', (e) => { if (e.isMainFrame && !permitido(e.url, wc.getURL())) barrar(e); });
+  wc.on('will-redirect', (e) => { if (e.isMainFrame && origemDe(salto) === ORIGEM_JOGO && !permitido(e.url, salto)) barrar(e); });
   wc.loadURL(JOGO);
   janela.contentView.addChildView(a.view);
 }

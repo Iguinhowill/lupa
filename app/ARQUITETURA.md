@@ -31,12 +31,16 @@ pode dar `require('electron')` (ipcRenderer, contextBridge).
 - **jogo** (uma por conta, `conta1` e `conta2`): partição `persist:conta1`/`persist:conta2` (login separado), carrega
   `https://lolidle.com/jogar`. Ocupa a área abaixo da casca, menos o painel. A economia de segundo plano do Chromium
   fica ligada: o jogo caça escondido pelo relógio próprio dele, e o Mercado aberto atualiza ~1 vez por minuto.
-  A aba só navega na origem exata do jogo e nos logins (`will-navigate` e `will-redirect`); o resto abre no
-  navegador do sistema.
+  A aba só navega na origem exata do jogo e nos logins; o resto abre no navegador do sistema. Links da página
+  (`will-navigate`) são sempre conferidos; redirecionamentos (`will-redirect`), só os que o servidor do jogo manda —
+  os saltos dados pelos servidores de login (Google, Twitch, Discord) seguem, como num navegador.
 - **login do Google**: o Google recusa login em Chromium embutido. Nas páginas do Google (e youtube.com, que entra
   na cadeia do login) o app é um Firefox: o `main.js` troca o User-Agent e tira os cabeçalhos `sec-ch-ua*`, e o
   `shim-jogo.js` faz o JavaScript da página ver o mesmo Firefox (sem `userAgentData` nem `window.chrome`), de forma
   síncrona antes do primeiro script da página (`contextBridge.executeInMainWorld`, UA pelo canal `lupa:uaFirefox`).
+  Não chamar `setUserAgent` no `did-redirect-navigation`: no Electron 44 isso trava o processo principal. Limitação
+  conhecida: o disfarce vale só no frame principal; iframes e workers da página ainda veem o Chromium. Se o Google
+  voltar a recusar o login, a próxima pista é essa.
 - **painel**: `lupa/painel.html`, 380 px à direita, aparece só na aba de um jogo e se `painelAberto`.
 - **central**: `lupa/central.html`, área toda abaixo da casca, só na aba Central.
 - **mini janela**: `BrowserWindow` 380×620 sempre por cima, `lupa/central.html#mini` (preload-lupa).
