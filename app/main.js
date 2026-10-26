@@ -44,6 +44,9 @@ const abas = [
 let pref = { ativa: 'conta1', painelAberto: true, nomes: {} };
 let atualizacao = { tipo: app.isPackaged ? 'procurando' : 'dev' };
 
+// aberto pelo Windows ao iniciar: vem com este argumento e começa minimizado (o mesmo args precisa ir no get e no set)
+const AO_INICIAR = ['--ao-iniciar'];
+const iniciaComWindows = () => app.isPackaged && app.getLoginItemSettings({ args: AO_INICIAR }).openAtLogin;
 const prefs = (preload, extra = {}) => ({ preload, contextIsolation: true, sandbox: true, nodeIntegration: false, ...extra });
 const abaAtiva = () => abas.find((a) => a.id === pref.ativa) || abas[0];
 const abaDe = (wc) => abas.find((a) => a.view?.webContents === wc);
@@ -156,7 +159,8 @@ function criarJanela() {
   janela.on('resize', arrumar);
   janela.on('closed', () => { janela = null; app.quit(); });
   arrumar();
-  janela.show();
+  if (process.argv.includes(AO_INICIAR[0])) { janela.showInactive(); janela.minimize(); }
+  else janela.show();
 }
 
 // a aba ativa ocupa a área abaixo da casca; num jogo, o painel da Lupa fica à direita
@@ -205,7 +209,7 @@ function rotulo(a) {
 const estadoCasca = () => ({
   abas: abas.map((a) => ({ id: a.id, tipo: a.tipo, rotulo: rotulo(a) })),
   ativa: pref.ativa, painelAberto: pref.painelAberto, versao: app.getVersion(), atualizacao,
-  iniciarComWindows: app.isPackaged && app.getLoginItemSettings().openAtLogin
+  iniciarComWindows: iniciaComWindows()
 });
 function avisarCasca() { if (casca && !casca.webContents.isDestroyed()) casca.webContents.send('casca:mudou', estadoCasca()); }
 
@@ -258,7 +262,7 @@ function ligarIpc() {
   ipcMain.handle('casca:recarregar', () => { const a = abaAtiva(); if (a.tipo === 'jogo') a.view.webContents.reload(); });
   ipcMain.handle('casca:procurar', () => procurar());
   ipcMain.handle('casca:atualizar', () => atualizar());
-  ipcMain.handle('casca:iniciarComWindows', (_e, sim) => { if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!sim }); avisarCasca(); });
+  ipcMain.handle('casca:iniciarComWindows', (_e, sim) => { if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!sim, args: AO_INICIAR }); avisarCasca(); });
 
   // cada mudança do armazém vai para o envio.js e para as páginas da Lupa (jogos, painel, Central, mini)
   armazem.on('mudou', (mud) => {
