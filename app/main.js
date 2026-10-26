@@ -13,6 +13,10 @@ const vm = require('node:vm');
 const { Armazem } = require('./armazem');
 
 const JOGO = process.env.LUPA_JOGO || 'https://lolidle.com/jogar';
+const ORIGEM_JOGO = new URL(JOGO).origin;
+// a sessão do Lupa Online (tokens) fica só no processo principal, com o envio.js: nenhuma página lê, grava ou recebe
+const PRIVADAS = new Set(['nuvem:sessao']);
+const semPrivadas = (o) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => !PRIVADAS.has(k)));
 const ALTURA_CASCA = 44, LARGURA_PAINEL = 380;
 const LUPA = path.join(__dirname, 'lupa');
 const ICONE = path.join(__dirname, 'icone.png');
@@ -119,7 +123,14 @@ function criarJogo(a) {
     if (/^https?:\/\//.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
-  wc.on('will-navigate', (e, url) => { if (!DO_JOGO.test(url) && !url.startsWith(JOGO.replace(/\/jogar$/, ''))) { e.preventDefault(); shell.openExternal(url); } });
+  // fora do jogo e dos logins, abre no navegador do sistema (origem exata: "lolidle.com.outro.site" não passa)
+  wc.on('will-navigate', (e, url) => {
+    let origem = '';
+    try { origem = new URL(url).origin; } catch {}
+    if (DO_JOGO.test(url) || origem === ORIGEM_JOGO) return;
+    e.preventDefault();
+    if (/^https?:\/\//.test(url)) shell.openExternal(url);
+  });
   wc.loadURL(JOGO);
   janela.contentView.addChildView(a.view);
 }
@@ -221,14 +232,15 @@ function atualizar() {
 // ---------- IPC (ver ARQUITETURA.md) ----------
 let envio;
 function ligarIpc() {
-  ipcMain.handle('armazem:get', (_e, c) => armazem.get(c));
+  ipcMain.handle('armazem:get', (_e, c) => semPrivadas(armazem.get(c)));
   ipcMain.handle('armazem:set', (e, obj) => {
+    obj = semPrivadas(obj);
     // a primeira ficha lida numa aba diz de quem é a conta
-    const a = abaDe(e.sender), nome = a && Object.keys(obj || {}).find((k) => k.startsWith('estado:'))?.slice(7);
+    const a = abaDe(e.sender), nome = a && Object.keys(obj).find((k) => k.startsWith('estado:'))?.slice(7);
     if (nome && pref.nomes[a.id] !== nome) { pref.nomes[a.id] = nome; salvarPref(); avisarCasca(); if (a === abaAtiva()) escolherNoPainel(); }
     armazem.set(obj);
   });
-  ipcMain.handle('armazem:remove', (_e, c) => armazem.remove(c));
+  ipcMain.handle('armazem:remove', (_e, c) => armazem.remove([].concat(c || []).filter((k) => !PRIVADAS.has(k))));
   ipcMain.handle('lupa:mensagem', (e, msg) => {
     if (msg?.tipo === 'ola') return undefined;
     if (msg?.tipo === 'aviso') { avisar(msg, abaDe(e.sender)); return undefined; }
@@ -251,9 +263,12 @@ function ligarIpc() {
   // cada mudança do armazém vai para o envio.js e para as páginas da Lupa (jogos, painel, Central, mini)
   armazem.on('mudou', (mud) => {
     for (const fn of ouvintesMud) { try { fn(mud, 'local'); } catch {} }
-    const alvos = [...abas.map((a) => a.view), painel].map((v) => v?.webContents);
-    if (mini && !mini.isDestroyed()) alvos.push(mini.webContents);
-    for (const wc of alvos) if (wc && !wc.isDestroyed()) wc.send('armazem:mudou', mud);
+    const pub = semPrivadas(mud);
+    if (Object.keys(pub).length) {
+      const alvos = [...abas.map((a) => a.view), painel].map((v) => v?.webContents);
+      if (mini && !mini.isDestroyed()) alvos.push(mini.webContents);
+      for (const wc of alvos) if (wc && !wc.isDestroyed()) wc.send('armazem:mudou', pub);
+    }
     if ('config' in mud) aplicarAcordado();
   });
 }
