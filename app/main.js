@@ -23,9 +23,9 @@ const ICONE = path.join(__dirname, 'icone.png');
 // páginas que o jogo abre numa janela e que precisam da mesma partição (login do Google, Twitch e Discord); o resto
 // vai para o navegador do sistema
 const DA_CONTA = /^https:\/\/((www\.)?lolidle\.com\/|accounts\.google\.com\/|id\.twitch\.tv\/|discord\.com\/(api\/)?oauth2\/)/;
-// subdomínios de conta do Google (accounts, myaccount, gds...), menos o www: o google.com/url?q= redireciona para qualquer
-// lugar
-const DO_JOGO = /^https:\/\/((www\.)?lolidle\.com|(?!www\.)[a-z0-9-]+\.google\.com|id\.twitch\.tv|discord\.com)\//;
+// por link direto: o jogo e as portas de entrada dos logins. Do Google, só os subdomínios de conta (sites., docs. e
+// script.google.com hospedam páginas de terceiros); do Discord, só o OAuth e o login (não as páginas de convite)
+const DO_JOGO = /^https:\/\/((www\.)?lolidle\.com\/|(accounts|myaccount|gds)\.google\.com\/|id\.twitch\.tv\/|discord\.com\/((api\/)?oauth2|login)([/?#]|$))/;
 
 if (!app.requestSingleInstanceLock()) app.exit(0);
 app.setAppUserModelId('com.iguinhowill.lupa');
@@ -38,8 +38,10 @@ const UA_CHROME = app.userAgentFallback.replace(new RegExp(`\\s(Electron|${nomeN
 const UA_FIREFOX = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0';
 const DO_GOOGLE = /^https:\/\/([a-z0-9-]+\.)*(google\.com(\.br)?|gstatic\.com|googleusercontent\.com|youtube\.com)\//;
 // páginas de login entre as quais um login anda sozinho (o do Google passa pelo accounts.youtube.com; a Twitch manda
-// para a página de login dela); só as de conta, não o youtube.com ou o googleusercontent.com inteiros
-const NO_LOGIN = /^https:\/\/((accounts|myaccount|gds)\.google\.com(\.br)?\/|accounts\.youtube\.com\/|(id|passport)\.twitch\.tv\/|www\.twitch\.tv\/login|discord\.com\/)/;
+// para a página de login dela e volta pelo passport-callback); só as de conta, não o youtube.com, o googleusercontent.com
+// ou a Twitch inteiros. Limitação aceita: a partir do /login, o site da Twitch troca de página por pushState, que não
+// passa por aqui
+const NO_LOGIN = /^https:\/\/((accounts|myaccount|gds)\.google\.com(\.br)?\/|accounts\.youtube\.com\/|(id|passport)\.twitch\.tv\/|www\.twitch\.tv\/(login|passport-callback)([/?#]|$)|discord\.com\/((api\/)?oauth2|login)([/?#]|$))/;
 const origemDe = (url) => { try { return new URL(url).origin; } catch { return ''; } };
 // a aba do jogo fica no jogo e nos logins; de uma página de login, pode seguir para outra página de login
 function permitido(url, atual) {
@@ -137,33 +139,50 @@ function criarJogo(a) {
   });
   a.view = new WebContentsView({ webPreferences: prefs(path.join(__dirname, 'gerado', 'preload-jogo.js'), { partition: a.particao }) });
   const wc = a.view.webContents;
-  // navegação que já começa no Google ("Tentar novamente"); o "Entrar com Google" chega por redirecionamento, e aí
-  // quem garante o Firefox é o cabeçalho (acima) e o shim-jogo.js. Não trocar no did-redirect-navigation: o
-  // setUserAgent no meio do redirecionamento trava o processo principal (Electron 44)
-  // `salto` é o endereço atual da navegação, inclusive no meio de uma cadeia de redirecionamentos
+  proteger(wc);
+  const tema = fs.readFileSync(path.join(LUPA, 'tema.css'), 'utf8');
+  wc.on('dom-ready', () => { if (/^https?:\/\/((www\.)?lolidle\.com|127\.0\.0\.1|localhost)[:/]/.test(wc.getURL())) wc.insertCSS(tema).catch(() => {}); });
+  wc.loadURL(JOGO);
+  janela.contentView.addChildView(a.view);
+}
+
+const externo = (url) => { if (/^https?:\/\//.test(url)) shell.openExternal(url); };
+const janelasDeLogin = new WeakSet();
+// Vale para a aba do jogo e para cada janela de login que ela abre (as duas sem barra de endereço): só o jogo e os
+// logins; o resto abre no navegador do sistema (origem exata: "lolidle.com.outro.site" não passa). Todo link e todo
+// redirecionamento é conferido, porque um redirecionamento aberto (google.com/url?q=, OAuth com client_id de outro)
+// levaria qualquer página para dentro dela. Entre páginas de login o salto segue (NO_LOGIN); um login corporativo com
+// provedor de fora não funciona aqui dentro e abre no navegador.
+function proteger(wc) {
+  // `salto` é o endereço atual da navegação, inclusive no meio de uma cadeia de redirecionamentos. O User-Agent só troca
+  // quando a navegação começa (o "Tentar novamente" do Google); o "Entrar com Google" chega por redirecionamento, e aí
+  // quem garante o Firefox é o cabeçalho (onBeforeSendHeaders) e o shim-jogo.js. Não trocar no did-redirect-navigation:
+  // o setUserAgent no meio do redirecionamento trava o processo principal (Electron 44)
   let salto = '';
   wc.on('did-start-navigation', (d) => {
     if (!d.isMainFrame) return;
-    if (!d.isSameDocument) salto = d.url;      // pushState/hash do jogo não é salto de cadeia nenhuma
+    if (!d.isSameDocument) salto = d.url;      // pushState/hash não é salto de cadeia nenhuma
     wc.setUserAgent(DO_GOOGLE.test(d.url) ? UA_FIREFOX : UA_CHROME);
   });
-  wc.on('did-redirect-navigation', (d) => { if (d.isMainFrame) salto = d.url; });      // só guarda: nada de setUserAgent aqui
-  const tema = fs.readFileSync(path.join(LUPA, 'tema.css'), 'utf8');
-  wc.on('dom-ready', () => { if (/^https?:\/\/((www\.)?lolidle\.com|127\.0\.0\.1|localhost)[:/]/.test(wc.getURL())) wc.insertCSS(tema).catch(() => {}); });
-  wc.setWindowOpenHandler(({ url }) => {
-    if (DA_CONTA.test(url)) return { action: 'allow', overrideBrowserWindowOptions: { width: 560, height: 760, autoHideMenuBar: true, icon: ICONE } };
-    if (/^https?:\/\//.test(url)) shell.openExternal(url);
-    return { action: 'deny' };
-  });
-  // fora do jogo e dos logins, abre no navegador do sistema (origem exata: "lolidle.com.outro.site" não passa). Todo
-  // link e todo redirecionamento é conferido: a aba não tem barra de endereço, e um redirecionamento aberto (o
-  // google.com/url?q=, por exemplo) levaria qualquer página para dentro dela. Entre páginas de login o salto segue
-  // (NO_LOGIN); um login corporativo com provedor de fora não funciona aqui dentro e abre no navegador.
-  const barrar = (e) => { e.preventDefault(); if (/^https?:\/\//.test(e.url)) shell.openExternal(e.url); };
+  wc.on('did-redirect-navigation', (d) => { if (d.isMainFrame) salto = d.url; });      // só guarda
+  const barrar = (e) => {
+    e.preventDefault();
+    externo(e.url);
+    // janela de login que nem chegou a mostrar nada: fecha em vez de ficar em branco
+    if (janelasDeLogin.has(wc) && !wc.getURL()) setImmediate(() => BrowserWindow.fromWebContents(wc)?.close());
+  };
   wc.on('will-navigate', (e) => { if (e.isMainFrame && !permitido(e.url, wc.getURL())) barrar(e); });
   wc.on('will-redirect', (e) => { if (e.isMainFrame && !permitido(e.url, salto)) barrar(e); });
-  wc.loadURL(JOGO);
-  janela.contentView.addChildView(a.view);
+  // o login que o jogo abre numa janela fica na mesma partição (a sessão volta para a conta) e ganha as mesmas regras;
+  // uma janela de login não abre outra: vai para o navegador
+  wc.setWindowOpenHandler(({ url }) => {
+    if (DA_CONTA.test(url) && !janelasDeLogin.has(wc)) {
+      return { action: 'allow', overrideBrowserWindowOptions: { width: 560, height: 760, autoHideMenuBar: true, icon: ICONE } };
+    }
+    externo(url);
+    return { action: 'deny' };
+  });
+  wc.on('did-create-window', (filha) => { janelasDeLogin.add(filha.webContents); proteger(filha.webContents); });
 }
 
 function criarJanela() {
