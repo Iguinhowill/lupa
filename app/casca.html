@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lupa</title>
+<link rel="stylesheet" href="casca.css">
+</head>
+<body>
+<header class="faixa">
+  <div class="marca">
+    <svg class="ico" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M15.5 15.5 21 21"></path></svg>
+    <span>Lupa</span>
+  </div>
+  <div class="abas" id="abas" role="tablist" aria-label="Contas e Central"></div>
+  <div class="espaco"></div>
+  <div class="direita">
+    <button type="button" class="botao" id="painel" aria-pressed="false" title="Mostrar ou esconder o painel da Lupa">
+      <svg class="ico" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M15.5 15.5 21 21"></path></svg>
+      <span>Lupa</span>
+    </button>
+    <button type="button" class="botao so-ico" id="recarregar" title="Recarregar o jogo desta aba" aria-label="Recarregar o jogo desta aba">
+      <svg class="ico" width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"></path><path d="M20 4v7h-7"></path></svg>
+    </button>
+    <button type="button" class="botao chave" id="windows" aria-pressed="false" title="Iniciar com o Windows">
+      <span class="trilho" aria-hidden="true"></span>
+      <span class="chave-texto">Iniciar com o Windows</span>
+    </button>
+    <div class="atualizacao" id="atualizacao"></div>
+  </div>
+</header>
+<script src="casca.js"></script>
+</body>
+</html>

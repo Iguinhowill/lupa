@@ -1,0 +1,66 @@
+{
+  "name": "lupa",
+  "productName": "Lupa",
+  "version": "0.6.0",
+  "description": "Lupa para LoL Idle: o jogo com as duas contas e o painel da Lupa numa janela só. Só lê a tela.",
+  "main": "main.js",
+  "private": true,
+  "author": "Iguinhowill",
+  "license": "UNLICENSED",
+  "scripts": {
+    "preparar": "node copiar-lupa.mjs",
+    "start": "node copiar-lupa.mjs && electron .",
+    "dist": "node copiar-lupa.mjs && electron-builder --win --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.10"
+  },
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "26.17.0"
+  },
+  "build": {
+    "appId": "com.iguinhowill.lupa",
+    "productName": "Lupa",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "armazem.js",
+      "preload-*.js",
+      "casca.html",
+      "casca.css",
+      "casca.js",
+      "gerado/**",
+      "lupa/**",
+      "icone.png",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "icone.png"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "artifactName": "Lupa-Setup-${version}.${ext}",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Iguinhowill",
+        "repo": "lupa"
+      }
+    ]
+  }
+}
