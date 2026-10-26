@@ -11,6 +11,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { Armazem } = require('./armazem');
+// regras de navegação (o que fica na aba do jogo e nas janelas de login), com teste em regras.test.js
+const { DA_CONTA, DO_GOOGLE, permitido: permitidoNo } = require('./regras');
 
 const JOGO = process.env.LUPA_JOGO || 'https://lolidle.com/jogar';
 const ORIGEM_JOGO = new URL(JOGO).origin;
@@ -20,8 +22,6 @@ const semPrivadas = (o) => Object.fromEntries(Object.entries(o || {}).filter(([k
 const ALTURA_CASCA = 44, LARGURA_PAINEL = 380;
 const LUPA = path.join(__dirname, 'lupa');
 const ICONE = path.join(__dirname, 'icone.png');
-// regras de navegação (o que fica na aba do jogo e nas janelas de login), com teste em regras.test.js
-const { DA_CONTA, DO_GOOGLE, permitido: permitidoNo } = require('./regras');
 const permitido = (url, atual) => permitidoNo(url, atual, ORIGEM_JOGO);
 
 if (!app.requestSingleInstanceLock()) app.exit(0);

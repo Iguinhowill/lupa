@@ -47,6 +47,11 @@ for (const [url, atual, esperado, nome] of casos) {
   test(`${esperado ? 'segue' : 'barra'}: ${nome}`, () => assert.equal(permitido(url, atual, JOGO), esperado));
 }
 
+test('a origem do jogo vem de fora (LUPA_JOGO): vale a que o main.js passar', () => {
+  assert.equal(permitido('http://localhost:5173/jogar', '', 'http://localhost:5173'), true);
+  assert.equal(permitido('http://localhost:5173/jogar', '', JOGO), false);
+});
+
 test('janela de login: só as entradas dos logins e do jogo', () => {
   assert.ok(DA_CONTA.test('https://accounts.google.com/o/oauth2/v2/auth'));
   assert.ok(DA_CONTA.test('https://discord.com/api/oauth2/authorize'));

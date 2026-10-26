@@ -13,6 +13,7 @@ O código da Lupa (pasta `../lupa`, que continua sendo também a extensão do Ch
 |---|---|---|
 | `main.js` | processo principal | janela, abas (WebContentsView), armazém, envio.js num `vm`, avisos, PC acordado, atualização |
 | `armazem.js` | processo principal | o `chrome.storage.local` do app: um JSON em `userData/lupa-dados.json` |
+| `regras.js` | processo principal | regras de navegação da aba do jogo e das janelas de login (`DA_CONTA`, `DO_JOGO`, `NO_LOGIN`, `DO_GOOGLE`, `permitido`); casos em `regras.test.js`, rodar com `npm test` |
 | `shim-jogo.js` | preload das abas do jogo | o objeto `chrome` que o `content.js` usa (só no mundo isolado, nunca exposto à página) |
 | `gerado/preload-jogo.js` | preload das abas do jogo | `shim-jogo.js` + `../lupa/content.js`, rodando no DOMContentLoaded só em lolidle.com |
 | `preload-lupa.js` | painel e Central | expõe `window.lupaChrome` (o mesmo `chrome` da extensão) e `window.lupaApp` |
@@ -34,7 +35,7 @@ pode dar `require('electron')` (ipcRenderer, contextBridge).
   A aba só navega na origem exata do jogo e nos logins; o resto abre no navegador do sistema. Todo link
   (`will-navigate`) e todo redirecionamento (`will-redirect`) é conferido, contra o endereço atual da cadeia: a aba
   não tem barra de endereço, e um redirecionamento aberto levaria qualquer página para dentro dela. Entre páginas de
-  login (`NO_LOGIN`: contas do Google, accounts.youtube.com, o login da Twitch, o OAuth e o login do Discord) o salto
+  login (`NO_LOGIN` no `regras.js`: contas do Google, accounts.youtube.com, o login da Twitch, o OAuth e o login do Discord) o salto
   segue. As mesmas regras (`proteger`) valem para cada janela de login que o jogo abre (`target=_blank` que bate com
   `DA_CONTA`, na mesma partição); uma janela de login não abre outra, e a que nem chega a mostrar nada fecha sozinha.
   Limitações aceitas: login corporativo com provedor de fora (SSO de empresa no Google) abre no navegador; a partir do
