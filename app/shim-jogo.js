@@ -14,7 +14,13 @@ if (/(^|\.)(google\.com(\.br)?|youtube\.com)$/.test(location.hostname)) {
     func: (ua) => {
       const fixo = (alvo, nome, valor) => { try { Object.defineProperty(alvo, nome, { get: () => valor, configurable: true }); } catch {} };
       // o Firefox não tem estas: apaga de verdade ('x' in navigator dá false); se não der, fica ao menos undefined
-      const apaga = (alvo, dono, nome) => { try { delete dono[nome]; } catch {} if (nome in alvo) fixo(dono, nome, undefined); };
+      // (atribuindo, que funciona em propriedade gravável não configurável, ou trocando por um getter)
+      const apaga = (alvo, dono, nome) => {
+        try { delete dono[nome]; } catch {}
+        if (!(nome in alvo)) return;
+        try { dono[nome] = undefined; } catch {}
+        if (alvo[nome] !== undefined) fixo(dono, nome, undefined);
+      };
       const n = Navigator.prototype;
       fixo(n, 'userAgent', ua);
       fixo(n, 'appVersion', '5.0 (Windows)');

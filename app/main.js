@@ -39,7 +39,7 @@ const UA_FIREFOX = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20
 const DO_GOOGLE = /^https:\/\/([a-z0-9-]+\.)*(google\.com(\.br)?|gstatic\.com|googleusercontent\.com|youtube\.com)\//;
 // páginas de login entre as quais um login anda sozinho (o do Google passa pelo accounts.youtube.com; a Twitch manda
 // para a página de login dela); só as de conta, não o youtube.com ou o googleusercontent.com inteiros
-const NO_LOGIN = /^https:\/\/((accounts|myaccount|gds)\.google\.com(\.br)?|accounts\.youtube\.com|(id|www)\.twitch\.tv|discord\.com)\//;
+const NO_LOGIN = /^https:\/\/((accounts|myaccount|gds)\.google\.com(\.br)?\/|accounts\.youtube\.com\/|(id|passport)\.twitch\.tv\/|www\.twitch\.tv\/login|discord\.com\/)/;
 const origemDe = (url) => { try { return new URL(url).origin; } catch { return ''; } };
 // a aba do jogo fica no jogo e nos logins; de uma página de login, pode seguir para outra página de login
 function permitido(url, atual) {
@@ -142,7 +142,11 @@ function criarJogo(a) {
   // setUserAgent no meio do redirecionamento trava o processo principal (Electron 44)
   // `salto` é o endereço atual da navegação, inclusive no meio de uma cadeia de redirecionamentos
   let salto = '';
-  wc.on('did-start-navigation', (d) => { if (d.isMainFrame) { salto = d.url; wc.setUserAgent(DO_GOOGLE.test(d.url) ? UA_FIREFOX : UA_CHROME); } });
+  wc.on('did-start-navigation', (d) => {
+    if (!d.isMainFrame) return;
+    if (!d.isSameDocument) salto = d.url;      // pushState/hash do jogo não é salto de cadeia nenhuma
+    wc.setUserAgent(DO_GOOGLE.test(d.url) ? UA_FIREFOX : UA_CHROME);
+  });
   wc.on('did-redirect-navigation', (d) => { if (d.isMainFrame) salto = d.url; });      // só guarda: nada de setUserAgent aqui
   const tema = fs.readFileSync(path.join(LUPA, 'tema.css'), 'utf8');
   wc.on('dom-ready', () => { if (/^https?:\/\/((www\.)?lolidle\.com|127\.0\.0\.1|localhost)[:/]/.test(wc.getURL())) wc.insertCSS(tema).catch(() => {}); });
