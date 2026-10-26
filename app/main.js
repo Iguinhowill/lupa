@@ -30,9 +30,10 @@ app.setAppUserModelId('com.iguinhowill.lupa');
 Menu.setApplicationMenu(null);
 // a identificação vira a de um Chrome comum; nas páginas do Google (login), a de um Firefox: o Google recusa login em
 // Chromium embutido ("esse navegador ou app pode não ser seguro"), e o shim-jogo.js esconde o navigator.userAgentData
-const UA_CHROME = app.userAgentFallback.replace(/\s(Electron|lupa|Lupa)\/\S+/g, '');
+const nomeNoUa = app.getName().replace(/[^\w.-]/g, '').replace(/[.*+?^${}()|[\]\\-]/g, '\\$&');
+const UA_CHROME = app.userAgentFallback.replace(new RegExp(`\\s(Electron|${nomeNoUa}|lupa|Lupa)\\/\\S+`, 'g'), '');
 const UA_FIREFOX = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0';
-const DO_GOOGLE = /^https:\/\/([a-z0-9-]+\.)*(google\.com|gstatic\.com|googleusercontent\.com)\//;
+const DO_GOOGLE = /^https:\/\/([a-z0-9-]+\.)*(google\.com(\.br)?|gstatic\.com|googleusercontent\.com|youtube\.com)\//;
 app.userAgentFallback = UA_CHROME;
 
 let armazem, janela, casca, painel, central, mini = null;
@@ -111,13 +112,16 @@ function mostrarJanela() {
 function criarJogo(a) {
   const ses = session.fromPartition(a.particao);
   ses.setPermissionRequestHandler((_wc, perm, ok) => ok(['notifications', 'fullscreen', 'clipboard-sanitized-write'].includes(perm)));
-  ses.webRequest.onBeforeSendHeaders({ urls: ['https://*.google.com/*', 'https://*.gstatic.com/*', 'https://*.googleusercontent.com/*'] }, (d, cb) => {
+  ses.webRequest.onBeforeSendHeaders({ urls: ['https://*.google.com/*', 'https://*.google.com.br/*', 'https://*.gstatic.com/*', 'https://*.googleusercontent.com/*', 'https://*.youtube.com/*'] }, (d, cb) => {
     const cab = { ...d.requestHeaders, 'User-Agent': UA_FIREFOX };
     for (const k of Object.keys(cab)) if (/^sec-ch-ua/i.test(k)) delete cab[k];
     cb({ requestHeaders: cab });
   });
   a.view = new WebContentsView({ webPreferences: prefs(path.join(__dirname, 'gerado', 'preload-jogo.js'), { partition: a.particao }) });
   const wc = a.view.webContents;
+  // navegação que já começa no Google ("Tentar novamente"); o "Entrar com Google" chega por redirecionamento, e aí
+  // quem garante o Firefox é o cabeçalho (acima) e o shim-jogo.js. Não trocar no did-redirect-navigation: o
+  // setUserAgent no meio do redirecionamento trava o processo principal (Electron 44)
   wc.on('did-start-navigation', (d) => { if (d.isMainFrame) wc.setUserAgent(DO_GOOGLE.test(d.url) ? UA_FIREFOX : UA_CHROME); });
   const tema = fs.readFileSync(path.join(LUPA, 'tema.css'), 'utf8');
   wc.on('dom-ready', () => { if (/^https?:\/\/((www\.)?lolidle\.com|127\.0\.0\.1|localhost)[:/]/.test(wc.getURL())) wc.insertCSS(tema).catch(() => {}); });
@@ -236,6 +240,7 @@ function atualizar() {
 // ---------- IPC (ver ARQUITETURA.md) ----------
 let envio;
 function ligarIpc() {
+  ipcMain.on('lupa:uaFirefox', (e) => { e.returnValue = UA_FIREFOX; });      // síncrono: o preload das páginas do Google
   ipcMain.handle('armazem:get', (_e, c) => semPrivadas(armazem.get(c)));
   ipcMain.handle('armazem:set', (e, obj) => {
     obj = semPrivadas(obj);

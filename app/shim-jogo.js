@@ -1,11 +1,29 @@
 // Lupa (app) · o objeto `chrome` do content.js, no mundo isolado do preload das abas do jogo.
 // Fala com o processo principal por IPC. Não expõe NADA à página (sem contextBridge): o jogo não pode ver o armazém.
-const { ipcRenderer, webFrame } = require('electron');
+const { ipcRenderer, contextBridge } = require('electron');
 
-// login do Google: nas páginas dele o main.js apresenta o app como Firefox, e o Firefox não tem navigator.userAgentData
-// (com ele, o Google percebe o Chromium embutido e recusa o login)
-if (/(^|\.)google\.com$/.test(location.hostname)) {
-  webFrame.executeJavaScript("try { Object.defineProperty(Navigator.prototype, 'userAgentData', { get() { return undefined; }, configurable: true }); } catch (e) {}").catch(() => {});
+// login do Google: o main.js manda o cabeçalho de um Firefox nas páginas dele, e aqui o JavaScript da página vê o mesmo
+// Firefox (userAgent, plataforma, sem userAgentData e sem window.chrome). Com qualquer pista de Chromium, o Google recusa
+// o login ("esse navegador ou app pode não ser seguro"). Roda síncrono, antes do primeiro script da página: com o
+// webFrame.executeJavaScript (assíncrono) os scripts do Google às vezes chegavam antes.
+if (/(^|\.)(google\.com(\.br)?|youtube\.com)$/.test(location.hostname)) {
+  const ua = ipcRenderer.sendSync('lupa:uaFirefox');
+  contextBridge.executeInMainWorld({
+    func: (ua) => {
+      const fixo = (alvo, nome, valor) => { try { Object.defineProperty(alvo, nome, { get: () => valor, configurable: true }); } catch {} };
+      const n = Navigator.prototype;
+      fixo(n, 'userAgent', ua);
+      fixo(n, 'appVersion', '5.0 (Windows)');
+      fixo(n, 'platform', 'Win32');
+      fixo(n, 'vendor', '');
+      fixo(n, 'productSub', '20100101');
+      fixo(n, 'oscpu', 'Windows NT 10.0; Win64; x64');
+      fixo(n, 'userAgentData', undefined);
+      try { delete window.chrome; } catch {}
+      fixo(window, 'chrome', undefined);
+    },
+    args: [ua]
+  });
 }
 
 const chrome = (() => {
