@@ -1,0 +1,1 @@
+@supabase/supabase-js 2.45.4 · dist/umd do pacote do npm (sha512-E5p8/zOLaQ3a462MZnmnz03CrduA5ySH9hZyL03Y+QZLIOO4/Gs8Rdy4ZCKDHsN7x0xdanVEWWFN3pJFQr9/hg==)

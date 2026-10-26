@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Guia do Ryze · Roteiros</title>
+<link rel="stylesheet" href="/roteiros/fontes/fontes.css">
+<style>
+:root { color-scheme: light; }
+/* Layout: coluna única e curta; o painel "Seu nível" é a peça central e responde pontos, barra e atributos para o nível escolhido. Depois, itens, ordem dos pontos, zonas e dicas. */
+:root {
+  --bg: #edf1f6;
+  --surface: #ffffff;
+  --surface-2: #f3f6fb;
+  --ink: #12203a;
+  --muted: #55627a;
+  --line: #d5dde9;
+  --accent: #1f5fcf;
+  --accent-soft: #e2ebfd;
+  --runa: #0f93b4;
+  --pergaminho: #9a6c27;
+  --pergaminho-soft: #f6ecdc;
+  --f-display: "Spectral SC", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --f-data: "IBM Plex Mono", "Cascadia Mono", Consolas, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0a1220; --surface: #111c2f; --surface-2: #16233a; --ink: #e6edf8; --muted: #9aabc6; --line: #26354f;
+    --accent: #86b4ff; --accent-soft: #1b2c4d; --runa: #4fd2ee; --pergaminho: #dcb06a; --pergaminho-soft: #2a2416;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0a1220; --surface: #111c2f; --surface-2: #16233a; --ink: #e6edf8; --muted: #9aabc6; --line: #26354f;
+  --accent: #86b4ff; --accent-soft: #1b2c4d; --runa: #4fd2ee; --pergaminho: #dcb06a; --pergaminho-soft: #2a2416;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 16px;
+  line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 64px;
+}
+.wrap { max-width: 760px; margin: 0 auto; display: grid; gap: 48px; }
+h1, h2 { font-family: var(--f-display); font-weight: 600; margin: 0; line-height: 1.15; text-wrap: balance; }
+h1 { font-size: clamp(2.2rem, 6vw, 3.2rem); letter-spacing: 0.01em; }
+h2 { font-size: 1.6rem; }
+p { margin: 0; }
+.rotulo { font-size: 0.76rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted); }
+kbd { font-family: var(--f-data); font-size: 0.9rem; background: var(--accent-soft); color: var(--accent); border-radius: 6px; padding: 1px 7px; }
+b { font-weight: 600; }
+
+/* topo */
+.topo { padding-top: 44px; display: grid; gap: 12px; }
+.topo .lead { font-size: 1.1rem; color: var(--muted); max-width: 56ch; }
+.runas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 6px; }
+.runas span { border-top: 4px solid var(--c); padding-top: 4px; font-size: 0.78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.runas span b { font-family: var(--f-data); font-weight: 500; color: var(--ink); margin-right: 4px; }
+.aviso { border-left: 4px solid var(--pergaminho); background: var(--surface); border-radius: 0 10px 10px 0; padding: 10px 14px; font-size: 0.95rem; max-width: 62ch; }
+
+/* painel do nível */
+.painel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 22px; display: grid; gap: 22px; }
+.controle { display: grid; gap: 10px; }
+.controle .linha { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.passo-nv { display: flex; align-items: center; gap: 8px; }
+.passo-nv button {
+  width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2);
+  color: var(--ink); font-size: 1.3rem; line-height: 1; cursor: pointer;
+}
+.passo-nv button:hover { border-color: var(--accent); color: var(--accent); }
+.passo-nv output { font-family: var(--f-display); font-size: 2.4rem; min-width: 2.2em; text-align: center; line-height: 1; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.respostas { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 24px; }
+.coluna { display: grid; gap: 18px; align-content: start; min-width: 0; }
+.bloco { display: grid; gap: 8px; }
+
+.habs { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.hab { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; }
+.hab .nome { font-weight: 600; min-width: 0; }
+.hab .nome small { font-weight: 400; color: var(--muted); }
+.hab .rk { font-family: var(--f-data); font-size: 0.9rem; }
+.hab .trilho { grid-column: 2 / 4; display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
+.hab .trilho i { height: 6px; border-radius: 2px; background: var(--line); }
+.hab .trilho i.on { background: var(--accent); }
+.hab.chave .trilho i.on { background: var(--runa); }
+.hab.fechada { opacity: 0.5; }
+.hab.fechada .rk { font-family: var(--f-body); font-size: 0.85rem; color: var(--muted); }
+.obs { font-size: 0.88rem; color: var(--muted); }
+
+.barra { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.tecla { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: flex; gap: 8px; align-items: center; min-width: 0; font-size: 0.92rem; line-height: 1.25; }
+.tecla.vazia { border-style: dashed; color: var(--muted); }
+.destaque { font-family: var(--f-display); font-size: 1.5rem; line-height: 1.2; }
+.lucidez { display: grid; gap: 6px; }
+.lucidez label { font-size: 0.88rem; color: var(--muted); }
+select {
+  font: inherit; font-size: 0.95rem; color: var(--ink); background: var(--surface-2);
+  border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; max-width: 100%;
+}
+.proximo { background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; font-size: 0.95rem; }
+.proximo.d18 { background: var(--pergaminho-soft); }
+
+/* seções */
+section { display: grid; gap: 16px; }
+section > header { display: grid; gap: 6px; }
+section > header p { color: var(--muted); max-width: 60ch; }
+.lista { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.lista li { display: grid; grid-template-columns: 76px minmax(0, 1fr); gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.lista .slot { font-family: var(--f-data); font-size: 0.8rem; color: var(--muted); padding-top: 3px; }
+.lista .slot.mitico { color: var(--pergaminho); }
+.lista b { display: block; }
+.lista span.desc { color: var(--muted); font-size: 0.95rem; }
+
+.passos { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: passo; }
+.passos li { counter-increment: passo; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 4px 12px; align-items: baseline; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--surface); }
+.passos li::before { content: counter(passo); font-family: var(--f-display); font-size: 1.5rem; color: var(--accent); line-height: 1; grid-row: span 2; }
+.passos li.chave { border-color: var(--pergaminho); }
+.passos li.chave::before { color: var(--pergaminho); }
+.passos .tit { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-weight: 600; }
+.passos .det { color: var(--muted); font-size: 0.93rem; }
+
+.dicas { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.dicas li { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 12px; }
+.dicas li::before { content: ""; width: 8px; height: 8px; transform: rotate(45deg); background: var(--runa); margin-top: 8px; }
+
+details { border-top: 1px solid var(--line); padding-top: 14px; }
+summary { cursor: pointer; font-weight: 600; color: var(--accent); }
+details .dicas { margin-top: 14px; font-size: 0.95rem; }
+.fonte { margin-top: 14px; font-size: 0.88rem; color: var(--muted); }
+a { color: var(--accent); }
+
+button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 640px) {
+  .respostas { grid-template-columns: 1fr; }
+  .painel { padding: 16px; }
+  .runas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 380px) { .barra { grid-template-columns: 1fr; } }
+/* Roteiros: moldura do site (margem do body e o link de volta para a lista) */
+body { margin: 0; }
+.topo { padding-top: 12px; }
+.voltar { justify-self: start; display: inline-flex; align-items: center; min-height: 44px; color: var(--muted); text-decoration: none; font-size: 0.92rem; }
+.voltar:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="topo">
+    <a class="voltar" href="/roteiros/">← Todos os roteiros</a>
+    <div class="rotulo">LoL Idle · Mago Rúnico</div>
+    <h1>Guia do Ryze</h1>
+    <p class="lead">O que equipar, onde colocar os pontos e onde caçar para farmar sem ficar sem mana. Escolha seu nível e veja como deixar o personagem.</p>
+    <div class="runas" aria-hidden="true">
+      <span style="--c: var(--accent)"><b>Q</b>Sobrecarregar</span>
+      <span style="--c: var(--runa)"><b>W</b>Prisão de Runa</span>
+      <span style="--c: var(--accent)"><b>E</b>Fluxo de Feitiço</span>
+      <span style="--c: var(--pergaminho)"><b>G</b>Fluxo Arcano</span>
+    </div>
+    <p class="aviso"><b>O ponto mais importante:</b> no nível 18, coloque 1 ponto no <b style="display:inline">Eco Rúnico (D)</b>, a passiva que devolve mana quando um monstro com Fluxo morre. Sem ela, a mana acaba o tempo todo e o XP por hora cai pela metade.</p>
+  </header>
+
+  <section class="painel" aria-label="Como deixar o personagem no seu nível">
+    <div class="controle">
+      <div class="linha">
+        <label class="rotulo" for="nivel">Seu nível</label>
+        <div class="passo-nv">
+          <button type="button" id="menos" aria-label="Diminuir o nível">−</button>
+          <output id="nivelTxt" for="nivel">30</output>
+          <button type="button" id="mais" aria-label="Aumentar o nível">+</button>
+        </div>
+      </div>
+      <input type="range" id="nivel" min="1" max="100" value="30">
+    </div>
+
+    <div class="respostas">
+      <div class="coluna">
+        <div class="bloco">
+          <div class="rotulo">Pontos de habilidade</div>
+          <ul class="habs" id="habs"></ul>
+          <p class="obs">As outras habilidades ficam sem pontos, inclusive o Portal de Reinos (R).</p>
+        </div>
+      </div>
+      <div class="coluna">
+        <div class="bloco">
+          <div class="rotulo">Barra de combate</div>
+          <div class="barra" id="barra"></div>
+        </div>
+        <div class="bloco">
+          <div class="rotulo">Atributos</div>
+          <p class="destaque" id="atrib">Foco 63 · Força 24</p>
+          <p class="obs" id="atribObs"></p>
+          <div class="lucidez">
+            <label for="luc">Sua Lucidez Escarlate (a bota) muda quanto Foco precisa:</label>
+            <select id="luc"></select>
+          </div>
+        </div>
+        <p class="proximo" id="proximo"></p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <header>
+      <div class="rotulo">Para farmar</div>
+      <h2>Itens</h2>
+      <p>Uma bota e quatro itens. Os da lista estão do que mais faz falta para o que menos faz.</p>
+    </header>
+    <ul class="lista">
+      <li><span class="slot">Bota</span><div><b>Lucidez Escarlate</b><span class="desc">Recarga 15% menor e mana. É ela que, junto com o Foco, leva a recarga a −40%.</span></div></li>
+      <li><span class="slot">Item</span><div><b>Cajado do Arcanjo</b><span class="desc">Mana, e 3% da mana máxima vira Poder de Habilidade.</span></div></li>
+      <li><span class="slot">Item</span><div><b>Capuz da Morte de Rabadon</b><span class="desc">+35% de todo o Poder de Habilidade. É a maior melhora da build.</span></div></li>
+      <li><span class="slot">Item</span><div><b>Cajado do Vazio</b><span class="desc">40% de penetração mágica. Rende mais que o Eco de Luden.</span></div></li>
+      <li><span class="slot">Item</span><div><b>Coroa da Rainha Despedaçada</b><span class="desc">Mana, vida e +6% de Poder. Empata com o <b style="display:inline">Eco de Luden</b>: use o que tiver.</span></div></li>
+      <li><span class="slot mitico">Mítico</span><div><b>Tempestade de Luden</b><span class="desc">Se conseguir uma, ela entra no lugar da Coroa: rende de 11% a 15% mais.</span></div></li>
+    </ul>
+    <ul class="dicas">
+      <li><p><b>Começando:</b> a Lucidez, o Arcanjo e o Rabadon vêm primeiro. Até o Rabadon chegar, a Coroa e o Eco de Luden seguram bem os outros espaços. O Cajado do Vazio entra por último, no lugar do Eco de Luden.</p></li>
+      <li><p><b>Morrendo para os chefes</b> (Arauto, Dragão Infernal, Barão) antes de completar a build? Troque a Coroa ou o Luden pelo <b style="display:inline">Cetro de Cristal de Rylai</b>: a lentidão dele zerou as mortes em todos os testes. Custa de 2% a 16% do XP; com a build completa, não precisa.</p></li>
+      <li><p><b>Não valem:</b> Sapatos Enfeitiçados no lugar da Lucidez, Ímpeto Cósmico, Chama Sombria, Liandry e Morellonomicon.</p></li>
+    </ul>
+    <div class="bloco">
+      <div class="rotulo">Cartas</div>
+      <ul class="dicas">
+        <li><p><b>Poder de Habilidade</b> é a carta padrão. A Lendária é a melhor que existe para ele.</p></li>
+        <li><p><b>Recarga</b> não vale: o Foco já leva a recarga a −40%, e cada carta de Recarga no lugar de uma de Poder rende menos.</p></li>
+        <li><p><b>Vampirismo Universal</b> só se ele estiver morrendo. Uma carta basta e custa de 1% a 3% do XP.</p></li>
+        <li><p>A carta rende igual em qualquer item. Encaixar é grátis; tirar custa ouro no Ornn.</p></li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <header>
+      <div class="rotulo">Do nível 1 ao 50</div>
+      <h2>Ordem dos pontos</h2>
+      <p>Prisão de Runa (W) leva 1 ponto no começo e fica nele até o fim da lista. O jogo limita quantos pontos cada habilidade aceita em cada nível; quando a da vez está no limite, o ponto vai na próxima.</p>
+    </header>
+    <ol class="passos">
+      <li><span class="tit"><kbd>Q</kbd><kbd>E</kbd> Sobrecarregar e Fluxo de Feitiço</span><span class="det">Juntas, com a Q um passo na frente: Q no 10 no nível 19, E no 10 no nível 23.</span></li>
+      <li class="chave"><span class="tit"><kbd>D</kbd> Eco Rúnico, 1 ponto</span><span class="det">No nível 18, assim que libera. Esse ponto sozinho resolve a mana.</span></li>
+      <li><span class="tit"><kbd>G</kbd> Fluxo Arcano</span><span class="det">1 ponto no nível 8 para entrar na barra; depois até 10 (no nível 32).</span></li>
+      <li><span class="tit"><kbd>D</kbd> Eco Rúnico até 10</span><span class="det">No nível 41.</span></li>
+      <li><span class="tit"><kbd>W</kbd> Prisão de Runa</span><span class="det">Com o resto: chega a 10 no nível 50.</span></li>
+    </ol>
+    <p class="obs">Barra: <kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> e, do nível 8 em diante, a Fluxo Arcano no 4º espaço. O Portal de Reinos (R) não entra: ele joga o Ryze para longe do grupo, e os monstros precisam andar até ele de novo.</p>
+  </section>
+
+  <section>
+    <header>
+      <div class="rotulo">Onde caçar</div>
+      <h2>Zonas</h2>
+      <p>O Campo Vermelho não tem chefe. Do Rio em diante, cada grupo tem 1,5% de chance de ser um chefe.</p>
+    </header>
+    <ul class="lista">
+      <li><span class="slot">1 a 24</span><div><b>A zona do seu nível</b><span class="desc">Antes do 18, sem o Eco Rúnico, a mana acaba e ele morre fácil: leve poções e acompanhe.</span></div></li>
+      <li><span class="slot">25 a 31</span><div><b>Campo Vermelho</b><span class="desc">Rende de 8% a 11% mais que o Rio, e não tem chefe.</span></div></li>
+      <li><span class="slot">32 a 40</span><div><b>Fosso do Dragão</b><span class="desc">No 34, rende 9% mais que o Campo Vermelho; no 37, 9% mais que o Rio.</span></div></li>
+      <li><span class="slot">41 a 49</span><div><b>Covil do Barão</b><span class="desc">+14% sobre o Fosso no 41 e +51% no 46.</span></div></li>
+      <li><span class="slot">50 em diante</span><div><b>Covil do Dragão Ancião</b><span class="desc">Libera no 50. Com a build completa, ele não morreu lá nos testes.</span></div></li>
+    </ul>
+  </section>
+
+  <section>
+    <header>
+      <div class="rotulo">Para upar mais rápido</div>
+      <h2>Dicas</h2>
+    </header>
+    <ul class="dicas">
+      <li><p>Tenha sempre uma tarefa do Capitão ativa. Ela só conta no campo dela, então cace onde a tarefa está.</p></li>
+      <li><p>Morrer custa 10% do XP do nível, e o Ryze fica parado na Fonte até você mandar caçar de novo. Uma morte no nível 30 custa de 40 minutos a 1 hora de caça.</p></li>
+      <li><p>Personagem antigo, de quando o jogo distribuía os pontos sozinho? Confira a habilidade D: o automático deixava o Eco Rúnico em 0 até o nível 45 e o Portal na barra, e isso rende de 38% a 59% menos. Resete as habilidades no Mestre da Legião (25 mil de ouro por nível) ou na loja (150 💎).</p></li>
+      <li><p>Colocou tudo em Força? Sem Foco, a recarga não chega a −40% e ele rende de 15% a 18% menos. O reset de atributos custa o mesmo e se paga.</p></li>
+    </ul>
+  </section>
+
+  <details>
+    <summary>Por que assim: números dos testes</summary>
+    <ul class="dicas">
+      <li><p><b>Eco Rúnico (D):</b> 1 ponto no nível 18 dobra o XP por hora (de +95% a +103% nos níveis 18 a 22). Sem ele, o Ryze passa 90% do tempo sem mana.</p></li>
+      <li><p><b>Ordem dos pontos:</b> Fluxo Arcano antes de mais pontos na D rende de 1% a 4% mais (níveis 26 a 40). Do 40 em diante, a D antes da W rende de 1% a 4% mais. W antes da Fluxo Arcano perde de 3% a 8%. Fluxo Arcano antes de Q e E perde de 7% a 12% nos níveis 19 a 25.</p></li>
+      <li><p><b>Barra:</b> a Fluxo Arcano no 4º espaço rende 4% mais que o Portal. Grilhão Rúnico, Círculo de Runas, Pergaminho Antigo e Tempestade Arcana empatam ou perdem até 10%.</p></li>
+      <li><p><b>Atributos:</b> sem Foco, de 15% a 18% menos. Foco além do necessário para −40% empata ou perde até 3%. Vitalidade não diminuiu as mortes e custa de 1% a 9%.</p></li>
+      <li><p><b>Itens:</b> Sapatos Enfeitiçados no lugar da Lucidez, mesmo com Foco a mais para compensar a recarga, de 11% a 16% menos. Eco de Luden no lugar do Arcanjo, 10% menos. Chama Sombria, Liandry, Ímpeto Cósmico e Rylai no lugar do Rabadon rendem de 14% a 21% menos. Cajado do Vazio no lugar do Eco de Luden: +2% a +8%. Coroa e Eco de Luden empatam. Tempestade de Luden no lugar da Coroa: +11% a +15%; no lugar do Arcanjo, só +2% a +5%.</p></li>
+      <li><p><b>Cartas:</b> uma de Vampirismo no lugar de uma de Poder, de 1% a 3% menos. Duas de Recarga, de 3% a 5% menos; cinco, de 11% a 13% menos.</p></li>
+      <li><p><b>Zonas:</b> Campo Vermelho contra Rio, +8% no 28 e +11% no 31. Fosso contra Vermelho, +3% no 31 e +9% no 34. Barão contra Fosso, +14% no 41 e +51% no 46.</p></li>
+      <li><p><b>Conferência com um Ryze de verdade:</b> o simulador reproduziu a ficha de um jogador do Discord (nível 38, mana 10,8 mil) e os abates dele no Fosso: 2.410 por hora no jogo, de 2.400 a 2.490 na simulação. Os itens e o Foco do post dele batem com estes testes. Na ordem dos pontos, ele sobe a Fluxo Arcano antes de Q e E; do 30 em diante, isso fica de 1% a 4% atrás deste guia.</p></li>
+    </ul>
+    <p class="fonte">Testes rodando o próprio motor do jogo (versão de 26/10/2026) fora do navegador, de 3 a 4 rodadas de 1,5 a 2 horas de caça por teste, sem poções automáticas. Diferenças abaixo de 2% são empate. A simulação conta um pouco menos de abates que o jogo real (o mascote não entra), igual para todas as opções. Fontes: <a href="https://lolidle.com/wiki#campeoes" target="_blank" rel="noopener">wiki do LoL Idle</a> e o código do jogo.</p>
+  </details>
+
+</div>
+
+<script src="/roteiros/ryze.js"></script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lupa Online</title>
+<link rel="stylesheet" href="painel.css">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<main class="login-pagina">
+  <form id="form" class="cartao login" novalidate>
+    <h1><svg class="ico marca" viewBox="0 0 24 24" width="28" height="28" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M15.5 15.5 21 21"></path></svg>Lupa <b>Online</b></h1>
+    <p class="nota">O que a Lupa lê no PC de casa, para ver de qualquer lugar. Use a mesma conta que você colocou em Lupa → Ajustes.</p>
+    <label>E-mail <input type="email" name="email" autocomplete="username" required></label>
+    <label>Senha <input type="password" name="senha" autocomplete="current-password" required minlength="8"></label>
+    <div class="botoes">
+      <button class="botao principal" type="submit">Entrar</button>
+      <button class="botao" type="button" id="criar">Criar a conta (só na primeira vez)</button>
+    </div>
+    <p id="msg" class="nuvem-erro" role="alert"></p>
+    <p class="nota"><a href="/roteiros/">Roteiros dos campeões</a>: abertos, sem login.</p>
+  </form>
+</main>
+<script src="supabase.js"></script>
+<script src="config.js"></script>
+<script src="entrar.js"></script>
+</body>
+</html>

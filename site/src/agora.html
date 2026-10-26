@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lupa Online · Agora</title>
+<link rel="stylesheet" href="painel.css">
+<link rel="stylesheet" href="central.css">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<header class="c-topo" id="c-topo">
+  <div class="c-linha">
+    <div class="quem">
+      <strong>AGORA</strong>
+      <span id="quem">lendo o banco…</span>
+    </div>
+    <span id="status" class="status"></span>
+    <div id="c-acoes" class="c-acoes"></div>
+  </div>
+  <div id="xp-topo" class="c-xp" hidden></div>
+  <div id="personagens" class="personagens c-personagens" hidden></div>
+</header>
+<main id="c-grade" class="c-grade"></main>
+<main id="c-mini" class="c-mini" hidden></main>
+<footer class="rodape c-rodape">
+  <svg class="ico" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 11h12a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-6a2 2 0 0 1 2-2z"></path><path d="M8 11V7a4 4 0 0 1 8 0v4"></path></svg>
+  <span>A mesma Central da Lupa, lida do seu banco. Atualiza a cada 30 s; a Lupa no PC de casa envia a cada minuto.</span>
+</footer>
+<script src="supabase.js"></script>
+<script src="config.js"></script>
+<script src="plano.js"></script>
+<script src="ui.js"></script>
+<script src="nuvem.js"></script>
+<script src="agora.js"></script>
+<script src="central.js"></script>
+</body>
+</html>
