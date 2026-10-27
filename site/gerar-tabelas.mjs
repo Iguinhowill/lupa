@@ -3,8 +3,11 @@
 // pequenas escritas à mão aqui. O motor do jogo NÃO é copiado: o que vai para o site são tabelas e fórmulas curtas.
 //
 // Como lê: baixa /jogar, acha o <script> do jogo (jogo.js), segue os imports do motor.js e guarda tudo numa pasta temporária.
-// O motor roda num processo filho do Node com o modelo de permissões (--permission): só pode LER aquela pasta, sem rede,
-// sem gravar arquivo e sem abrir processo. Depois o próprio script confere as funções reescritas contra as do motor.
+// O motor roda num processo filho do Node com o modelo de permissões (--permission): só pode LER aquela pasta, sem gravar
+// arquivo e sem abrir processo. ATENÇÃO: no Node 24 esse modelo NÃO corta a rede, então o filho roda sem nenhuma variável
+// de ambiente (não há token nem chave para vazar). É código público do próprio jogo, mas não é uma caixa de areia de
+// verdade: rode só de vez em quando, à mão. Depois o script confere as funções reescritas contra as do motor e só então
+// grava o src/dados-jogo.js.
 // Uso: node gerar-tabelas.mjs        (rode de vez em quando; o site avisa quando as tabelas ficam velhas)
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -21,7 +24,9 @@ const baixar = async (url) => {
   if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
   return r.text();
 };
-const importsDe = (src) => [...src.matchAll(/(?:^|\n)\s*import\s+(?:[^'"]*?from\s*)?['"](\.[^'"]+)['"]/g)].map((m) => m[1]);
+// processo filho sem o ambiente do pai (no Windows, SystemRoot é o mínimo para o Node subir)
+const ENV_FILHO = process.env.SYSTEMROOT ? { SYSTEMROOT: process.env.SYSTEMROOT } : {};
+const importsDe =(src) => [...src.matchAll(/(?:^|\n)\s*import\s+(?:[^'"]*?from\s*)?['"](\.[^'"]+)['"]/g)].map((m) => m[1]);
 
 const pasta = mkdtempSync(join(tmpdir(), 'lolidle-js-'));
 try {
@@ -79,9 +84,17 @@ try {
     }));
   `;
   const filho = spawnSync(process.execPath, ['--permission', `--allow-fs-read=${pasta}`, '--input-type=module', '-e', leitor],
-    { encoding: 'utf8', maxBuffer: 64e6, cwd: pasta });
+    { encoding: 'utf8', maxBuffer: 64e6, cwd: pasta, env: ENV_FILHO });
   if (filho.status !== 0) throw new Error('o motor não carregou no processo isolado:\n' + (filho.stderr || filho.stdout).slice(0, 2000));
   const T = JSON.parse(filho.stdout.trim().split('\n').pop());
+  // o formato antes de escrever qualquer coisa (os valores vêm de arquivos baixados)
+  const numeros = (v, n, nome) => { if (!Array.isArray(v) || v.length !== n || !v.every((x) => typeof x === 'number' && Number.isFinite(x))) throw new Error(`${nome}: esperava ${n} números`); };
+  numeros(T.XP_NIVEL, T.NIVEL_MAX, 'XP_NIVEL');
+  numeros(T.CHANCE_REFINO, T.REFINO_MAX, 'CHANCE_REFINO');
+  numeros(T.REGRESSAO_REFINO, T.REFINO_MAX, 'REGRESSAO_REFINO');
+  for (const [nome, arr] of [['ZONAS', T.ZONAS], ['ITENS', T.ITENS]]) {
+    if (!Array.isArray(arr) || !arr.length || !arr.every((x) => /^[\w-]+$/.test(String(x.id)))) throw new Error(`${nome}: ids fora do formato`);
+  }
 
   // 3) grava dados-jogo.js
   const j = (v) => JSON.stringify(v);
@@ -171,14 +184,14 @@ const JOGO = (() => {
 })();
 if (typeof module !== 'undefined') module.exports = JOGO;
 `;
-  writeFileSync(SAIDA, fonte);
-  console.log('gravado', SAIDA);
+  const provisorio = join(pasta, 'dados-jogo.js');      // conferido antes de ir para o src/
+  writeFileSync(provisorio, fonte);
 
   // 4) confere as funções reescritas contra o motor (no mesmo processo isolado)
   const conferir = `
     const M = await import(${JSON.stringify(pathToFileURL(join(pasta, 'motor.js')).href)});
     const { createRequire } = await import('node:module');
-    const J = createRequire(${JSON.stringify(pathToFileURL(join(aqui, 'x.js')).href)})(${JSON.stringify(SAIDA)});
+    const J = createRequire(${JSON.stringify(pathToFileURL(join(pasta, 'x.js')).href)})(${JSON.stringify(provisorio)});
     const erros = [], igual = (nome, a, b, tol = 1e-6) => { if (!(a === b || (typeof a === 'number' && Math.abs(a - b) <= tol * Math.max(1, Math.abs(b))))) erros.push(nome + ': ' + a + ' != ' + b); };
     for (let n = 1; n <= 100; n++) igual('xpParaNivel ' + n, J.xpParaNivel(n), M.xpParaNivel(n));
     for (let a = 1; a <= 100; a += 3) for (let b = 1; b <= 100; b += 4) igual('fatorXp ' + a + ',' + b, J.fatorXp(a, b), M.fatorXp(a, b));
@@ -192,11 +205,13 @@ if (typeof module !== 'undefined') module.exports = JOGO;
       igual('chanceForja ' + r + ',' + f + ',' + vip, J.chanceForja(r, f, vip), M.chanceForjaAgora({ vipAte: vip ? Date.now() + 1e9 : 0, persistencia: { forja: { [(r + 1) + ':basico']: f } } }, r, '1001'));
     console.log(JSON.stringify(erros.slice(0, 10)), erros.length);
   `;
-  const v = spawnSync(process.execPath, ['--permission', `--allow-fs-read=${pasta}`, `--allow-fs-read=${aqui}`, '--input-type=module', '-e', conferir], { encoding: 'utf8', maxBuffer: 64e6, cwd: pasta });
+  const v = spawnSync(process.execPath, ['--permission', `--allow-fs-read=${pasta}`, '--input-type=module', '-e', conferir], { encoding: 'utf8', maxBuffer: 64e6, cwd: pasta, env: ENV_FILHO });
   if (v.status !== 0) throw new Error('a conferência falhou:\n' + (v.stderr || v.stdout).slice(0, 2000));
   const [lista, total] = [v.stdout.trim().split('\n').pop().replace(/ \d+$/, ''), +v.stdout.trim().split(' ').pop()];
   if (total) throw new Error(`as funções reescritas divergem do motor em ${total} conta(s): ${lista}`);
   console.log('conferido: xpParaNivel, fatorXp, porAbateZona, zonaIdeal, precoRefino, valorVenda e a chance da forja batem com o motor.');
+  writeFileSync(SAIDA, fonte);
+  console.log('gravado', SAIDA);
 } finally {
   rmSync(pasta, { recursive: true, force: true });
 }

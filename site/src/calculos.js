@@ -6,7 +6,7 @@ const CALC = (() => {
   const J = typeof JOGO !== 'undefined' ? JOGO : require('./dados-jogo.js');
   const HORA_MS = 3600e3;
   const mulberry32 = (a) => () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
-  const percentil = (ord, p) => ord[Math.min(ord.length - 1, Math.floor(p * ord.length))];
+  const percentil = (ord, p) => ord[Math.min(ord.length - 1, Math.max(0, Math.ceil(p * ord.length) - 1))];      // posto mais próximo
 
   // chance da tentativa por (refino atual, falhas seguidas): uma tabela por refino, feita uma vez
   const tabChance = new Map();
@@ -20,7 +20,14 @@ const CALC = (() => {
   }
   // Monte Carlo com semente fixa: forja do refino "de" até "ate". As falhas contam por refino alvo (+1..+7) e só zeram quando aquele
   // alvo dá certo (voltar de nível ao falhar não zera); falhas0 = falhas já acumuladas no primeiro alvo.
-  function simularForja({ id, de, ate, vip, falhas0 = 0, n = 2000, semente = 20261026 }) {
+  // a mesma conta (semente fixa) dá sempre o mesmo resultado: guarda as últimas para não refazer a cada redesenho
+  const memoForja = new Map();
+  function simularForja(opts) {
+    const k = JSON.stringify(opts);
+    if (!memoForja.has(k)) { if (memoForja.size > 40) memoForja.delete(memoForja.keys().next().value); memoForja.set(k, simularForjaJa(opts)); }
+    return memoForja.get(k);
+  }
+  function simularForjaJa({ id, de, ate, vip, falhas0 = 0, n = 2000, semente = 20261026 }) {
     const rnd = mulberry32(semente), preco = Array.from({ length: 8 }, (_, r) => (r < 7 ? J.precoRefino(id, r) : 0));
     const tab = Array.from({ length: 7 }, (_, r) => chanceTab(r, vip));
     const tent = new Float64Array(n), custo = new Float64Array(n);

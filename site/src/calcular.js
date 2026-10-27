@@ -45,10 +45,9 @@ function graficoCurva(larg, nivel, alvo) {
   montarNav();
   const raiz = $id('pagina');
   let quem = lerPref('calc-quem', ''), aba = lerPref('calc-aba', 'nivel');
-  let estados, cac, merc;
-  try { [estados, cac, merc] = await Promise.all([Nuvem.estados(), Nuvem.cacadas(Date.now() - 8 * DIA), Nuvem.mercado(12), Nuvem.planos()]); }
+  let estados, cac;
+  try { [estados, cac] = await Promise.all([Nuvem.estados(), Nuvem.cacadas(Date.now() - 8 * DIA), Nuvem.planos()]); }      // planos: nomeCurto usa o campeão
   catch (e) { erroNaPagina(raiz, e); return; }
-  const precos = indicePrecos(merc);
   const nomes = Object.keys(estados).sort();
   if (!nomes.includes(quem)) quem = nomes[0] || '';
   const itens = [...JOGO.ITENS].sort((a, b) => ['lendario', 'epico', 'basico', 'mitico'].indexOf(a.raridade) - ['lendario', 'epico', 'basico', 'mitico'].indexOf(b.raridade) || a.nome.localeCompare(b.nome, 'pt-BR'));
@@ -132,7 +131,7 @@ function graficoCurva(larg, nivel, alvo) {
         nota(`"Com fatorXp" supõe que você continua em ${zona.nome}. ${perda} Sem fatorXp o XP/h seria sempre o mesmo, o que só vale se você for subindo de zona.`));
     }
     caixa.replaceChildren(origem, form, corpo,
-      cartao('Curva de XP até o nível 100', graficoCurva(Math.max(300, Math.min(1100, Math.floor(raiz.clientWidth - 34))), nivel, TN.alvo)),
+      h('div', { class: 'calc-corpo' }, h('h3', { class: 'sub-cab' }, 'Curva de XP até o nível 100'), graficoCurva(Math.max(300, Math.min(1100, Math.floor(raiz.clientWidth - 34))), nivel, TN.alvo)),
       nota('Estimativa: usa o XP/h que você mediu (ou digitou), a tabela de XP do jogo e a regra do fatorXp. Não conta mortes, tarefas, diárias, eventos nem mudança de build.'));
     return h('section', { class: 'cartao' }, h('h2', { class: 'rotulo' }, 'Tempo até o nível'), caixa);
   }
@@ -143,15 +142,15 @@ function graficoCurva(larg, nivel, alvo) {
     const corpo = h('div', { class: 'calc-corpo' }), saida = h('div', { class: 'calc-corpo' });
     const guardar = () => { gravarPref('calc-fj-item', FJ.item); gravarPref('calc-fj-de', String(FJ.de)); gravarPref('calc-fj-ate', String(FJ.ate)); gravarPref('calc-fj-vip', FJ.vip ? '1' : '0'); };
     FJ.de = Math.min(6, Math.max(0, FJ.de)); FJ.ate = Math.min(7, Math.max(FJ.de + 1, FJ.ate));
-    const selDe = h('select', { id: 'sel-de', onchange: () => { FJ.de = +selDe.value; guardar(); desenhar(); } }, [0, 1, 2, 3, 4, 5, 6].map((r) => h('option', { value: r }, `+${r}`)));
+    const selDe = h('select', { id: 'sel-de', onchange: () => { FJ.de = +selDe.value; FJ.falhas = '0'; guardar(); desenhar(); } }, [0, 1, 2, 3, 4, 5, 6].map((r) => h('option', { value: r }, `+${r}`)));
     selDe.value = FJ.de;
-    const selAte = h('select', { id: 'sel-ate', onchange: () => { FJ.ate = +selAte.value; guardar(); desenhar(); } }, [1, 2, 3, 4, 5, 6, 7].filter((r) => r > FJ.de).map((r) => h('option', { value: r }, `+${r}`)));
+    const selAte = h('select', { id: 'sel-ate', onchange: () => { FJ.ate = +selAte.value; FJ.falhas = '0'; guardar(); desenhar(); } }, [1, 2, 3, 4, 5, 6, 7].filter((r) => r > FJ.de).map((r) => h('option', { value: r }, `+${r}`)));
     selAte.value = FJ.ate;
     const inpFalhas = camposNum({ id: 'in-falhas', value: FJ.falhas, 'aria-label': 'Falhas acumuladas no próximo refino' });
     inpFalhas.addEventListener('change', () => { FJ.falhas = String(Math.max(0, Math.round(Number(inpFalhas.value) || 0))); calcular(); });
-    const form = h('div', { class: 'filtros-drops' }, campo('Item', seletorItem(FJ.item, (v) => { FJ.item = v; guardar(); desenhar(); })), campo('Refino atual', selDe), campo('Refino alvo', selAte),
+    const form = h('div', { class: 'filtros-drops' }, campo('Item', seletorItem(FJ.item, (v) => { FJ.item = v; FJ.falhas = '0'; guardar(); desenhar(); })), campo('Refino atual', selDe), campo('Refino alvo', selAte),
       campo(`Falhas já acumuladas no +${FJ.de + 1}`, inpFalhas),
-      h('button', { type: 'button', class: 'chave', 'aria-pressed': String(FJ.vip), onclick: () => { FJ.vip = !FJ.vip; guardar(); desenhar(); } }, h('span', { class: 'trilho', 'aria-hidden': 'true' }), h('span', null, `VIP (chance ×${JOGO.VIP.refino}, até ${Math.round(JOGO.VIP.refinoMax * 100)}%)`)));
+      h('button', { type: 'button', id: 'bt-vip', class: 'chave', 'aria-pressed': String(FJ.vip), onclick: () => { FJ.vip = !FJ.vip; guardar(); desenhar(); } }, h('span', { class: 'trilho', 'aria-hidden': 'true' }), h('span', null, `VIP (chance ×${JOGO.VIP.refino}, até ${Math.round(JOGO.VIP.refinoMax * 100)}%)`)));
 
     function calcular() {
       const it = JOGO.item(FJ.item), falhas0 = Math.max(0, Math.round(Number(FJ.falhas) || 0));
@@ -169,7 +168,7 @@ function graficoCurva(larg, nivel, alvo) {
           tile(`Chance da próxima tentativa (+${FJ.de} → +${FJ.de + 1})`, pct(chance1), falhas0 ? `com ${inteiro(falhas0)} falhas acumuladas` : 'sem falhas acumuladas'),
           tile('Tentativas esperadas', inteiro(r.tent.media), `mediana ${inteiro(r.tent.p50)} · 90% termina em ${inteiro(r.tent.p90)}`),
           tile('Ouro esperado', precoTxt(r.custo.media), `mediana ${precoTxt(r.custo.p50)} · 90% termina em ${precoTxt(r.custo.p90)}`),
-          tile('Garantia do Ornn no passo atual', faltamGar ? `em ${inteiro(faltamGar)} tentativas` : 'não há', faltamGar ? `a ${inteiro(regra1.max)}ª falha seguida vira 100%` : `o +${FJ.de + 1} é rápido e não tem garantia`)),
+          tile('Garantia do Ornn no passo atual', faltamGar ? `em ${inteiro(faltamGar)} tentativas` : 'não há', faltamGar ? `chega a 100% na ${inteiro(regra1.max)}ª tentativa` : `o +${FJ.de + 1} é rápido e não tem garantia`)),
         tabela([{ t: 'Passo' }, { t: 'Chance base', num: true }, { t: 'Ouro por tentativa', num: true }, { t: 'Garantia na' }, { t: 'Chance de voltar um refino ao falhar', num: true }], passos, 'Passos da forja'),
         nota(`${it.nome} (preço-base ${inteiro(it.preco)}). A "chance base" é a da primeira tentativa; a cada falha ela sobe 1% da própria chance (até +50%) e, perto do limite, dispara até 100% na tentativa da garantia. As falhas contam por refino alvo e por raridade do item e só zeram quando aquele refino dá certo: voltar de nível ao falhar não zera.`),
         nota(`Estimativa: média, mediana e 90% vêm de ${inteiro(r.n)} simulações com semente fixa (o resultado não muda se você repetir a conta, mas é uma estimativa e não um valor exato). Não conta Gemas de Sorte nem de Proteção, e a qualidade do item não muda o preço da forja.`));
@@ -223,17 +222,28 @@ function graficoCurva(larg, nivel, alvo) {
 
   // ================= página =================
   const ABAS = [['nivel', 'Tempo até o nível'], ['forja', 'Forja do Ornn'], ['venda', 'Valor de venda']];
-  function desenhar() {
-    const ativo = document.activeElement?.id;
+  // quem estava com o foco: o id, ou o botão de um grupo de chips pelo texto (os chips não têm id)
+  const chaveFoco = (el) => !el || el === document.body ? null : el.id ? { id: el.id } : el.closest('[role=group]') ? { grupo: el.closest('[role=group]').getAttribute('aria-label'), texto: el.textContent } : null;
+  function devolverFoco(k) {
+    if (!k) return;
+    const el = k.id ? $id(k.id) : [...document.querySelectorAll(`[role=group][aria-label="${CSS.escape(k.grupo)}"] button`)].find((b) => b.textContent === k.texto);
+    if (!el) return;
+    el.focus();
+    if (el.tagName === 'INPUT') try { el.setSelectionRange(el.value.length, el.value.length); } catch {}
+  }
+  let espera = 0;
+  const desenhar = () => { clearTimeout(espera); espera = setTimeout(desenharJa, 0); };      // depois do evento: o Tab já moveu o foco
+  function desenharJa() {
+    const ativo = chaveFoco(document.activeElement);
     const cab = h('div', { class: 'pagina-cab' },
       h('h1', null, 'Calculadoras', h('small', null, 'Estimativas com as tabelas públicas do jogo. O site só calcula: não mexe no jogo.')),
       chips('Calculadora', ABAS, aba, (v) => { aba = v; gravarPref('calc-aba', v); desenhar(); }),
       nomes.length > 1 ? chips('Personagem', nomes.map((n) => [n, nomeCurto(n)]), quem, (v) => { quem = v; gravarPref('calc-quem', v); desenhar(); }) : null);
     raiz.replaceChildren(cab, aba === 'forja' ? abaForja() : aba === 'venda' ? abaVenda() : abaNivel(), rodape());
     raiz.removeAttribute('aria-busy');
-    if (ativo && $id(ativo) && ativo.startsWith('in-')) { const el = $id(ativo); el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch {} }
+    devolverFoco(ativo);
   }
-  desenhar();
+  desenharJa();
   let tam = raiz.clientWidth;
   window.addEventListener('resize', () => { if (Math.abs(raiz.clientWidth - tam) > 40) { tam = raiz.clientWidth; if (aba === 'nivel') desenhar(); } });
 })();

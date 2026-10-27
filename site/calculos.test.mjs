@@ -54,3 +54,16 @@ test('XP/h das sessões e dos baldes', () => {
   assert.equal(C.xpHoraBaldes(sess, agora), 3e5 / (900 / 3600));      // 3 baldes de 5 min = 15 min a 1,2 M/h
   assert.equal(C.xpHoraBaldes([], agora), null);
 });
+
+test('forja com regressão (+2 → +3): leva mais tentativas que a chance sozinha e os percentis ficam em ordem', () => {
+  const r = C.simularForja({ id: '3031', de: 2, ate: 3, vip: false });
+  const semRegressao = 1 / J.chanceForja(2, 0, false);      // geométrica pura, sem voltar ao +1 nem a persistência
+  assert.ok(J.REGRESSAO_REFINO[2] > 0, 'o +2 → +3 tem regressão');
+  assert.ok(r.tent.p50 <= r.tent.p90, 'p50 <= p90');
+  assert.ok(r.tent.media > 1 && r.tent.media < semRegressao * 1.5, `média plausível: ${r.tent.media} (geométrica ${semRegressao})`);
+});
+
+test('a mesma conta da forja vem do cache (mesmo objeto)', () => {
+  const o = { id: '3031', de: 0, ate: 2, vip: true };
+  assert.equal(C.simularForja(o), C.simularForja({ ...o }));
+});
