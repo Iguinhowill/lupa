@@ -402,7 +402,8 @@ function desenharCacada(e, ctx) {
     drops.length ? secao(`O que caiu nesta sessão${vd.total > 0 ? ` · ${curto(vd.total)} no Lojista` : ''}`,
       h('ul', { class: 'lista-simples' }, drops.map((d) => h('li', { class: 'com-img' }, imagem(d.n.replace(/\s\[[A-Z+]+\]$/, '').replace(/\s\+\d+$/, ''), ctx, { tam: 24 }),
         h('span', { class: 'drop-nome' }, `${inteiro(d.q)}× ${d.n}`), d.v != null ? h('span', { class: 'num drop-valor' }, curto(d.v * d.q)) : null))),
-      vd.total > 0 ? nota('Valor no Lojista: espólio pelo preço do jogo; item comum como qualidade B (a da linha de loot ainda não é a sorteada); lendário com a qualidade que saiu.') : null) : null,
+      vd.total > 0 ? nota('Valor no Lojista: espólio pelo preço do jogo; item comum como qualidade B (a da linha de loot ainda não é a sorteada); lendário com a qualidade que saiu.'
+        + (vd.semPreco ? ` ${inteiro(vd.semPreco)} sem preço no Lojista (runas, gemas ou itens que as tabelas ainda não conhecem) não entram na soma.` : '')) : null) : null,
     h('div', { class: 'botoes' },
       h('button', { type: 'button', class: 'botao', onclick: () => ctx.salvarConfig({ novaSessaoPor: { ...config.novaSessaoPor, [e.nome]: Date.now() } }) }, 'Nova sessão'),
       h('button', { type: 'button', class: 'botao', onclick: () => exportarCsv(e.nome, sessoes) }, 'Exportar CSV')),
