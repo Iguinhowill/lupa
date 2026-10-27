@@ -71,9 +71,10 @@
   }
 
   // clica (ou aperta a tecla) e espera a tela mudar (cond) até `total` ms. Se em `cedo` ms nada mudou e o botão continua
-  // ali, a entrada pode ter se perdido: repete uma vez. Só nos botões que aguentam um segundo clique no jogo (voltar já
-  // voltando não faz nada; falar de novo com o Capitão recomeça a mesma conversa; a zona é só escolhida de novo; a viagem
-  // repetida é ignorada); os que abrem e fecham (a aba Missões) não repetem
+  // ali, a entrada pode ter se perdido: repete uma vez. Seguro em cada passo da entrega: "entregar", "tarefa" e a oferta
+  // somem da tela no instante em que o clique pega (então só repete se ele se perdeu); voltar já voltando não faz nada;
+  // falar de novo com o Capitão recomeça a mesma conversa; a zona é só escolhida de novo; a viagem repetida é ignorada.
+  // O que abre e fecha repete mais tarde (o mapa, 2,5 s) ou não repete (a aba Missões)
   async function clicarAte(el, cond, total, cedo = 1500) {
     await clicar(el);
     const v = await esperar(cond, cedo);
@@ -157,8 +158,9 @@
     // aceita: o jogo fecha a conversa em 0,6 s (dizer('tchau')) e o rastreio volta com a tarefa nova ("0/120 · <zona>")
     const aceitou = () => { const r = $('#rastreio-tarefa'); return $('#janela-npc')?.hidden || (r && !r.hidden && !r.classList.contains('pronta') && mesma(txt($('small', r)).split(' · ').at(-1), o.zona)); };
     if (!(await clicarAte(o.botao, aceitou, 4e3))) throw new Error('O Capitão não aceitou a tarefa.');
-    await esperar(() => $('#janela-npc')?.hidden, 2e3);      // a conversa fecha 0,6 s depois: o mapa não pode abrir por baixo dela
     const nova = `${o.titulo}${o.tipo ? ` (${o.tipo})` : ''}, ~${Math.round(o.min)} min, ${curto(o.xp / o.min)} de XP por minuto`;
+    // a conversa fecha 0,6 s depois do aceite: o mapa não pode abrir por baixo dela
+    if (!(await esperar(() => $('#janela-npc')?.hidden, 2e3))) throw new Error(`Tarefa nova: ${nova}. A conversa com o Capitão não fechou: a viagem fica com você.`);
 
     passo(`Indo para ${o.zona}…`);
     const mapaAberto = () => $('#janela-mapa') && !$('#janela-mapa').hidden;

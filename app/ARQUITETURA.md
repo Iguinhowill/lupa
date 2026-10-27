@@ -133,9 +133,11 @@ Por isso cada clique ou tecla é uma entrada de verdade, `webContents.sendInputE
   estar até 5 s atrasada), volta à Fonte (o botão Voltar, ou a tecla B com a coluna escondida) e espera chegar, clica no
   rastreio (o personagem anda até o Capitão), em "entregar", em "tarefa", na oferta de mais XP por minuto (`oferta.js`),
   abre o mapa (o botão ou a tecla M), clica na zona e no "Ir", e espera chegar. Cada passo espera a tela mudar (com prazo);
-  se nada mudou em 1,5 s (2,5 s no mapa, que abre e fecha; 5 s na volta à Fonte) e o botão continua ali, repete a entrada
-  uma vez: voltar já voltando, falar de novo com o Capitão, escolher a zona de novo e a viagem repetida não mudam nada no
-  jogo. A aba Missões (abre e fecha) não repete. O primeiro passo que falha para tudo e vira o erro mostrado no painel. O andamento vai para `acao:<nome>` no armazém
+  se nada mudou no prazo e o botão continua ali, repete a entrada uma vez. Prazos: 1,5 s em "entregar", "tarefa", na
+  oferta, na zona e no "Ir"; 2,5 s no mapa (botão ou M, que abrem e fecham); 3 s no rastreio (o personagem anda); 5 s na
+  volta à Fonte (B). Repetir é seguro: "entregar", "tarefa" e a oferta somem no instante em que o clique pega (só repetem
+  se ele se perdeu), voltar já voltando, falar de novo com o Capitão, escolher a zona de novo e a viagem repetida não mudam
+  nada no jogo. A aba Missões (abre e fecha) não repete. O primeiro passo que falha para tudo e vira o erro no painel. O andamento vai para `acao:<nome>` no armazém
   (`{ tipo, estado: 'rodando' | 'ok' | 'erro' | 'parado', texto, em }`). O Parar (`lupa:acao` tipo `parar`) interrompe.
 - **Alt+L**: autoriza a aba ativa por 5 s e 1 entrada; o `acao-jogo.js` clica no `#bt-esconder-coluna` do jogo.
 
@@ -143,8 +145,9 @@ Uma ação por vez entre as contas (`acaoAtual` no main): no lado a lado, duas j
 soltar do mouse. Um pedido com outra em andamento é recusado ("Já tem uma ação em andamento…"; o Alt+L é ignorado), sem
 trocar nem renovar a autorização da primeira. A autorização some no `acao:fim`, no Parar, ao fechar a Conta 2 e se a
 página do jogo recarregar ou cair no meio (aí o `acao:<nome>` vira erro com o motivo, gravado só depois que a página velha
-saiu, e o painel não fica parado em "rodando"). Durante a ação o teclado fica no jogo dela (as teclas precisam do foco);
-no fim ele volta para quem o tinha (no lado a lado, a outra metade).
+saiu, e o painel não fica parado em "rodando"). Durante a ação o teclado fica no jogo dela (as teclas precisam do foco, e o
+painel avisa); no fim, se ele ainda está lá, volta para quem o tinha antes da última entrada (o painel do botão, ou a outra
+metade do lado a lado se a pessoa foi digitar lá no meio).
 
 O main só manda a entrada se a aba que pede está autorizada, ainda no prazo e com entradas, e à vista (janela aberta, não
 minimizada, a view no layout). O clique vem em px CSS e vira px da view pelo zoom do jogo; ponto fora da view é recusado.

@@ -170,11 +170,15 @@ function criarJogo(a) {
   ligarAtalhos(wc);
   wc.on('focus', () => { if (ultimoFoco !== a.id) { ultimoFoco = a.id; if (modo() === 'lado') { escolherNoPainel(); avisarCasca(); } } });
   wc.on('did-navigate', () => aplicarZoom());      // o Chromium pode devolver o zoom ao padrão na troca de página
-  // a página recarregou ou caiu no meio de uma ação: a autorização some na hora. O motivo vai para o painel só quando a
-  // página velha já saiu (did-navigate): até lá ela ainda roda e gravaria um passo por cima ("rodando" de novo)
+  // a página recarregou ou caiu no meio de uma entrega: a autorização some na hora. O motivo vai para o painel só quando a
+  // página velha já saiu (did-navigate, ou did-fail-load se a recarga falhou): até lá ela ainda roda e gravaria um passo por
+  // cima ("rodando" de novo). Navegação cancelada: a página velha continua e grava o próprio erro (o clique dela é recusado)
   let recarregou = null;
-  wc.on('did-start-navigation', (d) => { if (d.isMainFrame && !d.isSameDocument && encerrarAcao(a)) recarregou = pref.nomes[a.id]; });
-  wc.on('did-navigate', () => { if (recarregou) avisarFimDaAcao(recarregou, 'A página do jogo recarregou no meio. Aperte de novo.'); recarregou = null; });
+  const avisarRecarga = () => { if (recarregou) avisarFimDaAcao(recarregou, 'A página do jogo recarregou no meio. Aperte de novo.'); recarregou = null; };
+  wc.on('did-start-navigation', (d) => { if (d.isMainFrame && !d.isSameDocument && encerrarAcao(a) === 'tarefa') recarregou = pref.nomes[a.id]; });
+  wc.on('did-navigate', avisarRecarga);
+  wc.on('did-fail-load', (_e, _cod, _desc, _url, principal) => { if (principal) avisarRecarga(); });
+  wc.on('did-stop-loading', () => { recarregou = null; });
   wc.on('render-process-gone', () => encerrarAcao(a, 'A página do jogo caiu no meio. Aperte de novo.'));
   const tema = fs.readFileSync(path.join(LUPA, 'tema.css'), 'utf8');
   wc.on('dom-ready', () => { if (/^https?:\/\/((www\.)?lolidle\.com|127\.0\.0\.1|localhost)[:/]/.test(wc.getURL())) wc.insertCSS(tema).catch(() => {}); });
@@ -436,26 +440,36 @@ function atualizarSelo() {
 // O pedido (botão do painel ou Alt+L) autoriza UMA aba por pouco tempo (Acoes.REGRAS), e só uma ação por vez entre as contas:
 // no lado a lado, duas juntas disputariam o foco entre o apertar e o soltar do mouse. O preload do jogo (acao-jogo.js) pede
 // cada clique ou tecla e o main manda uma entrada de verdade (sendInputEvent), só na aba que está à vista.
-let acaoAtual = null;      // { aba, tipo, ate, resta, foco }: a ação em andamento (foco: quem tinha o teclado antes dela)
+let acaoAtual = null;      // { aba, tipo, ate, resta, devolver }: a ação em andamento (devolver: ver tomarFoco)
 const emAndamento = () => !!acaoAtual && Date.now() <= acaoAtual.ate;
 // recusa (false) se já tem uma ação em andamento: um segundo pedido não troca nem renova a autorização da primeira
 function pedirAcao(a, tipo) {
   if (!a?.view || a.tipo !== 'jogo' || emAndamento()) return false;
-  acaoAtual = { aba: a.id, ...Acoes.autorizacao(tipo), foco: webContents.getFocusedWebContents() };
+  acaoAtual = { aba: a.id, ...Acoes.autorizacao(tipo), devolver: null };
   a.view.webContents.send('acao:iniciar', { tipo });
   return true;
 }
 const avisarFimDaAcao = (nome, motivo) => { if (nome) armazem.set({ ['acao:' + nome]: { tipo: 'tarefa', estado: 'erro', texto: motivo, em: Date.now() } }); };
-// a ação daquela aba acabou, foi parada ou a página dela foi embora: a autorização some e o teclado volta para quem o tinha
-// (no lado a lado, quem digitava na outra metade). Com `motivo`, o painel deixa de mostrar "rodando" e mostra o motivo.
-// Devolve se havia uma ação daquela aba
+// Antes de cada entrada a view da ação ganha o foco (sem ele o Chromium descarta o apertar do mouse, e a tecla vai para quem
+// o tem). Quem tinha o foco logo antes (o painel do botão, ou a outra metade do lado a lado se a pessoa foi digitar lá no
+// meio) fica guardado para recebê-lo de volta no fim
+async function tomarFoco(wc) {
+  if (wc.isFocused()) return;
+  const antes = webContents.getFocusedWebContents();
+  if (acaoAtual && antes && antes !== wc) acaoAtual.devolver = antes;
+  wc.focus();
+  await new Promise((ok) => setTimeout(ok, 120));      // o foco não muda na hora
+}
+// a ação daquela aba acabou, foi parada ou a página dela foi embora: a autorização some e, se o foco ainda está no jogo da
+// ação (a pessoa não foi para outro lugar), volta para quem o tinha antes da última entrada. Com `motivo`, o painel deixa de
+// mostrar "rodando" e mostra o motivo. Devolve o tipo da ação encerrada (null se não havia uma daquela aba)
 function encerrarAcao(a, motivo) {
-  if (!acaoAtual || acaoAtual.aba !== a.id) return false;
-  const { tipo, foco } = acaoAtual;
+  if (!acaoAtual || acaoAtual.aba !== a.id) return null;
+  const { tipo, devolver } = acaoAtual, wc = a.view?.webContents;
   acaoAtual = null;
-  if (foco && !foco.isDestroyed() && foco !== a.view?.webContents) foco.focus();
+  if (devolver && !devolver.isDestroyed() && wc && !wc.isDestroyed() && webContents.getFocusedWebContents() === wc) devolver.focus();
   if (motivo && tipo === 'tarefa') avisarFimDaAcao(pref.nomes[a.id], motivo);
-  return true;
+  return tipo;
 }
 // a aba que mandou o pedido de entrada, se é a da ação e está à vista (com a janela aberta); null se não pode
 function abaAutorizada(wc) {
@@ -574,7 +588,7 @@ function ligarIpc() {
     if (!pt || !Acoes.gastar(acaoAtual)) return false;
     // o foco vai para o jogo, como num clique de verdade: com o foco no painel (onde está o botão "Entregar e seguir"), o
     // Chromium descartava o apertar e o soltar e só o mover chegava. Mover, apertar e soltar com um intervalo, como a mão
-    if (!wc.isFocused()) { wc.focus(); await new Promise((ok) => setTimeout(ok, 120)); }      // o foco não muda na hora
+    await tomarFoco(wc);
     for (const ev of Acoes.clique(pt)) { if (wc.isDestroyed()) return false; wc.sendInputEvent(ev); await new Promise((ok) => setTimeout(ok, Acoes.INTERVALO)); }
     return true;
   });
@@ -582,7 +596,7 @@ function ligarIpc() {
     const v = abaAutorizada(e.sender), evs = Acoes.tecla(p?.tecla);
     if (!v || !evs || !Acoes.gastar(acaoAtual)) return false;
     const wc = v.a.view.webContents;
-    if (!wc.isFocused()) { wc.focus(); await new Promise((ok) => setTimeout(ok, 120)); }      // a tecla vai para a view em foco
+    await tomarFoco(wc);      // a tecla vai para a view em foco
     for (const ev of evs) { if (wc.isDestroyed()) return false; wc.sendInputEvent(ev); await new Promise((ok) => setTimeout(ok, Acoes.INTERVALO)); }
     return true;
   });

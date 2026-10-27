@@ -90,6 +90,8 @@ app.whenReady().then(async () => {
 
     // 1) coluna à vista: tudo por clique (não depende do foco)
     const focoAntes = { jogo: jogo.isFocused(), painel: painel.isFocused(), janela: janela.isFocused() };
+    painel.focus();      // como quem acabou de clicar no botão do painel: no fim o foco tem de voltar para ele
+    await espera(300);
     const p1 = entregar(painel, Date.now());
     // no meio da entrega, um segundo pedido e um Alt+L: os dois recusados, sem atrapalhar a primeira
     await espera(800);
@@ -97,6 +99,8 @@ app.whenReady().then(async () => {
     jogo.sendInputEvent({ type: 'keyDown', keyCode: 'l', modifiers: ['alt'] });
     jogo.sendInputEvent({ type: 'keyUp', keyCode: 'l', modifiers: ['alt'] });
     const r1 = await p1;
+    await espera(500);
+    out.focoVoltouAoPainel = painel.isFocused();
     out.colunaDepois1 = await jogo.executeJavaScript(`document.body.classList.contains('coluna-escondida')`);
     out.cenario1 = { ...r1, passos: (await jogo.executeJavaScript('window.__d')).passos.join(' → '), mouse: (await jogo.executeJavaScript('window.__d')).mouse.slice(0, 30), focoAntes, alvo: await jogo.executeJavaScript(`(() => { const r = document.querySelector('#voltar-base').getBoundingClientRect(); return [r.left, r.top, r.width, r.height, innerWidth, innerHeight, devicePixelRatio] })()`) };
     const fim = await textoDoPainel(painel);
@@ -107,6 +111,7 @@ app.whenReady().then(async () => {
     conferir(/\bok\b/.test(fim[0]) && fim[1] === r1.a?.texto, `1) o painel não mostrou o resultado: ${fim[1]}`);
     conferir(/em andamento/.test(out.pedidoDuplo?.erro || ''), '1) um segundo pedido no meio não foi recusado: ' + JSON.stringify(out.pedidoDuplo));
     conferir(out.colunaDepois1 === false, '1) o Alt+L no meio da entrega mexeu na coluna');
+    conferir(out.focoVoltouAoPainel, '1) no fim da entrega o foco não voltou para o painel');
 
     // 2) apertar de novo logo depois, nos ~5 s em que a leitura da Lupa ainda diz "pronta" (o botão continua ligado): a ação
     // confere na tela e tem de recusar sem mexer no jogo. O pedido vai direto porque aqui a Lupa já releu e desligou o botão
