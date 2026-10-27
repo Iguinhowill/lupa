@@ -137,6 +137,11 @@ function graficoXp(series, ini, agora, passo, larg) {
     const agora = Date.now(), ini = agora - HORAS[periodo] * HORA, doQuem = (p) => quem === 'todos' || p === quem;
     const evs = d.evs.filter((e) => e.ts >= ini && doQuem(e.personagem));
     const t = totais(ini, agora, doQuem);
+    // materiais: a soma de cacadas.drops no período (sessões cortadas pelo período entram proporcionais ao tempo), com o que o Lojista
+    // paga (valorDrop do ui.js). Os itens (o lendário entra nos drops da caçada desde a Lupa 0.8) já estão em "Itens dropados".
+    const mats = Object.entries(t.materiais).map(([m, q]) => ({ m, q: Math.round(q), v: valorDrop(m) })).filter((x) => x.q > 0 && x.v?.tipo !== 'item')
+      .map((x) => ({ ...x, loja: x.v?.loja != null ? x.v.loja * x.q : null })).sort((a, b) => (b.loja ?? -1) - (a.loja ?? -1) || b.q - a.q);
+    const lojaMats = mats.reduce((s0, x) => s0 + (x.loja || 0), 0);
     const niveis = evs.filter((e) => e.tipo === 'nivel').map((e) => ({ ...e, nivel: parseInt((e.texto || '').replace(/\D+/g, ''), 10) || null }));
     const drops = evs.filter((e) => e.tipo === 'drop').map((e) => ({ ...e, preco: d.porNome.get([e.item || e.titulo, e.qual, 0, ''].join('|')) || null }));
     const lend = drops.filter((e) => /^(lendario|mitico)$/.test(e.raridade || ''));
@@ -156,6 +161,7 @@ function graficoXp(series, ini, agora, passo, larg) {
       tile('Abates', inteiro(t.abates), t.seg >= 60 ? `${inteiro(t.abates / (t.seg / 3600))} por hora caçando` : ''),
       tile('Lendários', String(lend.length), drops.length ? `de ${drops.length} drops` : 'nenhum drop'),
       tile('Valor dos drops', valor ? '≈ ' + precoTxt(valor) : '—', valor ? 'pelo menor preço no Mercado' : 'sem preço lido ainda'),
+      tile('Espólios no Lojista', lojaMats ? curto(lojaMats) : '—', lojaMats && t.seg >= 60 ? `${curto(lojaMats / (t.seg / 3600))} por hora caçando` : 'o que o Lojista paga'),
       tile('Mortes', String(mortes), chao ? `${chao} ${chao > 1 ? 'itens ficaram' : 'item ficou'} no chão` : ''));
 
     const ativ = nomes.filter(doQuem).map((p) => ({ p, ...atividade(p, agora) }));
@@ -218,14 +224,12 @@ function graficoXp(series, ini, agora, passo, larg) {
       tabDrops,
       nota(`Preço: a mesma versão (+0, sem carta) na última leitura do Mercado${d.precos.ultima ? `, de ${dataHora(d.precos.ultima.lidoEm)}` : ''}. Entre parênteses, quantos estavam à venda. Drop que o jogo deixa no chão pelos filtros não chega à mochila e não entra aqui.`));
 
-    // materiais: a soma de cacadas.drops no período (sessões cortadas pelo período entram proporcionais ao tempo)
-    const mats = Object.entries(t.materiais).map(([m, q]) => ({ m, q: Math.round(q) })).filter((x) => x.q > 0).sort((a, b) => b.q - a.q);
     const secMat = cartao('Materiais',
-      mats.length ? tabela([{ t: 'Material', ordena: true }, { t: 'Quantidade', num: true, ordena: true }, { t: 'Por hora caçando', num: true, ordena: true }],
-        mats.map((x) => ({ celulas: [h('div', { class: 'item' }, imagem(x.m, ctx, { tam: 24 }), h('span', { class: 'item-nome' }, x.m)), inteiro(x.q), t.seg >= 60 ? inteiro(x.q / (t.seg / 3600)) : '—'],
-          v: [x.m, x.q, t.seg >= 60 ? x.q / (t.seg / 3600) : null] })), 'Materiais', ordMat)
+      mats.length ? tabela([{ t: 'Material', ordena: true }, { t: 'Quantidade', num: true, ordena: true }, { t: 'Por hora caçando', num: true, ordena: true }, { t: 'No Lojista', num: true, ordena: true }],
+        mats.map((x) => ({ celulas: [h('div', { class: 'item' }, imagem(x.m, ctx, { tam: 24 }), h('span', { class: 'item-nome' }, x.m)), inteiro(x.q), t.seg >= 60 ? inteiro(x.q / (t.seg / 3600)) : '—', x.loja != null ? curto(x.loja) : '—'],
+          v: [x.m, x.q, t.seg >= 60 ? x.q / (t.seg / 3600) : null, x.loja] })), 'Materiais', ordMat)
         : vazio('Nenhum material no período.'),
-      nota('Soma do que cada caçada guardou (cacadas.drops). Não inclui o que o jogo deixa no chão pelos filtros.'));
+      nota(`Soma do que cada caçada guardou (cacadas.drops)${lojaMats ? `: ${curto(lojaMats)} no Lojista, pelo preço do jogo` : ''}. Não inclui o que o jogo deixa no chão pelos filtros.`));
 
     // Hoje: desde a meia-noite de Brasília, por personagem
     const ini0 = inicioDoDia(agora), cor = (p) => COR_LINHA[nomes.indexOf(p) % COR_LINHA.length];

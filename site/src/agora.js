@@ -1,5 +1,5 @@
 // Lupa Online · Agora: roda o central.js da Lupa com um storage que vem do banco.
-// O central.js usa LUPA_API no lugar do chrome; aqui ele lê as mesmas chaves (estado:, cacada:, eventos:, icones)
+// O central.js usa LUPA_API no lugar do chrome; aqui ele lê as mesmas chaves (estado:, cacada:, eventos:, icones, mercado:menores)
 // montadas a partir das tabelas, relidas a cada 30 s. A config (modo, filtros) fica no localStorage deste navegador.
 'use strict';
 
@@ -42,6 +42,11 @@ globalThis.LUPA_TEXTO_VAZIO = 'Nenhuma leitura ainda. No PC de casa, entre no Lu
       for (const [n, l] of Object.entries(porNome)) novo['eventos:' + n] = l.slice(-80);
     }
     if (icones) { novo.icones = icones; comIcones = true; }
+    // o Mercado da Ficha: o menor preço visto de cada item equipado ou na mochila (se a consulta falhar, a Ficha fica só com a Loja)
+    if (pesado) {
+      const chaves = [...new Set(Object.values(estados).flatMap((e) => [...(e.ficha?.equip || []), ...(e.ficha?.mochila || [])]).map((i) => chaveMercado(i.id)).filter(Boolean))];
+      try { novo['mercado:menores'] = await Nuvem.menores(chaves); } catch {}
+    }
     if (pesado) ultimoPesado = agora;
     trocar(novo);
   }
