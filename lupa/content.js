@@ -152,13 +152,30 @@
     };
   }
 
+  // espólios (partes de monstro, só para vender): cada pilha traz "esp:<id>:<qtd>" e a dica diz quanto o Lojista paga
+  // por unidade ("o Lojista compra por 76 de ouro cada"; de 10 mil para cima o jogo arredonda, "75.0k"). Pilhas do mesmo
+  // espólio viram uma linha só.
+  function lerEspolios() {
+    const por = new Map();
+    for (const s of $$('#mochila .espolio-slot')) {
+      const [, id, q] = (s.dataset.id || '').split(':'), d = dica(s), l1 = d.split('\n')[0];
+      const nome = l1.replace(/\s*×.*$/, '').trim(), qtd = numero(q) || numero((l1.match(/×\s*([\d.,]+)/) || [])[1]);
+      if (!id || !nome || !qtd) continue;
+      const x = por.get(id) || { id, nome, qtd: 0, cada: numero((d.match(/por ([\d.,]+) de ouro cada/) || [])[1]) || null };
+      x.qtd += qtd;
+      por.set(id, x);
+    }
+    return [...por.values()];
+  }
+
   const nomeHab = (el) => dica(el).split(' — ')[0].replace(/ \(passiva\)$/, '') || el.dataset.t;
 
   function lerFicha() {
     const teclas = $$('#hud-habs > *').map((el) => txt($(':scope > span', el)));
     return {
       equip: $$('#equip .slot').map(lerItem).filter(Boolean),
-      mochila: $$('#mochila .slot').map(lerItem).filter((i) => i && i.raridade !== 'basico'),
+      mochila: $$('#mochila .slot').map(lerItem).filter(Boolean),
+      espolios: lerEspolios(),
       barra: $$('#barra > *').map((el, k) => (el.dataset.t ? { t: el.dataset.t, nome: nomeHab(el), tecla: txt($('.tecla-hab', el)) || teclas[k] || '' } : null)),
       habs: $$('#habilidades .hab[data-t]').filter((el) => el.dataset.t !== 'P').map((el) => ({
         t: el.dataset.t, nome: nomeHab(el), rank: txt($('.rank span', el)),
@@ -368,6 +385,8 @@
     if ((m = corpo.match(RE_LENDARIO))) {
       const item = m[2].replace(/\s\+\d+$/, '').trim();
       registrar('drop', item, m[1] ? 'Prêmio da tarefa' : 'Caiu na caçada', { item, qual: m[3], servidor: true });
+      // o que caiu na caçada entra nos drops da sessão como os da linha de loot ("Item [Q]"), já com a qualidade sorteada
+      if (!m[1]) { const k = `${m[2].trim()} [${m[3]}]`; pend.drops[k] = (pend.drops[k] || 0) + 1; }
     } else if (/^Caiu um lendário, mas a mochila está cheia/.test(corpo)) {
       // o jogo repete a linha a cada minuto enquanto o lendário espera: um aviso a cada 10 min basta
       if (config.avisos.mochila && Date.now() - avisouLendCheia > 10 * 60e3) {

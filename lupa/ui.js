@@ -119,36 +119,119 @@ function haQuanto(ms) {
   const m = Math.floor(ms / 60e3);
   return m < 1 ? 'agora' : m < 60 ? `há ${m} min` : m < 48 * 60 ? `há ${Math.floor(m / 60)} h` : `há ${Math.floor(m / 1440)} d`;
 }
-// Linha cinza sob o nome: "Loja 12,5 mil · Mercado 850 mil · há 2 h" ("—" se a Lupa nunca viu a versão; sem JOGO, só o Mercado)
-function textoValor(it, ctx) {
-  const m = String(it.id || '').match(RE_CHAVE_ITEM);
+// O preço de um item pelo código da tela: loja (null sem as tabelas ou com a qualidade ainda sendo sorteada, "~?") e o menor visto
+// no Mercado nos últimos 7 dias (visto: { ouro, gemas, n, em } ou null). comCarta: o Mercado é o da mesma versão sem a carta.
+// a chave da mesma versão sem a carta, como o Mercado agrupa ("3031+4#velocidade2~B" → "3031+4~B"); null fora do formato
+function chaveMercado(id) {
+  const m = String(id || '').match(RE_CHAVE_ITEM);
+  return m ? `${m[1]}${m[2]}${m[3] && +m[3] ? '+' + +m[3] : ''}~${m[5]}` : null;
+}
+function precoItem(it, ctx) {
+  const m = String(it?.id || '').match(RE_CHAVE_ITEM);
   if (!m) return null;
-  const refino = +(m[3] || 0), base = `${m[1]}${m[2]}${refino ? '+' + refino : ''}~${m[5]}`;
+  const refino = +(m[3] || 0), base = chaveMercado(it.id);
   let loja = null;
   try { loja = typeof JOGO !== 'undefined' ? JOGO.valorVenda(m[1], refino, m[5]) : null; } catch { loja = null; }
-  const agora = Date.now(), v = ctx?.menores?.[base];
-  const visto = v && agora - v.em < VALIDADE_MENOR && (v.ouro != null || v.gemas != null) ? v : null;
-  const partes = [];
-  if (loja != null) partes.push(['Loja ', milhar(loja)]);
-  // sem leitura local do Mercado (o site, que não tem mercado:menores) a parte do Mercado nem aparece
+  const v = ctx?.menores?.[base];
+  const visto = v && Date.now() - v.em < VALIDADE_MENOR && (v.ouro != null || v.gemas != null) ? v : null;
+  return { loja, visto, comCarta: !!m[4] };
+}
+// Linha sob o nome: "Loja 12,5 mil · Mercado 850 mil · há 2 h" ("—" se a Lupa nunca viu a versão; sem JOGO, só o Mercado)
+function textoValor(it, ctx, qtd = 1) {
+  const p = precoItem(it, ctx);
+  if (!p) return null;
+  const n = (v) => h('span', { class: 'num' }, v), partes = [];
+  if (p.loja != null) partes.push(['Loja ', n(milhar(p.loja)), qtd > 1 ? [' cada · ', n(milhar(p.loja * qtd))] : null]);
+  // sem leitura do Mercado (nem a local da Lupa nem a do banco, no site) a parte do Mercado nem aparece
   if (ctx?.menores) {
-    const preco = !visto ? '—' : visto.ouro != null ? milhar(visto.ouro) : `${inteiro(visto.gemas)} gemas`;
+    const v = p.visto;
     // item com carta: o preço é o da mesma versão SEM carta, e o texto diz isso
-    partes.push(['Mercado ', preco + (visto && m[4] ? ' sem carta' : '') + (visto ? ' · ' + haQuanto(agora - visto.em) : '')]);
+    partes.push(['Mercado ', !v ? '—' : n(v.ouro != null ? milhar(v.ouro) : `${inteiro(v.gemas)} gemas`), v && p.comCarta ? ' sem carta' : null, v ? [' · ', h('span', { class: 'inteiro' }, haQuanto(Date.now() - v.em))] : null]);
   }
   if (!partes.length) return null;
-  return h('span', { class: 'item-valor fraco' }, partes.map(([r, n], k) => [k ? ' · ' : '', r, h('span', { class: 'num' }, n)]));
+  return h('span', { class: 'item-valor fraco' }, partes.map((x, k) => [k ? ' · ' : '', x]));
 }
 
-function linhaItem(it, ctx, tam = 40) {
+// Um drop da caçada pelo texto do chat ("Gume do Infinito +2 [A]", "Escama de Dragão") → quanto o Lojista paga por um.
+// A qualidade da linha de loot ainda não é a sorteada (o jogo escreve B até o servidor avaliar), então item comum conta como B;
+// o lendário que cai na caçada já entra com a qualidade certa. Runa, gema e o que as tabelas não conhecem: null.
+const RE_DROP = /^(.+?)(?:\s\+(\d+))?(?:\s\[([A-Z+]+)\])?$/;
+function valorDrop(texto) {
+  if (typeof JOGO === 'undefined') return null;
+  const m = String(texto || '').trim().match(RE_DROP);
+  if (!m) return null;
+  try {
+    const esp = JOGO.espolioPorNome?.(m[1]);
+    if (esp) return { tipo: 'espolio', loja: esp.valor };
+    const it = JOGO.itemPorNome?.(m[1]);
+    if (it) return { tipo: 'item', loja: JOGO.valorVenda(it.id, +(m[2] || 0), JOGO.QUALIDADES[m[3]] ? m[3] : 'B') };
+  } catch {}
+  return null;
+}
+// soma de um mapa { texto do drop: quantidade } (a sessão de caçada, os materiais do relatório); semPreco conta as unidades sem valor
+function valorDrops(drops) {
+  const r = { total: 0, espolios: 0, itens: 0, semPreco: 0 };
+  for (const [d, q] of Object.entries(drops || {})) {
+    const v = valorDrop(d);
+    if (v?.loja == null) { r.semPreco += q; continue; }
+    r.total += v.loja * q;
+    r[v.tipo === 'espolio' ? 'espolios' : 'itens'] += v.loja * q;
+  }
+  return r;
+}
+
+function linhaItem(it, ctx, tam = 40, qtd = 1) {
   const selo = [it.refino || '+0', it.qual || '?'].join(' ');
   return h('div', { class: 'item' },
     imagem(it.nome, ctx, { tam, raridade: it.raridade, selo: tam >= 40 ? selo : null }),
     h('span', { class: 'item-texto' },
-      h('span', { class: 'item-nome' }, it.nome || 'Item sem dica (passe o mouse nele no jogo)'),
+      h('span', { class: 'item-nome' }, qtd > 1 ? `${qtd}× ` : '', it.nome || 'Item sem dica (passe o mouse nele no jogo)'),
       h('span', { class: 'item-sub' }, tam >= 40 ? (it.carta || 'sem carta') : `${selo} · ${it.carta || 'sem carta'}`),
-      textoValor(it, ctx)),
+      textoValor(it, ctx, qtd)),
     null);
+}
+
+// Pilha de espólio da mochila: { id, nome, qtd, cada }. Vale o preço das tabelas (exato); o da dica do jogo (cada) fica para o
+// espólio que as tabelas ainda não conhecem, porque a dica arredonda de 10 mil para cima ("75.0k")
+const cadaEspolio = (x) => (typeof JOGO !== 'undefined' ? JOGO.valorEspolio?.(x.id) : null) ?? x.cada ?? null;
+function linhaEspolio(x, ctx) {
+  const cada = cadaEspolio(x);
+  return h('div', { class: 'item' },
+    imagem(x.nome, ctx, { tam: 28 }),
+    h('span', { class: 'item-texto' },
+      h('span', { class: 'item-nome' }, `${inteiro(x.qtd)}× ${x.nome}`),
+      h('span', { class: 'item-sub' }, 'espólio: só serve para vender'),
+      cada != null ? h('span', { class: 'item-valor fraco' }, 'Loja ', h('span', { class: 'num' }, milhar(cada)), ' cada · ', h('span', { class: 'num' }, milhar(cada * x.qtd))) : null),
+    null);
+}
+
+// A mochila inteira: o total no Lojista (itens e espólios) e o dos itens pelo menor preço visto no Mercado, depois os itens
+// iguais juntos (do mais caro para o mais barato na Loja) e as pilhas de espólio. Só soma o que a tela mostra: não vende nada.
+function secaoMochila(e, ctx) {
+  const f = e.ficha, oc = e.mochila;
+  const grupos = new Map();
+  for (const it of f.mochila || []) { const k = it.id || it.nome; const g = grupos.get(k); if (g) g.qtd++; else grupos.set(k, { it, qtd: 1, p: precoItem(it, ctx) }); }
+  const itens = [...grupos.values()].sort((a, b) => (b.p?.loja ?? -1) * b.qtd - (a.p?.loja ?? -1) * a.qtd);
+  const esp = (f.espolios || []).map((x) => ({ x, total: (cadaEspolio(x) ?? 0) * x.qtd })).sort((a, b) => b.total - a.total);
+  if (!itens.length && !esp.length) return null;
+  const somaItens = itens.reduce((s0, g) => s0 + (g.p?.loja ?? 0) * g.qtd, 0), somaEsp = esp.reduce((s0, y) => s0 + y.total, 0);
+  // "~?" no código: o servidor ainda está sorteando a qualidade, e o Lojista não compra até sair
+  const comMercado = itens.filter((g) => g.p?.visto?.ouro != null), avaliando = itens.filter((g) => /~\?$/.test(g.it.id || '')).reduce((s0, g) => s0 + g.qtd, 0);
+  const mercado = comMercado.reduce((s0, g) => s0 + g.p.visto.ouro * g.qtd, 0), nItens = itens.reduce((s0, g) => s0 + g.qtd, 0);
+  const temLoja = typeof JOGO !== 'undefined' || esp.some((y) => y.x.cada != null);
+  const titulo = `Mochila${oc?.total ? ` · ${oc.usados}/${oc.total}` : ''}`;
+  const detalhe = [itens.length ? `itens ${milhar(somaItens)}` : null, esp.length ? `espólios ${milhar(somaEsp)}` : null, avaliando ? `${avaliando} sendo avaliado${avaliando > 1 ? 's' : ''} (sem preço ainda)` : null].filter(Boolean).join(' · ');
+  return secao(titulo,
+    temLoja ? h('div', { class: 'valor-mochila' },
+      h('div', { class: 'grade-2' },
+        stat('Vale no Lojista', milhar(somaItens + somaEsp), 'grande destaque'),
+        ctx?.menores && itens.length ? stat('Itens no Mercado', comMercado.length ? milhar(mercado) : '—', 'grande') : null),
+      detalhe ? h('span', { class: 'fraco valor-detalhe' }, detalhe) : null,
+      ctx?.menores && itens.length ? h('span', { class: 'fraco valor-detalhe' }, comMercado.length
+        ? `Mercado: menor preço visto da mesma versão (${comMercado.reduce((s0, g) => s0 + g.qtd, 0)} de ${nItens} ${nItens > 1 ? 'itens' : 'item'}). Espólio não vai ao Mercado.`
+        : 'Mercado: nenhum destes itens visto nos últimos 7 dias (abra o Mercado no jogo, aba Comprar).') : null) : null,
+    itens.map((g) => linhaItem(g.it, ctx, 28, g.qtd)),
+    esp.map((y) => linhaEspolio(y.x, ctx)));
 }
 
 let planoAberto = false;
@@ -206,7 +289,7 @@ function desenharFicha(e, ctx, opts = {}) {
         h('span', { class: 'rank' }, ranks[b.t]?.rank || ''))))),
       fora.length ? nota('Fora da barra: ' + fora.map((x) => `${x.t} ${x.rank}${x.passiva ? ' (passiva)' : ''} · ${x.nome}`).join(' — ')) : null),
     secao('Atributos e ficha', stats.length ? h('div', { class: 'grade-3' }, stats.map(([r, v]) => stat(r, v))) : vazio('Abra a aba Atributos no jogo uma vez para a Lupa ler.')),
-    f.mochila.length ? secao(`Na mochila (sem os básicos)${e.mochila?.total ? ` · ${e.mochila.usados}/${e.mochila.total}` : ''}`, f.mochila.map((i) => linhaItem(i, ctx, 28))) : null,
+    secaoMochila(e, ctx),
     (f.cartas.length || f.cartasMisteriosas) ? secao('Cartas guardadas', h('ul', { class: 'lista-simples' },
       f.cartasMisteriosas ? h('li', { class: 'com-img' }, imagem('Carta misteriosa', ctx, { tam: 24 }), `${f.cartasMisteriosas}× Carta misteriosa`) : null,
       f.cartas.map((c) => h('li', { class: 'com-img' }, imagem(c.nome, ctx, { tam: 24 }), `${c.qtd}× ${c.nome}`)))) : null);
@@ -260,10 +343,11 @@ function grafico(sessao, campoXp, ativa, ctx) {
 function exportarCsv(nome, sessoes) {
   const dec = (v, d = 0) => (v == null ? '' : v.toFixed(d).replace('.', ','));
   const iso = (ts) => new Date(ts).toLocaleString('pt-BR');
-  const linhas = [['inicio', 'fim', 'minutos_cacando', 'zona_principal', 'abates', 'xp', 'xp_sem_live', 'ouro', 'mortes', 'abates_por_h', 'xp_por_h', 'ouro_por_h'].join(';')];
+  const linhas = [['inicio', 'fim', 'minutos_cacando', 'zona_principal', 'abates', 'xp', 'xp_sem_live', 'ouro', 'mortes', 'abates_por_h', 'xp_por_h', 'ouro_por_h', 'drops_no_lojista', 'drops_no_lojista_por_h'].join(';')];
   for (const x of sessoes) {
+    const vd = valorDrops(x.drops).total;
     linhas.push([iso(x.ini), iso(x.fim), dec(x.seg / 60, 1), zonaPrincipal(x), x.abates, Math.round(x.xp), Math.round(x.xpBase), Math.round(x.ouro), x.mortes,
-      dec(porHora(x.abates, x.seg)), dec(porHora(x.xp, x.seg)), dec(porHora(x.ouro, x.seg))].join(';'));
+      dec(porHora(x.abates, x.seg)), dec(porHora(x.xp, x.seg)), dec(porHora(x.ouro, x.seg)), Math.round(vd), dec(porHora(vd, x.seg))].join(';'));
   }
   const url = URL.createObjectURL(new Blob(['﻿' + linhas.join('\r\n')], { type: 'text/csv;charset=utf-8' }));
   const a = h('a', { href: url, download: `lupa-${nome}-cacadas.csv` });
@@ -277,7 +361,10 @@ function desenharCacada(e, ctx) {
   if (!x) return vazio('Ainda não há caçada registrada para este personagem. Os números aparecem depois do primeiro abate com a Lupa ligada.');
   const ativa = Date.now() - (x.ultimoAbate || x.fim) < PAUSA, campo = semBonus ? 'xpBase' : 'xp';
   const zonas = Object.entries(x.zonas || {}).filter(([, z]) => z.seg >= 30 || z.abates).sort((a, b) => b[1].seg - a[1].seg);
-  const drops = Object.entries(x.drops || {}).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  // o que caiu, do que mais vale no Lojista para o que menos vale (sem preço: pela quantidade, no fim)
+  const vd = valorDrops(x.drops);
+  const drops = Object.entries(x.drops || {}).map(([n, q]) => ({ n, q, v: valorDrop(n)?.loja ?? null }))
+    .sort((a, b) => (b.v ?? -1) * b.q - (a.v ?? -1) * a.q || b.q - a.q).slice(0, 8);
   const anteriores = sessoes.slice(0, -1).slice(-5).reverse();
   // melhor zona por XP/h: só entre as que têm 2 min para a taxa valer, e se houver mais de uma para comparar
   const taxaZona = (z) => (z.seg >= 120 ? porHora(z[campo], z.seg) : null);
@@ -295,9 +382,12 @@ function desenharCacada(e, ctx) {
       stat('Abates/h', ouTraco(porHora(x.abates, x.seg), inteiro), 'grande'),
       stat('XP/h', ouTraco(porHora(x[campo], x.seg)), 'grande destaque'),
       stat('Ouro/h', ouTraco(porHora(x.ouro, x.seg)), 'grande')),
+    vd.total > 0 ? h('div', { class: 'grade-2' },
+      stat('Drops no Lojista/h', ouTraco(porHora(vd.total, x.seg))),
+      stat('Ouro + drops/h', ouTraco(porHora(x.ouro + vd.total, x.seg)), 'destaque')) : null,
     e.bonus && (e.bonus.xp > 1 || e.bonus.ouro > 1) ? h('p', { class: 'bonus-mult', title: 'Multiplicador somado dos bônus ativos' },
       'Bônus agora: ', [e.bonus.xp > 1 ? `XP ${mult(e.bonus.xp)}` : null, e.bonus.ouro > 1 ? `ouro ${mult(e.bonus.ouro)}` : null].filter(Boolean).join(' · ')) : null,
-    nota(`${inteiro(x.abates)} abates · ${curto(x[campo])} de XP · ${curto(x.ouro)} de ouro · ${x.mortes} ${x.mortes === 1 ? 'morte' : 'mortes'}`
+    nota(`${inteiro(x.abates)} abates · ${curto(x[campo])} de XP · ${curto(x.ouro)} de ouro${vd.total > 0 ? ` · drops valem ${curto(vd.total)} no Lojista` : ''} · ${x.mortes} ${x.mortes === 1 ? 'morte' : 'mortes'}`
       + (semBonus ? '. Sem bônus de live é uma estimativa: tira o bônus da Kick e da Twitch de cada abate.' : '')),
     grafico(x, campo, ativa, ctx),
     zonas.length ? secao('Por zona', h('div', { class: 'tabela' },
@@ -305,7 +395,10 @@ function desenharCacada(e, ctx) {
       zonas.map(([nome, z]) => { const mz = nome === melhor ? ' melhor' : ''; return [h('span', { class: 'forte' + mz, title: mz ? `${nome} · melhor XP/h` : nome }, mz ? '★ ' : '', nome), h('span', { class: mz.trim() }, duracao(z.seg)),
         h('span', { class: 'num' + mz }, ouTraco(porHora(z.abates, z.seg), inteiro)), h('span', { class: 'num' + mz }, ouTraco(porHora(z[campo], z.seg)))]; }),
       melhor ? h('span', { class: 'nota tabela-nota' }, '★ melhor XP/h entre as zonas desta sessão') : null)) : null,
-    drops.length ? secao('O que caiu nesta sessão', h('ul', { class: 'lista-simples' }, drops.map(([n, q]) => h('li', { class: 'com-img' }, imagem(n, ctx, { tam: 24 }), `${inteiro(q)}× ${n}`)))) : null,
+    drops.length ? secao(`O que caiu nesta sessão${vd.total > 0 ? ` · ${curto(vd.total)} no Lojista` : ''}`,
+      h('ul', { class: 'lista-simples' }, drops.map((d) => h('li', { class: 'com-img' }, imagem(d.n.replace(/\s\[[A-Z+]+\]$/, '').replace(/\s\+\d+$/, ''), ctx, { tam: 24 }),
+        h('span', { class: 'drop-nome' }, `${inteiro(d.q)}× ${d.n}`), d.v != null ? h('span', { class: 'num drop-valor' }, curto(d.v * d.q)) : null))),
+      vd.total > 0 ? nota('Valor no Lojista: espólio pelo preço do jogo; item comum como qualidade B (a da linha de loot ainda não é a sorteada); lendário com a qualidade que saiu.') : null) : null,
     h('div', { class: 'botoes' },
       h('button', { type: 'button', class: 'botao', onclick: () => ctx.salvarConfig({ novaSessaoPor: { ...config.novaSessaoPor, [e.nome]: Date.now() } }) }, 'Nova sessão'),
       h('button', { type: 'button', class: 'botao', onclick: () => exportarCsv(e.nome, sessoes) }, 'Exportar CSV')),

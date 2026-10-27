@@ -70,6 +70,14 @@ ao servidor. Com a janela aberta, a leitura sobe para o banco no máximo a cada 
 **Valor dos itens na Ficha:** cada item do equipamento e da mochila mostra a Loja do jogo (`dados-jogo.js`, copiado do `site/src`) e o
 menor preço visto no Mercado para a mesma versão (item, qualidade e refino, sem carta), com há quanto tempo. O acumulado fica em
 `mercado:menores` (`{ chave: { ouro, gemas, n, em } }`, 7 dias, até 400 chaves). A Lupa só mostra: não vende nada.
+A seção **Mochila** soma tudo: quanto a mochila vale no Lojista (itens, inclusive os básicos, e as pilhas de espólio, pelo preço
+que a dica do jogo mostra) e quanto os itens valem pelo menor preço do Mercado. Itens iguais aparecem juntos ("3× Botas").
+No site, a aba Agora busca o mesmo menor preço no banco (`mercado_precos`, 7 dias).
+
+**Valor dos drops na Caçada:** a sessão mostra **Drops no Lojista/h** e **Ouro + drops/h**, e a lista do que caiu traz o valor
+de cada linha. Espólio vale o preço do jogo; item comum conta como qualidade B (a do chat ainda não é a sorteada); o lendário
+que cai na caçada entra nos drops da sessão já com a qualidade sorteada. O CSV ganha `drops_no_lojista`. No site, o Relatório
+mostra os espólios no Lojista (total e por material).
 
 **Alertas de preço** (liberados pelo Brunox em 26/10/2026: só avisar, nunca comprar): a lista "Quero comprar" fica na
 Loja do site (item, qualidade e refino mínimos, só sem carta, preço máximo em ouro ou 💠). Deixe o Mercado aberto em
