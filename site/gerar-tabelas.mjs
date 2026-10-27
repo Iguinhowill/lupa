@@ -91,8 +91,12 @@ try {
       .map(([k, v]) => [k, Array.isArray(v) ? v.map((x) => +x.toFixed(6)) : v]))]))]));
     const CARTA_VALOR = Object.fromEntries(Object.entries(M.CARTAS).map(([id, c]) => [id, c.valor]));
     const CARTA_TIRAR = Object.fromEntries(Object.entries(M.CARTA_NIVEIS).map(([n, c]) => [n, c.tirar]));
+    // as habilidades de cada campeão (o que a ficha mostra e as regras de rank): nome, nível em que libera, rank máximo, passiva
+    const KIT_HABS = Object.fromEntries(Object.entries(M.KITS).map(([id, k]) => [id, Object.fromEntries(M.ORDEM_HAB.filter((t) => k.hab[t])
+      .map((t) => [t, { nome: k.hab[t].nome, nivel: k.hab[t].nivel, max: k.hab[t].max, passiva: !!k.hab[t].passiva }]))]));
     console.log(JSON.stringify({
-      CAMPEOES, HABS, CARTA_VALOR, CARTA_TIRAR, RESET_OURO: M.RESET_OURO, CARTA_TIPOS: M.ORDEM_TIPOS_CARTA, VEL_ATAQUE_MAX: M.VEL_ATAQUE_MAX, NIVEL_DIF: M.NIVEL_DIF, TETO_VIDA_ITEM: M.TETO_VIDA_ITEM, RM_MONSTRO: M.RM_MONSTRO,
+      CAMPEOES, HABS, CARTA_VALOR, CARTA_TIRAR, RESET_OURO: M.RESET_OURO, CARTA_TIPOS: M.ORDEM_TIPOS_CARTA,
+      KIT_HABS, BARRA: M.BARRA, PONTOS_POR_NIVEL: M.PONTOS_POR_NIVEL, NIVEL_PONTOS_HAB: M.NIVEL_PONTOS_HAB, NIVEL_MIN_R: M.nivelMinimoR, VEL_ATAQUE_MAX: M.VEL_ATAQUE_MAX, NIVEL_DIF: M.NIVEL_DIF, TETO_VIDA_ITEM: M.TETO_VIDA_ITEM, RM_MONSTRO: M.RM_MONSTRO,
       FOCO_DANO_HAB: M.FOCO_DANO_HAB, FOCO_FLUXO: M.FOCO_FLUXO, FLUXO_MAX: M.FLUXO_MAX,
       NIVEL_MAX: M.NIVEL_MAX, REFINO_MAX: M.REFINO_MAX, BONUS_REFINO: M.BONUS_REFINO,
       CHANCE_REFINO: M.CHANCE_REFINO, REGRESSAO_REFINO: M.REGRESSAO_REFINO, PERSISTENCIA_FORJA: M.PERSISTENCIA.forja,
@@ -123,6 +127,10 @@ try {
     if (!Array.isArray(arr) || !arr.length || !arr.every((x) => /^[\w-]+$/.test(String(x.id)))) throw new Error(`${nome}: ids fora do formato`);
   }
   if (![1, 2, 3].every((n) => Number.isFinite(T.CARTA_TIRAR?.[n]) && T.CARTA_TIRAR[n] >= 0)) throw new Error('CARTA_TIRAR: esperava o preço das 3 raridades');
+  for (const [id, k] of Object.entries(T.KIT_HABS || {})) for (const [t, h] of Object.entries(k)) {
+    if (!/^[a-z]+$/.test(id) || !/^[A-Z]$/.test(t) || typeof h.nome !== 'string' || !Number.isInteger(h.nivel) || !Number.isInteger(h.max)) throw new Error(`KIT_HABS: ${id}.${t} fora do formato`);
+  }
+  numeros(T.NIVEL_MIN_R, 5, 'NIVEL_MIN_R');
   const esp = Object.entries(T.ESPOLIOS || {});
   if (!esp.length || !esp.every(([id, e]) => /^[\w-]+$/.test(id) && typeof e.nome === 'string' && e.nome && Number.isFinite(e.valor) && e.valor >= 0)) throw new Error('ESPOLIOS: fora do formato');
 
@@ -216,6 +224,21 @@ const JOGO = (() => {
     return { xp: Math.round(t.qtd * a.xp * T.xp), ouro: Math.round(t.qtd * a.ouro * T.ouro) };
   }
 
+  // quantos ranks o nível permite na habilidade t (Q, W e E a cada 2 níveis; R e N em níveis fixos; as outras a cada 2 depois de liberar)
+  function rankMaximo(campeao, t, nivel) {
+    const h = KIT_HABS[campeao]?.[t];
+    if (!h || nivel < h.nivel) return 0;
+    if (t === 'R') return NIVEL_MIN_R.filter((n) => nivel >= n).length;
+    if (t === 'N') return NIVEL_MIN_N.filter((n) => nivel >= n).length;
+    if (t === 'Q' || t === 'W' || t === 'E') return Math.min(h.max, Math.ceil(nivel / 2));
+    return Math.min(h.max, 1 + Math.floor((nivel - h.nivel) / 2));
+  }
+  // o campeão pelo nome das habilidades que a ficha mostra ({ Q: 'Tempestade de Aço', ... }); null se nenhum bater
+  function campeaoPelasHabs(habs) {
+    const pares = Object.entries(habs || {});
+    return Object.keys(KIT_HABS).find((id) => pares.some(([t]) => KIT_HABS[id][t]) && pares.every(([t, nome]) => !KIT_HABS[id][t] || KIT_HABS[id][t].nome === nome)) || null;
+  }
+
   // ---------- ficha final da build (campeão, nível, atributos, itens com refino, qualidade e carta) ----------
   // Reescrita curta da conta do motor (atributos): o gerador confere cada número contra o motor em milhares de builds aleatórias.
   const CAMPEOES = ${j(T.CAMPEOES)};
@@ -223,6 +246,11 @@ const JOGO = (() => {
   const CARTA_VALOR = ${j(T.CARTA_VALOR)};              // "ataque2" (Carta de Ataque Rara): 0,05; crítico e roubo de vida somam em pontos
   const CARTA_TIRAR = ${j(T.CARTA_TIRAR)};              // ouro para tirar uma carta de um item, por raridade (1 básica, 2 rara, 3 lendária); ela volta para a bolsa
   const RESET_OURO = ${num(T.RESET_OURO, 'RESET_OURO')};                    // reset de atributos no Mestre da Legião: isto × nível
+  // as habilidades de cada campeão: nome (o mesmo da ficha), nível em que libera, rank máximo e se é passiva (passiva não vai na barra)
+  const KIT_HABS = ${j(T.KIT_HABS)};
+  const BARRA = ${num(T.BARRA, 'BARRA')}, PONTOS_POR_NIVEL = ${num(T.PONTOS_POR_NIVEL, 'PONTOS_POR_NIVEL')}, NIVEL_PONTOS_HAB = ${num(T.NIVEL_PONTOS_HAB, 'NIVEL_PONTOS_HAB')};      // por nível: 1 ponto de habilidade (até o NIVEL_PONTOS_HAB) e PONTOS_POR_NIVEL de atributo
+  // os níveis em que o R e o N ganham rank (o do N não é exportado pelo motor: a conferência compara rankMaximo com o rankMaximoNoNivel dele)
+  const NIVEL_MIN_R = ${j(T.NIVEL_MIN_R)}, NIVEL_MIN_N = [45, 46, 47, 48, 50];
   const NIVEL_DIF = ${j(T.NIVEL_DIF)};                  // monstro mais de "livre" níveis acima do jogador aguenta mais (danoJogador por nível, piso minDanoJogador)
   const TETO_VIDA_ITEM = ${num(T.TETO_VIDA_ITEM, 'TETO_VIDA_ITEM')}, RM_MONSTRO = ${num(T.RM_MONSTRO, 'RM_MONSTRO')}, VEL_ATAQUE_MAX = ${num(T.VEL_ATAQUE_MAX, 'VEL_ATAQUE_MAX')}, FOCO_DANO_HAB = ${num(T.FOCO_DANO_HAB, 'FOCO_DANO_HAB')}, FOCO_FLUXO = ${num(T.FOCO_FLUXO, 'FOCO_FLUXO')}, FLUXO_MAX = ${num(T.FLUXO_MAX, 'FLUXO_MAX')};
   const DT = 0.05;                                  // o combate do jogo roda em passos fixos de 0,05 s
@@ -306,7 +334,8 @@ const JOGO = (() => {
   const FARM = ${j(FARM)};      // parâmetros do modelo de farm (calculos.js: estimarFarm), calibrados pelo gerador contra a simulação do motor
 
   return { meta, NIVEL_MAX, REFINO_MAX, BONUS_REFINO, RITMO_REAL, CHANCE_REFINO, REGRESSAO_REFINO, PERSISTENCIA, VIP, DROP_CHEFE, ABATES_MIN_ZONA, TAREFA_TIPOS, QUALIDADES, ORDEM_QUAL,
-    XP_NIVEL, BALANCO, MONSTROS, ZONAS, ITENS, ESPOLIOS, ZONA, CURVA, CAMPEOES, HABS, CARTA_VALOR, CARTA_TIRAR, RESET_OURO, CARTA_TIPOS, NIVEL_DIF, TETO_VIDA_ITEM, RM_MONSTRO, VEL_ATAQUE_MAX, DT, FARM, fichaDaBuild, periodoAtaque, chaveItem, refinoDe, qualDe, cartaDe, fatorDanoJogador, ARMADURA_MONSTRO, xpParaNivel, xpEntre, fatorXp, porAbateZona, zonaIdeal, item, valorVenda, itemPorNome, espolioPorNome, valorEspolio, precoRefino, chanceRefino, chanceForja, recompensaTarefa };
+    XP_NIVEL, BALANCO, MONSTROS, ZONAS, ITENS, ESPOLIOS, ZONA, CURVA, CAMPEOES, HABS, CARTA_VALOR, CARTA_TIRAR, RESET_OURO, CARTA_TIPOS,
+    KIT_HABS, BARRA, PONTOS_POR_NIVEL, NIVEL_PONTOS_HAB, rankMaximo, campeaoPelasHabs, NIVEL_DIF, TETO_VIDA_ITEM, RM_MONSTRO, VEL_ATAQUE_MAX, DT, FARM, fichaDaBuild, periodoAtaque, chaveItem, refinoDe, qualDe, cartaDe, fatorDanoJogador, ARMADURA_MONSTRO, xpParaNivel, xpEntre, fatorXp, porAbateZona, zonaIdeal, item, valorVenda, itemPorNome, espolioPorNome, valorEspolio, precoRefino, chanceRefino, chanceForja, recompensaTarefa };
 })();
 if (typeof module !== 'undefined') module.exports = JOGO;
 `; };
@@ -326,6 +355,8 @@ if (typeof module !== 'undefined') module.exports = JOGO;
       igual('xp/abate ' + z.id, J.porAbateZona(z).xp, p.xp); igual('ouro/abate ' + z.id, J.porAbateZona(z).ouro, p.ouro);
     }
     for (let n = 1; n <= 100; n++) igual('zonaIdeal ' + n, J.zonaIdeal(n).id, M.zonaIdeal(n).id);
+    for (const id of Object.keys(M.KITS)) for (const t of M.ORDEM_HAB) for (let n = 1; n <= 100; n++) igual('rankMaximo ' + id + ' ' + t + ' ' + n, J.rankMaximo(id, t, n), M.rankMaximoNoNivel({ campeao: id, nivel: n }, t));
+    for (const id of Object.keys(M.KITS)) igual('campeaoPelasHabs ' + id, J.campeaoPelasHabs(Object.fromEntries(M.ORDEM_HAB.filter((t) => M.KITS[id].hab[t]).map((t) => [t, M.KITS[id].hab[t].nome]))), id);
     for (const it of J.ITENS) for (let r = 0; r < 7; r++) { igual('precoRefino ' + it.id + '+' + r, J.precoRefino(it.id, r), M.precoRefino(it.id + '+' + r)); for (const q of J.ORDEM_QUAL) igual('valorVenda ' + it.id + r + q, J.valorVenda(it.id, r, q), M.valorVenda(it.id + '+' + r + '~' + q)); }
     // espólios: o mesmo valor do motor e o total de uma mochila inteira igual ao valorEspolios dele
     for (const id of Object.keys(M.ESPOLIOS)) igual('valorEspolio ' + id, J.valorEspolio(id, 37), M.ESPOLIOS[id].valor * 37);
@@ -393,7 +424,7 @@ if (typeof module !== 'undefined') module.exports = JOGO;
     }
     return { erros: erros.slice(0, 10), total: erros.length, contas };
   };
-  console.log('conferido: xpParaNivel, fatorXp, porAbateZona, zonaIdeal, precoRefino, valorVenda, os espólios e a chance da forja batem com o motor.');
+  console.log('conferido: xpParaNivel, fatorXp, porAbateZona, zonaIdeal, rankMaximo, o campeão pelas habilidades, precoRefino, valorVenda, os espólios e a chance da forja batem com o motor.');
   const rodarFilho = (corpo) => {
     const r = spawnSync(process.execPath, ['--permission', `--allow-fs-read=${pasta}`, '--input-type=module', '-e', corpo], { encoding: 'utf8', maxBuffer: 64e6, cwd: pasta, env: ENV_FILHO, timeout: 30 * 60e3 });
     if (r.status !== 0) throw new Error('o processo isolado falhou:\n' + (r.stderr || r.stdout).slice(0, 2000));
