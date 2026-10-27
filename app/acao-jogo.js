@@ -152,7 +152,8 @@
       return { ...OFERTA.lerOferta(txt(b), txt($('.info small', l))), botao: $('[data-tarefa]', l), titulo: txt(b), tipo: txt($('.selo-tarefa', l)) };
     });
     // o seu ritmo em cada zona, pelas caçadas que a Lupa mediu: a escolha é pelo XP por hora caçando com a tarefa
-    const ritmos = OFERTA.ritmosDe((await chrome.storage.local.get('cacada:' + quem))['cacada:' + quem]?.sessoes);
+    // (sem o armazém, fica sem ritmo e a escolha cai no prêmio por minuto do jogo)
+    const ritmos = OFERTA.ritmosDe((await chrome.storage.local.get('cacada:' + quem).catch(() => ({})))['cacada:' + quem]?.sessoes);
     const k = OFERTA.escolher(ofertas, ritmos);
     if (k < 0) throw new Error('Não consegui ler as ofertas do Capitão (o jogo mudou o texto?). Escolha uma e vá caçar.');
     const o = ofertas[k], seu = OFERTA.noSeuRitmo(o, ofertas, ritmos);

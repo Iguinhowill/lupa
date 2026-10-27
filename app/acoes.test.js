@@ -53,16 +53,17 @@ test('escolher sem ritmo medido: a de mais prêmio por minuto; empate fica com a
   assert.equal(OFERTA.escolher(undefined), -1);
 });
 
-// sessões de caçada como a Lupa guarda (cacada:<nome>): por zona, segundos, abates e XP
-const sessao = (fim, zonas) => ({ fim, zonas });
+// sessões de caçada como a Lupa guarda (cacada:<nome>): início, fim e, por zona, segundos, abates, XP e XP sem live
+const sessao = (ini, zonas) => ({ ini, fim: ini + 3600e3, zonas });
 const HORA = 3600;
 
-test('ritmosDe: por zona, só os últimos 7 dias e só zona com 10 min ou mais', () => {
+test('ritmosDe: por zona, só sessões que começaram nos últimos 7 dias, só zona com 10 min ou mais, XP sem live', () => {
   const agora = 1e12, dia = 864e5;
   const r = OFERTA.ritmosDe([
-    sessao(agora - dia, { 'Fosso do Dragão': { seg: HORA, abates: 2850, xp: 1909500 }, Fonte: { seg: 300, abates: 0, xp: 0 } }),
-    sessao(agora - 2 * dia, { 'fosso do dragão': { seg: HORA, abates: 2850, xp: 1909500 } }),
-    sessao(agora - 8 * dia, { 'Covil do Barão': { seg: 10 * HORA, abates: 20000, xp: 13e6 } }),
+    sessao(agora - dia, { 'Fosso do Dragão': { seg: HORA, abates: 2850, xp: 2291400, xpBase: 1909500 }, Fonte: { seg: 300, abates: 0, xp: 0 } }),
+    sessao(agora - 2 * dia, { 'fosso do dragão': { seg: HORA, abates: 2850, xp: 1909500 } }),      // sem xpBase (sessão antiga): vale o xp
+    { ini: agora - 8 * dia, fim: agora - dia, zonas: { 'Covil do Barão': { seg: 10 * HORA, abates: 20000, xp: 13e6 } } },      // começou há 8 dias
+    { fim: agora, zonas: { Rio: { seg: HORA, abates: 2000, xp: 1e6 } } },      // sem início
     sessao(agora, { Rio: { seg: 599, abates: 300, xp: 150000 } }),
     null
   ], agora);
@@ -73,8 +74,9 @@ test('ritmosDe: por zona, só os últimos 7 dias e só zona com 10 min ou mais',
 });
 
 // as 5 ofertas do Capitão como o jogo monta (ritmo do jogo 10,5 abates/min no Fosso e 11,25 no Covil, prêmio = abates ×
-// XP-base do abate × fator do tipo): Rápida, Normal, o Desafio da zona de cima, Expedição e Grande Expedição
-const of = (tipo, zona, qtd, min, xp) => ({ tipo, zona, qtd, min, xp });
+// XP-base do abate × fator do tipo) e com o prêmio escrito como o jogo escreve ("147.0k"): Rápida, Normal, o Desafio da
+// zona de cima, Expedição e Grande Expedição
+const of = (tipo, zona, qtd, min, xp) => ({ tipo, zona, qtd, min, xp: OFERTA.numero((xp >= 1e4 ? (xp / 1e3).toFixed(1) + 'k' : String(Math.round(xp)))) });
 const OFERTAS = [
   of('Rápida', 'Fosso do Dragão', 70, 7, 70 * 500 * 0.42),
   of('Normal', 'Fosso do Dragão', 160, 15, 160 * 500 * 0.43),
@@ -82,31 +84,51 @@ const OFERTAS = [
   of('Expedição', 'Fosso do Dragão', 630, 60, 630 * 500 * 0.462),
   of('Grande Expedição', 'Fosso do Dragão', 1890, 180, 1890 * 500 * 0.462)
 ];
+const CUSTO = OFERTA.CUSTO_ENTREGA_MIN;
 
 test('escolher no seu ritmo: o Desafio da zona de cima não ganha só por pagar mais por minuto no papel', () => {
   assert.equal(OFERTA.escolher(OFERTAS), 2, 'sem ritmo medido, pelo prêmio por minuto do jogo, o Desafio no Covil parece melhor');
   const aphelios = { 'fosso do dragão': { abatesMin: 47.5, xpAbate: 670 } };      // só o Fosso medido (o caso relatado)
   const k = OFERTA.escolher(OFERTAS, aphelios);
   assert.equal(OFERTAS[k].zona, 'Fosso do Dragão');
-  assert.equal(OFERTAS[k].tipo, 'Expedição', 'mais prêmio por abate que a Rápida e a Normal; empata com a Grande e fica a mais curta');
+  assert.equal(OFERTAS[k].tipo, 'Grande Expedição', 'mais prêmio por abate e o custo da entrega dividido por mais abates');
   const v = OFERTA.noSeuRitmo(OFERTAS[k], OFERTAS, aphelios);
-  assert.ok(Math.abs(v.min - 630 / 47.5) < 1e-9);
-  assert.ok(Math.abs(v.xpHora - ((630 * 670 + 630 * 500 * 0.462) / (630 / 47.5)) * 60) < 1e-6);
+  assert.ok(Math.abs(v.min - 1890 / 47.5) < 1e-9);
+  assert.ok(Math.abs(v.xpHora - ((1890 * 670 + OFERTAS[k].xp) / (1890 / 47.5 + CUSTO)) * 60) < 1e-6);
   assert.equal(OFERTA.noSeuRitmo(OFERTAS[2], OFERTAS, aphelios), null, 'sem medição no Covil');
 });
 
+test('escolher: empate até 1% (o arredondamento do prêmio que o jogo mostra) fica com a mais curta', () => {
+  const a = { tipo: 'Normal', zona: 'Z', qtd: 100, min: 10, xp: 1000 }, b = { tipo: 'Normal', zona: 'Z', qtd: 50, min: 5, xp: 1004 };
+  assert.equal(OFERTA.escolher([a, b]), 1, 'sem ritmo: 200,8 contra 100 por minuto');
+  const c = { tipo: 'Normal', zona: 'Z', qtd: 100, min: 10, xp: 1000 }, d = { tipo: 'Normal', zona: 'Z', qtd: 99, min: 9.95, xp: 1000 };
+  assert.equal(OFERTA.escolher([c, d]), 1, 'diferença de 0,5%: a mais curta');
+  // no seu ritmo: a mesma oferta com o prêmio 0,5% maior pelo arredondamento empata com a original, e fica a mais curta
+  const r = { z: { abatesMin: 40, xpAbate: 600 } };
+  const e = { tipo: 'Normal', zona: 'Z', qtd: 200, min: 20, xp: 46200 }, f = { tipo: 'Normal', zona: 'Z', qtd: 201, min: 20.1, xp: 46200 * 1.005 * 1.005 };
+  assert.ok(OFERTA.noSeuRitmo(f, [], r).xpHora > OFERTA.noSeuRitmo(e, [], r).xpHora);
+  assert.equal(OFERTA.escolher([f, e], r), 1);
+});
+
 test('escolher no seu ritmo: com as duas zonas medidas, vale a que rende mais para você', () => {
-  const yasuo = { 'fosso do dragão': { abatesMin: 2093 / 60, xpAbate: 547 }, 'covil do barão': { abatesMin: 2005 / 60, xpAbate: 672 } };
-  assert.equal(OFERTA.escolher(OFERTAS, yasuo), 2);
+  const covilMelhor = { 'fosso do dragão': { abatesMin: 30, xpAbate: 500 }, 'covil do barão': { abatesMin: 40, xpAbate: 800 } };
+  assert.equal(OFERTA.escolher(OFERTAS, covilMelhor), 2);
   const lento = { 'fosso do dragão': { abatesMin: 47.5, xpAbate: 670 }, 'covil do barão': { abatesMin: 15, xpAbate: 800 } };
   assert.equal(OFERTAS[OFERTA.escolher(OFERTAS, lento)].zona, 'Fosso do Dragão', 'no Covil mata devagar demais');
 });
 
-test('abatesDa: a Caça e a Fúria valem o tempo do jogo vezes o ritmo dele na zona', () => {
+test('abatesDa: a Caça e a Fúria valem o tempo do jogo vezes o ritmo dele na zona (pelo selo ou pelo título)', () => {
   const caca = of('Caça', 'Fosso do Dragão', 40, 12, 9000);
   assert.equal(OFERTA.abatesDa(OFERTAS[1], OFERTAS), 160);
   const lista = [...OFERTAS, caca];
   const ritmoJogo = (70 / 7 + 160 / 15 + 630 / 60 + 1890 / 180) / 4;
   assert.ok(Math.abs(OFERTA.abatesDa(caca, lista) - 12 * ritmoJogo) < 1e-9);
   assert.ok(Math.abs(OFERTA.abatesDa(of('Fúria', 'Rio', 3, 16, 5000), lista) - 16 * ((70 / 7 + 160 / 15 + 170 / 15 + 630 / 60 + 1890 / 180) / 5)) < 1e-9, 'zona sem outra oferta: o ritmo de todas');
+  // selo com outro rótulo: o título decide ("<n> monstros em" conta todo abate; o nome da espécie ou "furiosos", não)
+  const especie = { tipo: 'Caçada', titulo: '40 Larva do Vazio em Fosso do Dragão', zona: 'Fosso do Dragão', qtd: 40, min: 12, xp: 9000 };
+  const furiosos = { tipo: 'Furor', titulo: '3 monstros furiosos em Fosso do Dragão', zona: 'Fosso do Dragão', qtd: 3, min: 16, xp: 9000 };
+  const normal = { tipo: 'Comum', titulo: '160 monstros em Fosso do Dragão', zona: 'Fosso do Dragão', qtd: 160, min: 15, xp: 34400 };
+  assert.ok(Math.abs(OFERTA.abatesDa(especie, lista) - 12 * ritmoJogo) < 1e-9);
+  assert.ok(Math.abs(OFERTA.abatesDa(furiosos, lista) - 16 * ritmoJogo) < 1e-9);
+  assert.equal(OFERTA.abatesDa(normal, lista), 160);
 });
