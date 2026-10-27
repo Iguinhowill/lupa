@@ -15,7 +15,9 @@ const ESQUEMA = 'lupasim';
 const BASE_JOGO = 'https://lolidle.com/js/';
 const VALIDADE_MOTOR = 6 * 3600e3;      // baixa de novo depois disso (o jogo muda quase todo dia)
 const MAX_ARQUIVOS = 400, MAX_BYTES = 5e6;      // um motor fora disso não é o do jogo: recusa antes de baixar o resto
-const PRAZO = 10 * 60e3;                       // uma rodada que passa disto travou (o normal é menos de 1 min)
+// uma rodada que passa do prazo travou: no mínimo 10 min, ou 4 vezes o tempo esperado (uns 0,75 s por hora simulada por trabalhador)
+const PRAZO_MIN = 10 * 60e3, MS_POR_MINUTO_SIMULADO = 12.5;
+const PRAZO_BAIXAR = 30e3;                     // por arquivo do motor
 // os nomes vêm dos imports de arquivos baixados: só caminhos simples dentro de js/, nunca subindo de pasta
 const NOME_OK = /^[\w-]+(\/[\w-]+)*\.js$/;
 const importsDe = (src) => [...src.matchAll(/(?:import|export)\s[^'"]*?from\s*['"](\.{1,2}\/[^'"]+)['"]|import\(\s*['"](\.{1,2}\/[^'"]+)['"]\s*\)|import\s*['"](\.{1,2}\/[^'"]+)['"]/g)]
@@ -26,6 +28,21 @@ const TIPOS = { '.js': 'text/javascript; charset=utf-8', '.html': 'text/html; ch
 // antes do app ficar pronto (o Electron exige): o lupasim:// funciona como https para módulos e trabalhadores
 function registrarEsquema() {
   protocol.registerSchemesAsPrivileged([{ scheme: ESQUEMA, privileges: { standard: true, secure: true } }]);
+}
+
+// o corpo da resposta como texto, parando (sem guardar o resto) se passar de max bytes
+async function lerAte(r, max, nome) {
+  if (Number(r.headers.get('content-length')) > max) throw new Error(`${nome}: grande demais`);
+  const partes = [], leitor = r.body.getReader();
+  let total = 0;
+  for (;;) {
+    const { done, value } = await leitor.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > max) { await leitor.cancel().catch(() => {}); throw new Error(`${nome}: grande demais`); }
+    partes.push(value);
+  }
+  return new TextDecoder().decode(Buffer.concat(partes));
 }
 
 // baixa motor.js e tudo que ele importa para pasta/<novo> e só então troca pela cópia em uso. Devolve { sha, em, arquivos }
@@ -41,10 +58,9 @@ async function baixarMotor(pasta, buscar = fetch) {
     const arq = path.resolve(nova, nome);
     if (!arq.startsWith(path.resolve(nova) + path.sep)) throw new Error('import fora da pasta (recusado): ' + nome);
     feitos.set(nome, '');
-    const r = await buscar(BASE_JOGO + nome, { headers: { 'user-agent': 'Lupa (app, simulador de build)' } });
+    const r = await buscar(BASE_JOGO + nome, { headers: { 'user-agent': 'Lupa (app, simulador de build)' }, signal: AbortSignal.timeout(PRAZO_BAIXAR) });
     if (!r.ok) throw new Error(`${nome}: HTTP ${r.status}`);
-    const src = await r.text();
-    if (src.length > MAX_BYTES) throw new Error(`${nome}: grande demais`);
+    const src = await lerAte(r, MAX_BYTES, nome);
     feitos.set(nome, src);
     fs.mkdirSync(path.dirname(arq), { recursive: true });
     fs.writeFileSync(arq, src);
@@ -55,10 +71,12 @@ async function baixarMotor(pasta, buscar = fetch) {
   fs.writeFileSync(path.join(nova, '.lupa-motor.json'), JSON.stringify(meta));
   // a cópia em uso sai de lado antes e só é apagada depois que a nova entrou (no Windows o antivírus às vezes segura a pasta)
   const velha = path.join(pasta, 'velha');
-  fs.rmSync(velha, { recursive: true, force: true });
+  const apagarVelha = () => { try { fs.rmSync(velha, { recursive: true, force: true }); } catch {} };      // a que sobrar não atrapalha
+  apagarVelha();
+  if (fs.existsSync(velha)) fs.renameSync(velha, path.join(pasta, 'velha-' + Date.now()));      // presa pelo antivírus: fica de lado
   if (fs.existsSync(atual)) fs.renameSync(atual, velha);
   try { fs.renameSync(nova, atual); } catch (e) { if (fs.existsSync(velha)) fs.renameSync(velha, atual); throw e; }
-  fs.rmSync(velha, { recursive: true, force: true });
+  apagarVelha();
   return meta;
 }
 const metaMotor = (pasta) => { try { return JSON.parse(fs.readFileSync(path.join(pasta, 'atual', '.lupa-motor.json'), 'utf8')); } catch { return null; } };
@@ -110,14 +128,16 @@ async function rodarCombates({ pastaSim, pastaJogo, jobs, aoAndar }) {
   });
   // com prazo e atento à queda da página: sem isso, um laço no motor ou a página caindo deixaria a conta "rodando" para sempre
   let relogio = null;
-  const prazo = new Promise((_ok, falha) => { relogio = setTimeout(() => falha(new Error('a simulação passou de 10 min e foi interrompida')), PRAZO); });
+  const n = quantosTrabalhadores(), minutos = jobs.reduce((s, j) => s + (j.sementes?.length || 1) * (j.minutos || 60), 0);
+  const ms = Math.max(PRAZO_MIN, (4 * minutos * MS_POR_MINUTO_SIMULADO) / n);
+  const prazo = new Promise((_ok, falha) => { relogio = setTimeout(() => falha(new Error(`a simulação passou de ${Math.round(ms / 60e3)} min e foi interrompida`)), ms); });
   const caiu = new Promise((_ok, falha) => jan.webContents.once('render-process-gone', (_e, d) => falha(new Error(`a página do simulador caiu (${d?.reason || '?'})`))));
   prazo.catch(() => {}); caiu.catch(() => {});
   try {
     await Promise.race([jan.loadURL(ESQUEMA + '://app/sim.html'), prazo, caiu]);
     // o simulador come CPU: prioridade abaixo do normal, para o jogo não sentir
     try { os.setPriority(jan.webContents.getOSProcessId(), os.constants.priority.PRIORITY_BELOW_NORMAL); } catch {}
-    return await Promise.race([jan.webContents.executeJavaScript(`rodar(${JSON.stringify(jobs)}, ${quantosTrabalhadores()})`), prazo, caiu]);
+    return await Promise.race([jan.webContents.executeJavaScript(`rodar(${JSON.stringify(jobs)}, ${n})`), prazo, caiu]);
   } finally {
     clearTimeout(relogio);
     // fecha de verdade antes de devolver: com destroy() a próxima janela pegava o processo que estava morrendo e o lupasim://

@@ -71,7 +71,15 @@ app.whenReady().then(async () => {
     await painel.executeJavaScript('desenhar(true)');
     const texto = await painel.executeJavaScript(`document.querySelector('.gastar')?.innerText || ''`);
     conferir(/Onde gastar o ouro/.test(texto) && /Conta de/.test(texto) && /se paga em|Nada do que o ouro compra/.test(texto), 'o cartão mostra a conta');
-    // 3) pedido inválido (personagem sem ficha) é recusado
+    // 3) um item equipado ainda sendo avaliado ("~?"): a conta não roda e o cartão diz que espera
+    const avaliando = JSON.parse(JSON.stringify(novo)); avaliando.ts = Date.now(); avaliando.ficha.equip[1].id = '3031+5#ataque2~?';
+    await painel.executeJavaScript(`chrome.storage.local.set(${JSON.stringify({ 'estado:Teste': avaliando })})`);
+    await espera(5000);
+    const g3 = await gastoDe(painel);
+    conferir(g3?.esperandoFicha === true && g3.estado === 'pronto' && g3.em === r2.g.em, 'item sendo avaliado: não recalcula e marca que espera a ficha');
+    await painel.executeJavaScript('desenhar(true)');
+    conferir(/sendo avaliado/.test(await painel.executeJavaScript(`document.querySelector('.gastar')?.innerText || ''`)), 'o cartão diz que a conta espera o item ser avaliado');
+    // 4) pedido inválido (personagem sem ficha) é recusado
     const recusa = await painel.executeJavaScript(`lupaApp.gastar('Ninguém')`);
     conferir(!!recusa?.erro, 'personagem sem ficha: recusado (' + (recusa?.erro || '?') + ')');
     try { fs.writeFileSync(path.join(SAIDA, 'painel.png'), (await painel.capturePage()).toPNG()); } catch {}

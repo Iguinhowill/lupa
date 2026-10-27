@@ -470,8 +470,16 @@ function vigiarGasto(nome, e, agora = Date.now()) {
   if (visto && visto.chave === chave && agora - visto.em < 60e3) return;
   vistoGasto.set(nome, { chave, em: agora });
   const b = Gastar.buildDoEstado(e, lerChave('cacada:' + nome)?.sessoes || []);
-  if (!b || b.faltam > 0) return;      // item sendo avaliado ou desconhecido: espera a ficha ficar completa
-  const sig = Gastar.assinatura(b), g = lerChave('gastar:' + nome), pend = esperasGasto.get(nome);
+  if (!b) return;
+  const g = lerChave('gastar:' + nome), pend = esperasGasto.get(nome);
+  // item sendo avaliado ou desconhecido: não roda (nem a que já estava agendada) e o cartão diz por quê; avisa só na virada
+  if (b.faltam > 0) {
+    if (pend) { clearTimeout(pend.t); esperasGasto.delete(nome); }
+    if (g && !g.esperandoFicha) gravarGasto(nome, { esperandoFicha: true });
+    return;
+  }
+  if (g?.esperandoFicha) gravarGasto(nome, { esperandoFicha: false });
+  const sig = Gastar.assinatura(b);
   const emDia = g?.assinatura === sig && agora - (g.em || 0) < GASTO.velho;
   // depois de um erro, a mesma build espera 30 min (sem internet, por exemplo); uma build nova tenta já
   const esperaErro = g?.estado === 'erro' && g.erroAssinatura === sig && agora - (g.erroEm || 0) < GASTO.depoisDoErro;

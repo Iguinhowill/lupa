@@ -15,7 +15,7 @@ const SIM = {
   triagem: { minutos: 20, sementes: [101, 102] },
   conferir: { minutos: 60, sementes: [201, 202, 203, 204, 205, 206, 207, 208] },
 };
-const MAX_TRIAGEM = 300, MAX_CONFERIR = 20, MELHORES_TRIAGEM = 8;
+const MAX_TRIAGEM = 300, MAX_CONFERIR = 30, MELHORES_TRIAGEM = 8, LUGARES_CONFERIDOS = 2;
 const ESPACOS_ITENS = 4;      // o equipamento: 1 bota + 4 outros (ESPACOS_ITENS do motor)
 // abaixo disto (ou dentro do erro da medida) o ganho não se separa do zero: a opção vai para "não muda nada"
 const SIGNIFICATIVO = 0.003;
@@ -193,20 +193,21 @@ function ganhoPareado(base, opcao) {
   const dp = n > 1 ? Math.sqrt(d.reduce((s, v) => s + (v - media) ** 2, 0) / (n - 1)) : 0;
   return { ganho: media, erro: n > 1 ? (2 * dp) / Math.sqrt(n) : 1 };
 }
-// da triagem para a conferência: todas as forjas (a pergunta mais comum), as de graça que ganharam e as melhores por ouro gasto. Do
-// mesmo item em lugares diferentes vai só o melhor lugar (senão um item só ocuparia todas as vagas)
+// da triagem para a conferência: todas as forjas (a pergunta mais comum), as de graça que ganharam e as melhores por ouro gasto. A
+// vaga é por item: do mesmo item em lugares diferentes vão os 2 melhores lugares da triagem, e a conferência (mais precisa) decide
 function escolherParaConferir(opcoes, triagem) {
   const base = triagem.base, nota = (c) => ({ c, g: ganhoPareado(base, triagem[c.id]).ganho });
-  const porGrupo = new Map();
+  const grupos = new Map();
   for (const x of opcoes.filter((c) => triagem[c.id]).map(nota)) {
-    const k = x.c.grupo || x.c.id, m = porGrupo.get(k);
-    if (!m || x.g > m.g) porGrupo.set(k, x);
+    const k = x.c.grupo || x.c.id;
+    (grupos.get(k) || grupos.set(k, []).get(k)).push(x);
   }
-  const com = [...porGrupo.values()];
-  const forjas = com.filter((x) => x.c.tipo === 'forja');
-  const gratis = com.filter((x) => x.c.tipo !== 'forja' && x.c.custo === 0 && x.g > 0).sort((x, y) => y.g - x.g);
-  const pagas = com.filter((x) => x.c.tipo !== 'forja' && x.c.custo > 0 && x.g > 0).sort((x, y) => y.g / y.c.custo - x.g / x.c.custo);
-  return [...forjas, ...gratis.slice(0, MELHORES_TRIAGEM), ...pagas.slice(0, MELHORES_TRIAGEM)].slice(0, MAX_CONFERIR).map((x) => x.c);
+  const lista = [...grupos.values()].map((l) => l.sort((x, y) => y.g - x.g).slice(0, LUGARES_CONFERIDOS));      // cada grupo: os melhores lugares
+  const forjas = lista.filter((l) => l[0].c.tipo === 'forja');
+  const gratis = lista.filter((l) => l[0].c.tipo !== 'forja' && l[0].c.custo === 0 && l[0].g > 0).sort((x, y) => y[0].g - x[0].g);
+  const pagas = lista.filter((l) => l[0].c.tipo !== 'forja' && l[0].c.custo > 0 && l[0].g > 0).sort((x, y) => y[0].g / y[0].c.custo - x[0].g / x[0].c.custo);
+  return [...forjas, ...gratis.slice(0, MELHORES_TRIAGEM), ...pagas.slice(0, MELHORES_TRIAGEM)].flat().filter((x) => x.g > 0 || x.c.tipo === 'forja')
+    .slice(0, MAX_CONFERIR).map((x) => x.c);
 }
 
 // XP e ouro por hora na zona, medidos pela Lupa nas caçadas dos últimos 7 dias (10 min ou mais nela, XP sem bônus de live)

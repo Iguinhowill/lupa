@@ -180,10 +180,10 @@ ganhos que importam aqui).
   preço do Mercado, trocando uma carta que já está num item (o preço de tirar ela entra); itens da mochila e do Mercado
   (lendários e míticos com stat de dano do tipo dele; de cada item, a versão mais forte que o ouro paga e a mais barata;
   a carta do item que sai vai junto, com o preço de tirá-la) em cada lugar em que cabem, inclusive num espaço vazio (uma
-  bota e 4 outros, cada lendário uma vez, mítico só do 50); e o reset de atributos (25 mil × nível) para tudo em Força ou parte em Agilidade/Foco. Preço do
-  Mercado: o menor anúncio visto nos últimos 7 dias (`mercado:menores`).
+  bota e 4 outros, cada lendário uma vez, mítico só do 50); e o reset de atributos (25 mil × nível) para tudo em Força
+  ou parte em Agilidade/Foco. Preço do Mercado: o menor anúncio visto nos últimos 7 dias (`mercado:menores`).
 - **Duas etapas no simulador**: a triagem roda tudo em 2 caçadas de 20 min; a conferência roda as forjas, as de graça
-  que ganharam e as 8 melhores por ouro em 8 caçadas de 1 h. Cada opção usa as mesmas sementes da build atual, e o ganho
+  que ganharam e as 8 melhores por ouro (de cada item, os 2 melhores lugares da triagem) em 8 caçadas de 1 h. Cada opção usa as mesmas sementes da build atual, e o ganho
   é a média da diferença semente a semente (com 2 erros-padrão). Rende quando passa de 0,3% e do próprio erro; do
   mesmo item em lugares diferentes fica só o melhor lugar. Se paga em: custo ÷ (ganho × ouro/h medido na zona nas
   caçadas dos últimos 7 dias; sem medição, o de tabela).
@@ -191,7 +191,8 @@ ganhos que importam aqui).
   zona) fica 2 min parada diferente da última conta, ou quando a conta passa de 6 h. Um personagem por vez; depois de
   um erro, a mesma build espera 30 min (uma build nova tenta já). Com um item equipado que a conta não reconhece (sendo
   avaliado, "~?", ou mais novo que as tabelas) ela não roda: simular sem a peça daria ganhos errados. Leva cerca de 1 min;
-  cada rodada do simulador tem prazo de 10 min e para se a página cair. O resultado vai para `gastar:<nome>` no armazém
+  cada rodada do simulador tem prazo (10 min, ou mais num PC com poucos núcleos) e para se a página cair; cada arquivo
+  do motor tem 30 s para baixar. Enquanto um item espera avaliação, o cartão diz que a conta espera (`esperandoFicha`). O resultado vai para `gastar:<nome>` no armazém
   (`{ estado: 'pronto' | 'rodando' | 'na-fila' | 'erro', em, assinatura, nivel, zona, campeao, ouro, equip, base, motor,
   sim, testadas, conferidas, opcoes: [linha], semGanho: [linha] }`, linha = `{ tipo, titulo, detalhe, custo, custoP90,
   ganho, erro, xpH, ouroH, horas, mortesH }`); enquanto recalcula, a conta anterior continua lá. O envio.js sobe a

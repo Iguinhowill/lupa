@@ -192,11 +192,11 @@ test('espaço vazio no equipamento também recebe sugestão', () => {
   assert.ok(!G.candidatos(G.buildDoEstado(ESTADO), { menores: { '3074+5~A': { ouro: 3e6, em: agora } }, agora }).some((x) => /espaço vazio/.test(x.titulo)));
 });
 
-test('a triagem manda um lugar por item para a conferência', () => {
+test('a triagem manda os 2 melhores lugares de cada item para a conferência', () => {
   const opcoes = ['a@0', 'a@1', 'a@2', 'a@3'].map((id) => ({ id, grupo: 'mercado:a', tipo: 'mercado', custo: 1e6 })).concat([{ id: 'b@0', grupo: 'mercado:b', tipo: 'mercado', custo: 1e6 }]);
   const r = (g) => ({ abatesH: [100 * (1 + g), 100 * (1 + g)] });
   const tri = { base: r(0), 'a@0': r(0.01), 'a@1': r(0.04), 'a@2': r(0.02), 'a@3': r(0.03), 'b@0': r(0.005) };
-  assert.deepEqual(G.escolherParaConferir(opcoes, tri).map((x) => x.id), ['a@1', 'b@0']);
+  assert.deepEqual(G.escolherParaConferir(opcoes, tri).map((x) => x.id), ['a@1', 'a@3', 'b@0']);
 });
 
 test('o ouro da ficha: o cartão (ui.js) lê igual à conta', () => {

@@ -518,7 +518,8 @@ function cartaoGastar(e, ctx, opts = {}) {
   if (g?.opcoes) {
     const atual = (e.ficha?.equip || []).map((i) => i.id).join(), mudou = (g.equip || []).join() !== atual || String(g.nivel) !== String(parseInt(e.nivel, 10));
     partes.push(h('p', { class: 'gasto-quando fraco' }, `Conta de ${dataHora(g.em)} · nível ${g.nivel} · ${g.zona?.nome || '?'}${ouro != null ? ` · seu ouro: ${milhar(ouro)}` : ''}`,
-      mudou ? h('span', { class: 'gasto-mudou' }, noApp ? ' · sua build mudou: a conta refaz sozinha em 2 min' : ' · a build mudou desde esta conta') : null));
+      mudou ? h('span', { class: 'gasto-mudou' }, g.esperandoFicha ? ' · sua build mudou, mas um item equipado ainda está sendo avaliado (ou é novo demais para a Lupa): a conta espera'
+        : noApp ? ' · sua build mudou: a conta refaz sozinha em 2 min' : ' · a build mudou desde esta conta') : null));
     const mostrar = opts.completo || gastoAberto ? g.opcoes : g.opcoes.slice(0, 3);
     partes.push(g.opcoes.length ? h('ul', { class: 'gasto-lista' }, mostrar.map((l) => linhaGasto(l, ouro)))
       : h('p', { class: 'gasto-nada' }, 'Nada do que o ouro compra agora aumenta o seu farm de um jeito que dê para medir. Guardar também é uma opção.'));
