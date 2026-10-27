@@ -132,8 +132,9 @@ Por isso cada clique ou tecla é uma entrada de verdade, `webContents.sendInputE
   `acao-jogo.js` confere na tela que a tarefa está pronta (classe `pronta` do `#rastreio-tarefa`; a leitura da Lupa pode
   estar até 5 s atrasada), volta à Fonte (o botão Voltar, ou a tecla B com a coluna escondida) e espera chegar, clica no
   rastreio (o personagem anda até o Capitão), em "entregar", em "tarefa", na oferta que mais rende no ritmo do jogador
-  (`oferta.js`: XP por hora caçando com ela, abates mais prêmio, pelo ritmo medido em cada zona nos últimos 7 dias; zona sem
-  medição só entra se nenhuma tiver; o tempo que o jogo mostra supõe o mesmo ritmo em toda zona),
+  (`oferta.js`: XP por hora caçando com ela, abates mais prêmio, com 1 min de custo por entrega, pelo ritmo medido em cada
+  zona nas sessões dos últimos 7 dias, XP sem live; zona sem medição só entra se nenhuma tiver; empate até 1% fica com a
+  mais curta; o tempo que o jogo mostra supõe o mesmo ritmo em toda zona),
   abre o mapa (o botão ou a tecla M), clica na zona e no "Ir", e espera chegar. Cada passo espera a tela mudar (com prazo);
   se nada mudou no prazo e o botão continua ali, repete a entrada uma vez. Prazos: 1,5 s em "entregar", "tarefa", na
   oferta, na zona e no "Ir"; 2,5 s no mapa (botão ou M, que abrem e fecham); 3 s no rastreio (o personagem anda); 5 s na

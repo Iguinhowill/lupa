@@ -50,8 +50,8 @@ janela** abre uma janelinha que fica sempre por cima, com a tarefa, as taxas, os
 
 **Entregar e seguir (só no app de PC):** na aba Tarefa, com a tarefa pronta, o botão volta à Fonte (tecla B), entrega
 ao Capitão da Legião, aceita a oferta que mais rende no seu ritmo e viaja para a zona dela (tecla M e o mapa). "Mais
-rende" é o XP por hora caçando com a tarefa (os abates mais o prêmio), pelo ritmo que a Lupa mediu nas suas caçadas de cada
-zona (últimos 7 dias, 10 min ou mais na zona). Zona em que você nunca caçou não entra na conta; se nenhuma oferta for de
+rende" é o XP por hora caçando com a tarefa (os abates mais o prêmio, contando 1 min por entrega), pelo ritmo que a Lupa
+mediu nas suas caçadas de cada zona (sessões dos últimos 7 dias, 10 min ou mais na zona, XP sem o bônus de live). Zona em que você nunca caçou não entra na conta; se nenhuma oferta for de
 zona medida, vale o prêmio por minuto pelo tempo do jogo. O tempo que o jogo mostra supõe o mesmo ritmo em toda zona: por
 isso o Desafio da zona de cima parecia render mais. O app faz isso pelos botões do jogo, com cliques e teclas de verdade, e confere a tela a
 cada passo; se algo sair do esperado (mochila cheia, em combate, janela por cima), para e diz onde. O botão Parar
