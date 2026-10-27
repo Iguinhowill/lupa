@@ -19,7 +19,7 @@ de uma linha. Na extensão, tudo continua como descrito aqui.
 
 - **Ficha:** o seu plano no topo, os itens equipados com a imagem, refino, qualidade e carta; a barra de combate com
   o ícone e a habilidade de cada tecla (a tecla R pode ser o G, por exemplo); ranks, atributos, mochila e cartas. No
-  app, o cartão **Onde gastar o ouro** (ver abaixo).
+  app, os cartões **Pontos e barra** e **Onde gastar o ouro** (ver abaixo).
 - **Caçada:** abates, XP e ouro por hora caçando, por sessão e por zona (a melhor zona por XP/h ganha uma estrela), com o multiplicador de bônus ("XP ×1,45 · ouro ×1,20")
   e o gráfico de 5 em 5 min que alterna entre XP e Abates. "Nova sessão" vale só para o personagem aberto. Fica salvo por personagem e não zera ao
   recarregar a página. Também mostra uma estimativa sem os bônus da Kick e da Twitch e exporta em CSV.
@@ -68,6 +68,11 @@ item de velocidade com a velocidade no teto). Roda sozinho uns 2 min depois que 
 cerca de 1 min. O app baixa para isso os arquivos públicos do motor (os mesmos que a página do jogo carrega) e simula
 numa página isolada, sem internet; nada da sua conta sai daqui. Só informa: comprar, forjar e trocar é com você, no jogo.
 A conta também aparece no site, em Calcular.
+
+**Pontos e barra (só no app de PC):** na mesma conta do Onde gastar o ouro, o app testa no motor do jogo para onde vão os
+pontos dos próximos 5 níveis (todos numa habilidade, ou todos num atributo) e qual combinação de 4 habilidades que você já
+aprendeu rende mais na barra. Um ponto sozinho mexe tão pouco que fica dentro da margem da simulação; por isso a conta olha
+5 níveis à frente. Quando duas opções ficam dentro da margem uma da outra, o cartão diz que empatam.
 
 **Seu plano:** em `planos.js` ficam as anotações por personagem (habilidades, barra, atributos, itens, cartas e
 zona). A Lupa só compara com a tela e mostra o próximo passo; não calcula nem simula nada.
