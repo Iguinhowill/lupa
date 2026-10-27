@@ -125,3 +125,12 @@ test('as tabelas de campeões, cartas e farm foram gravadas', () => {
   const e = J.meta.erroComparador;
   assert.ok(e && Number.isFinite(e.mediana) && Number.isFinite(e.max) && e.max >= e.mediana, 'o erro medido do comparador está em meta.erroComparador');
 });
+test('espólios: valor por unidade, busca pelo nome e itens pelo nome', () => {
+  assert.ok(Object.keys(J.ESPOLIOS).length >= 40);
+  for (const [id, e] of Object.entries(J.ESPOLIOS)) { assert.ok(e.nome && e.valor > 0, id); assert.equal(J.espolioPorNome(e.nome).id, id); }
+  assert.equal(J.valorEspolio('escama-dragao', 10), J.ESPOLIOS['escama-dragao'].valor * 10);
+  assert.equal(J.valorEspolio('nao-existe'), null);
+  assert.equal(J.espolioPorNome('Gume do Infinito'), null);
+  for (const it of J.ITENS) assert.equal(J.itemPorNome(it.nome).id, it.id, it.nome);
+  assert.equal(J.itemPorNome('Escama de Dragão'), null);
+});

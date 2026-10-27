@@ -69,7 +69,10 @@ button { font: inherit; color: inherit; }
 .item-nome { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .item-sub { font-size: 13px; color: var(--fraco); }
 .item-valor { font-size: 12.5px; overflow-wrap: anywhere; }      /* quebra em 2 linhas em vez de cortar o "há 10 min" */
-.item-valor .num { font-size: 12px; }
+.item-valor .num { font-size: 12px; color: var(--ouro-claro); white-space: nowrap; }
+.item-valor .inteiro { white-space: nowrap; }
+.valor-mochila { display: flex; flex-direction: column; gap: 4px; margin-bottom: 2px; }
+.valor-detalhe { font-size: 12.5px; }
 
 .grade-4, .grade-3, .grade-2 { display: grid; gap: 8px; }
 .grade-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -163,6 +166,8 @@ button { font: inherit; color: inherit; }
 .img-selo { position: absolute; right: -3px; bottom: -3px; padding: 0 3px; border-radius: 4px; background: color-mix(in srgb, var(--fundo) 92%, transparent); border: 1px solid var(--borda-forte); font-family: var(--mono); font-size: 11px; font-weight: 700; line-height: 1.35; white-space: nowrap; }
 .item .item-texto { flex: 1 1 auto; }
 .lista-simples li.com-img { display: flex; align-items: center; gap: 8px; }
+.lista-simples .drop-nome { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lista-simples .drop-valor { margin-left: auto; padding-left: 8px; color: var(--ouro-claro); font-size: 13px; }
 .botao-central { flex: none; }
 
 /* ---------- barra de XP do topo ---------- */

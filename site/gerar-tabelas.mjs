@@ -105,6 +105,7 @@ try {
         chefe: l.chefe || null, drop: Object.fromEntries(Object.entries(M.chancesDrop(l)).map(([k, v]) => [k, +v.toPrecision(5)])) })),
       ITENS: Object.values(M.ITENS).map((i) => ({ id: i.id, nome: i.nome, preco: i.preco, raridade: M.raridade(i), espaco: i.espaco || null,
         e: Object.fromEntries(STATS_ITEM.map((x) => [x, num(i[x])]).filter(([, v]) => v)) })),
+      ESPOLIOS: Object.fromEntries(Object.entries(M.ESPOLIOS).map(([id, e]) => [id, { nome: e.nome, valor: e.valor }])),
       dataDragon: D.DADOS.versao,
     }));
   `;
@@ -120,6 +121,8 @@ try {
   for (const [nome, arr] of [['ZONAS', T.ZONAS], ['ITENS', T.ITENS]]) {
     if (!Array.isArray(arr) || !arr.length || !arr.every((x) => /^[\w-]+$/.test(String(x.id)))) throw new Error(`${nome}: ids fora do formato`);
   }
+  const esp = Object.entries(T.ESPOLIOS || {});
+  if (!esp.length || !esp.every(([id, e]) => /^[\w-]+$/.test(id) && typeof e.nome === 'string' && e.nome && Number.isFinite(e.valor) && e.valor >= 0)) throw new Error('ESPOLIOS: fora do formato');
 
   // 3) grava dados-jogo.js
   const j = (v) => JSON.stringify(v);
@@ -156,6 +159,8 @@ const JOGO = (() => {
   const ZONAS = ${linhas(T.ZONAS)};
   // itens: preco é o preço-base no Lojista
   const ITENS = ${linhas(T.ITENS)};
+  // espólios (partes de monstro, só para vender): valor é o que o Lojista paga por unidade
+  const ESPOLIOS = ${j(T.ESPOLIOS)};
 
   const ajuste = (n) => BALANCO.find((f) => n >= f.de && n <= f.ate) || BALANCO[BALANCO.length - 1];
   const CURVA = {
@@ -184,6 +189,11 @@ const JOGO = (() => {
   const baseId = (x) => String(x).split(/[!+~#]/)[0];
   const item = (id) => ITENS.find((i) => i.id === baseId(id)) || null;
   const valorVenda = (id, refino, qual) => { const i = item(id); return i ? Math.floor(i.preco * 0.5 * (1 + 0.5 * refino) * (QUALIDADES[qual]?.venda || 1)) : null; };
+  // o item ou o espólio pelo nome que o jogo escreve (chat, mochila); null se não for nenhum dos dois (runa, gema...)
+  const itemPorNome = (nome) => ITENS.find((i) => i.nome === nome) || null;
+  const espolioPorNome = (nome) => { const k = Object.keys(ESPOLIOS).find((id) => ESPOLIOS[id].nome === nome); return k ? { id: k, ...ESPOLIOS[k] } : null; };
+  // quanto o Lojista paga por qtd unidades de um espólio (pelo id)
+  const valorEspolio = (id, qtd = 1) => (ESPOLIOS[id] ? ESPOLIOS[id].valor * qtd : null);
   // preço de UMA tentativa de forja a partir do refino atual (refino -> refino + 1)
   const precoRefino = (id, refino) => { const i = item(id); return i ? Math.round(i.preco * (0.5 + 0.5 * refino) * (PRECO_REFINO_TOPO[refino] || (refino >= 2 ? PRECO_REFINO_ALTO : 1))) : null; };
   const chanceRefino = (refino, vip) => (vip ? Math.min(VIP.refinoMax, CHANCE_REFINO[refino] * VIP.refino) : CHANCE_REFINO[refino]);
@@ -292,7 +302,7 @@ const JOGO = (() => {
   const FARM = ${j(FARM)};      // parâmetros do modelo de farm (calculos.js: estimarFarm), calibrados pelo gerador contra a simulação do motor
 
   return { meta, NIVEL_MAX, REFINO_MAX, BONUS_REFINO, RITMO_REAL, CHANCE_REFINO, REGRESSAO_REFINO, PERSISTENCIA, VIP, DROP_CHEFE, ABATES_MIN_ZONA, TAREFA_TIPOS, QUALIDADES, ORDEM_QUAL,
-    XP_NIVEL, BALANCO, MONSTROS, ZONAS, ITENS, ZONA, CURVA, CAMPEOES, HABS, CARTA_VALOR, CARTA_TIPOS, NIVEL_DIF, TETO_VIDA_ITEM, RM_MONSTRO, VEL_ATAQUE_MAX, DT, FARM, fichaDaBuild, periodoAtaque, chaveItem, refinoDe, qualDe, cartaDe, fatorDanoJogador, ARMADURA_MONSTRO, xpParaNivel, xpEntre, fatorXp, porAbateZona, zonaIdeal, item, valorVenda, precoRefino, chanceRefino, chanceForja, recompensaTarefa };
+    XP_NIVEL, BALANCO, MONSTROS, ZONAS, ITENS, ESPOLIOS, ZONA, CURVA, CAMPEOES, HABS, CARTA_VALOR, CARTA_TIPOS, NIVEL_DIF, TETO_VIDA_ITEM, RM_MONSTRO, VEL_ATAQUE_MAX, DT, FARM, fichaDaBuild, periodoAtaque, chaveItem, refinoDe, qualDe, cartaDe, fatorDanoJogador, ARMADURA_MONSTRO, xpParaNivel, xpEntre, fatorXp, porAbateZona, zonaIdeal, item, valorVenda, itemPorNome, espolioPorNome, valorEspolio, precoRefino, chanceRefino, chanceForja, recompensaTarefa };
 })();
 if (typeof module !== 'undefined') module.exports = JOGO;
 `; };
@@ -313,6 +323,11 @@ if (typeof module !== 'undefined') module.exports = JOGO;
     }
     for (let n = 1; n <= 100; n++) igual('zonaIdeal ' + n, J.zonaIdeal(n).id, M.zonaIdeal(n).id);
     for (const it of J.ITENS) for (let r = 0; r < 7; r++) { igual('precoRefino ' + it.id + '+' + r, J.precoRefino(it.id, r), M.precoRefino(it.id + '+' + r)); for (const q of J.ORDEM_QUAL) igual('valorVenda ' + it.id + r + q, J.valorVenda(it.id, r, q), M.valorVenda(it.id + '+' + r + '~' + q)); }
+    // espólios: o mesmo valor do motor e o total de uma mochila inteira igual ao valorEspolios dele
+    for (const id of Object.keys(M.ESPOLIOS)) igual('valorEspolio ' + id, J.valorEspolio(id, 37), M.ESPOLIOS[id].valor * 37);
+    const bolsa = Object.fromEntries(Object.keys(M.ESPOLIOS).map((id, k) => [id, 1 + k * 13]));
+    igual('valorEspolios', Object.entries(bolsa).reduce((s, [id, q]) => s + J.valorEspolio(id, q), 0), M.valorEspolios({ espolios: bolsa }));
+    for (const it of J.ITENS) igual('itemPorNome ' + it.id, J.itemPorNome(M.ITENS[it.id].nome)?.id, it.id);
     for (let r = 0; r < 7; r++) for (const f of [0, 1, 50, 79, 80, 100, 119, 299, 799, 3499, 7999, 8000, 11999, 12000]) for (const vip of [false, true])
       igual('chanceForja ' + r + ',' + f + ',' + vip, J.chanceForja(r, f, vip), M.chanceForjaAgora({ vipAte: vip ? Date.now() + 1e9 : 0, persistencia: { forja: { [(r + 1) + ':basico']: f } } }, r, '1001'));
     console.log(JSON.stringify(erros.slice(0, 10)), erros.length);
@@ -374,7 +389,7 @@ if (typeof module !== 'undefined') module.exports = JOGO;
     }
     return { erros: erros.slice(0, 10), total: erros.length, contas };
   };
-  console.log('conferido: xpParaNivel, fatorXp, porAbateZona, zonaIdeal, precoRefino, valorVenda e a chance da forja batem com o motor.');
+  console.log('conferido: xpParaNivel, fatorXp, porAbateZona, zonaIdeal, precoRefino, valorVenda, os espólios e a chance da forja batem com o motor.');
   const rodarFilho = (corpo) => {
     const r = spawnSync(process.execPath, ['--permission', `--allow-fs-read=${pasta}`, '--input-type=module', '-e', corpo], { encoding: 'utf8', maxBuffer: 64e6, cwd: pasta, env: ENV_FILHO, timeout: 30 * 60e3 });
     if (r.status !== 0) throw new Error('o processo isolado falhou:\n' + (r.stderr || r.stdout).slice(0, 2000));

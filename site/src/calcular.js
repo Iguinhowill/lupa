@@ -101,7 +101,8 @@ function graficoCurva(larg, nivel, alvo) {
   // os itens que o personagem usa ou carrega, para preencher o formulário com um clique
   function itensDoPersonagem() {
     const f = estados[quem]?.ficha, vistos = new Set(), out = [];
-    for (const it of [...(f?.equip || []), ...(f?.mochila || [])]) {
+    // os básicos da mochila (a Lupa lê desde a 0.8) não entram: tirariam do limite de 10 os itens que valem comparar
+    for (const it of [...(f?.equip || []), ...(f?.mochila || []).filter((i) => i.raridade !== 'basico')]) {
       const m = String(it.id || '').match(RE_CHAVE);
       if (!m || !JOGO.item(m[1]) || vistos.has(it.id)) continue;
       vistos.add(it.id);
