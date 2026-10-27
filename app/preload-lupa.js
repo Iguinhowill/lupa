@@ -45,4 +45,6 @@ contextBridge.exposeInMainWorld('lupaChrome', {
 contextBridge.exposeInMainWorld('lupaApp', {
   // o main manda o personagem da aba ativa; o painel passa a mostrar esse
   aoEscolher: (fn) => { ipcRenderer.on('lupa:escolher', (_e, nome) => fn(nome)); },
+  // o botão "Entregar e seguir" ('tarefa') e o Parar ('parar'), na aba desse personagem → { ok } ou { erro }
+  acao: (tipo, nome) => ipcRenderer.invoke('lupa:acao', { tipo: String(tipo), nome: String(nome) }),
 });

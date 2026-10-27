@@ -3,6 +3,7 @@ node_modules/
 app/dist/
 app/lupa/
 app/gerado/
+app/teste-acao/saida/
 site/dist/
 .vercel/
 .env*

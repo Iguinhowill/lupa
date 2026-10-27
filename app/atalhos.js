@@ -1,17 +1,19 @@
 // Lupa (app) · quais teclas são do app (puro, para testar em alertas.test.js). O main captura SÓ estas e impede que
-// cheguem ao jogo; todo o resto passa para a página como sempre. O app nunca envia tecla para o jogo.
+// cheguem ao jogo; todo o resto passa para a página como sempre. O Alt+L é o único que mexe no jogo: aperta a setinha
+// dele que esconde a coluna da direita (ver acoes.js).
 'use strict';
 
 const LISTA = [
   ['Ctrl+1', 'Conta 1'], ['Ctrl+2', 'Conta 2'], ['Ctrl+3', 'Lado a lado'], ['Ctrl+4', 'Central'],
-  ['Ctrl+Tab', 'Próxima aba'], ['Ctrl+B', 'Mostrar ou esconder o painel'], ['F5', 'Recarregar o jogo'],
+  ['Ctrl+Tab', 'Próxima aba'], ['Ctrl+B', 'Mostrar ou esconder o painel'], ['Alt+L', 'Esconder ou mostrar a coluna do jogo'], ['F5', 'Recarregar o jogo'],
   ['Ctrl + / Ctrl − / Ctrl 0', 'Zoom: aumentar, diminuir, padrão']
 ];
 
 // `input` é o do before-input-event ({ type, key, control, alt, meta, shift }). Devolve a ação ou null
 function atalhoDe(input) {
-  if (!input || input.type !== 'keyDown' || input.alt || input.meta) return null;
+  if (!input || input.type !== 'keyDown' || input.meta) return null;
   const k = String(input.key || '');
+  if (input.alt) return !input.control && !input.shift && /^[lL]$/.test(k) ? 'coluna' : null;
   if (!input.control) return k === 'F5' && !input.shift ? 'recarregar' : null;
   if (k === '1') return 'aba:conta1';
   if (k === '2') return 'aba:conta2';

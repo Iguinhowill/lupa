@@ -1,11 +1,12 @@
 // Lupa (app) · processo principal
 // Uma janela com a barra de abas (casca), uma aba por conta do jogo (cada uma na sua partição: login separado), o
 // painel da Lupa à direita e a Central. Faz o papel do service worker da extensão: guarda os dados (armazem.js), roda
-// o envio.js da Lupa num vm com um `chrome` equivalente, mostra os avisos e segura o PC acordado. Só lê a tela: nada
-// aqui clica, aperta tecla ou fala com o servidor do jogo. Liberado pelo Brunox em 26/10/2026. Ver ARQUITETURA.md.
+// o envio.js da Lupa num vm com um `chrome` equivalente, mostra os avisos e segura o PC acordado. Lê a tela e nunca fala
+// com o servidor do jogo. Liberado pelo Brunox em 26/10/2026. Clica ou aperta tecla no jogo só em duas ações que o jogador
+// pede (o botão "Entregar e seguir" e o Alt+L), liberadas por ele em 27/10/2026: ver acoes.js e ARQUITETURA.md.
 'use strict';
 
-const { app, BaseWindow, BrowserWindow, Menu, Tray, WebContentsView, ipcMain, Notification, nativeImage, powerSaveBlocker, screen, shell, session } = require('electron');
+const { app, BaseWindow, BrowserWindow, Menu, Tray, WebContentsView, ipcMain, Notification, nativeImage, powerSaveBlocker, screen, shell, session, webContents } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -17,6 +18,8 @@ const { DA_CONTA, DO_GOOGLE, permitido: permitidoNo } = require('./regras');
 const Layout = require('./layout');
 const { alertasDe, notasEmTexto } = require('./alertas');
 const { atalhoDe, LISTA: ATALHOS } = require('./atalhos');
+// as ações que o jogador pede (entregar a tarefa, a setinha da coluna): autorização e entradas, puro (acoes.test.js)
+const Acoes = require('./acoes');
 
 const JOGO = process.env.LUPA_JOGO || 'https://lolidle.com/jogar';
 const ORIGEM_JOGO = new URL(JOGO).origin;
@@ -167,6 +170,16 @@ function criarJogo(a) {
   ligarAtalhos(wc);
   wc.on('focus', () => { if (ultimoFoco !== a.id) { ultimoFoco = a.id; if (modo() === 'lado') { escolherNoPainel(); avisarCasca(); } } });
   wc.on('did-navigate', () => aplicarZoom());      // o Chromium pode devolver o zoom ao padrão na troca de página
+  // a página recarregou ou caiu no meio de uma entrega: a autorização some na hora. O motivo vai para o painel só quando a
+  // página velha já saiu (did-navigate, ou did-fail-load se a recarga falhou): até lá ela ainda roda e gravaria um passo por
+  // cima ("rodando" de novo). Navegação cancelada: a página velha continua e grava o próprio erro (o clique dela é recusado)
+  let recarregou = null;
+  const avisarRecarga = () => { if (recarregou) avisarFimDaAcao(recarregou, 'A página do jogo recarregou no meio. Aperte de novo.'); recarregou = null; };
+  wc.on('did-start-navigation', (d) => { if (d.isMainFrame && !d.isSameDocument && encerrarAcao(a) === 'tarefa') recarregou = pref.nomes[a.id]; });
+  wc.on('did-navigate', avisarRecarga);
+  wc.on('did-fail-load', (_e, _cod, _desc, _url, principal) => { if (principal) avisarRecarga(); });
+  wc.on('did-stop-loading', () => { recarregou = null; });
+  wc.on('render-process-gone', () => encerrarAcao(a, 'A página do jogo caiu no meio. Aperte de novo.', true));
   const tema = fs.readFileSync(path.join(LUPA, 'tema.css'), 'utf8');
   wc.on('dom-ready', () => { if (/^https?:\/\/((www\.)?lolidle\.com|127\.0\.0\.1|localhost)[:/]/.test(wc.getURL())) wc.insertCSS(tema).catch(() => {}); });
   wc.loadURL(JOGO);
@@ -423,9 +436,53 @@ function atualizarSelo() {
   janela.setOverlayIcon(total ? iconePonto : null, total ? `${total} alerta${total > 1 ? 's' : ''}` : '');
 }
 
+// ---------- ações no jogo (só quando o jogador pede) ----------
+// O pedido (botão do painel ou Alt+L) autoriza UMA aba por pouco tempo (Acoes.REGRAS), e só uma ação por vez entre as contas:
+// no lado a lado, duas juntas disputariam o foco entre o apertar e o soltar do mouse. O preload do jogo (acao-jogo.js) pede
+// cada clique ou tecla e o main manda uma entrada de verdade (sendInputEvent), só na aba que está à vista.
+let acaoAtual = null;      // { aba, tipo, ate, resta, devolver }: a ação em andamento (devolver: ver tomarFoco)
+const emAndamento = () => !!acaoAtual && Date.now() <= acaoAtual.ate;
+// recusa (false) se já tem uma ação em andamento: um segundo pedido não troca nem renova a autorização da primeira
+function pedirAcao(a, tipo) {
+  if (!a?.view || a.tipo !== 'jogo' || emAndamento()) return false;
+  acaoAtual = { aba: a.id, ...Acoes.autorizacao(tipo), devolver: null };
+  a.view.webContents.send('acao:iniciar', { tipo });
+  return true;
+}
+const avisarFimDaAcao = (nome, motivo) => { if (nome) armazem.set({ ['acao:' + nome]: { tipo: 'tarefa', estado: 'erro', texto: motivo, em: Date.now() } }); };
+// Antes de cada entrada a view da ação ganha o foco (sem ele o Chromium descarta o apertar do mouse, e a tecla vai para quem
+// o tem). Quem tinha o foco logo antes (o painel do botão, ou a outra metade do lado a lado se a pessoa foi digitar lá no
+// meio) fica guardado para recebê-lo de volta no fim
+async function tomarFoco(wc) {
+  if (wc.isFocused()) return;
+  const antes = webContents.getFocusedWebContents();
+  if (acaoAtual && antes && antes !== wc) acaoAtual.devolver = antes;
+  wc.focus();
+  await new Promise((ok) => setTimeout(ok, 120));      // o foco não muda na hora
+}
+// a ação daquela aba acabou, foi parada ou a página dela foi embora: a autorização some e, se o foco ainda está no jogo da
+// ação (a pessoa não foi para outro lugar), volta para quem o tinha antes da última entrada. Com a página caída (`caiu`), a
+// view perde o foco junto: aí ele volta se não ficou com ninguém. Com `motivo`, o painel deixa de mostrar "rodando" e mostra
+// o motivo. Devolve o tipo da ação encerrada (null se não havia uma daquela aba)
+function encerrarAcao(a, motivo, caiu = false) {
+  if (!acaoAtual || acaoAtual.aba !== a.id) return null;
+  const { tipo, devolver } = acaoAtual, wc = a.view?.webContents, atual = webContents.getFocusedWebContents();
+  acaoAtual = null;
+  if (devolver && !devolver.isDestroyed() && (atual === wc || (caiu && !atual))) devolver.focus();
+  if (motivo && tipo === 'tarefa') avisarFimDaAcao(pref.nomes[a.id], motivo);
+  return tipo;
+}
+// a aba que mandou o pedido de entrada, se é a da ação e está à vista (com a janela aberta); null se não pode
+function abaAutorizada(wc) {
+  const a = abaDe(wc);
+  if (!a || a.tipo !== 'jogo' || acaoAtual?.aba !== a.id || !janela || !janela.isVisible() || janela.isMinimized()) return null;
+  const r = layoutAtual().jogos[a.id];
+  return r ? { a, r } : null;
+}
+
 // ---------- atalhos do app ----------
-// só as teclas do atalhos.js são do app: o preventDefault vale só para elas, o resto segue para a página. O app nunca
-// injeta tecla, clique ou comando no jogo
+// só as teclas do atalhos.js são do app: o preventDefault vale só para elas, o resto segue para a página. Fora as duas
+// ações acima, o app não injeta tecla, clique ou comando no jogo
 function ligarAtalhos(wc) {
   wc.on('before-input-event', (e, input) => {
     const acao = atalhoDe(input);
@@ -444,6 +501,7 @@ function executarAtalho(acao) {
   } else if (acao === 'painel') alternarPainel();
   else if (acao === 'recarregar') recarregarAba();
   else if (acao.startsWith('zoom:')) ajustarZoomAtivo(acao.slice(5));
+  else if (acao === 'coluna' && modo() !== 'central') pedirAcao(abaAtiva(), 'coluna');      // a setinha do próprio jogo
 }
 function alternarPainel() {
   if (modo() === 'central') return;
@@ -455,7 +513,7 @@ function recarregarAba() { const a = abaAtiva(); if (a.tipo === 'jogo') a.view.w
 // "Usar só a Conta 1": a view da Conta 2 nem existe (economiza memória); a aba e o Lado a lado somem
 function aplicarSoConta1() {
   const a = abas.find((x) => x.id === 'conta2');
-  if (pref.soConta1 && a.view) { janela.contentView.removeChildView(a.view); a.view.webContents.close(); a.view = null; }
+  if (pref.soConta1 && a.view) { encerrarAcao(a, 'A Conta 2 foi fechada no meio.'); janela.contentView.removeChildView(a.view); a.view.webContents.close(); a.view = null; }
   else if (!pref.soConta1 && !a.view) criarJogo(a);
   if (pref.soConta1 && ultimoFoco === 'conta2') ultimoFoco = 'conta1';
   pref.ativa = Layout.modoValido(pref.ativa, pref.soConta1);
@@ -513,6 +571,37 @@ function ligarIpc() {
     else if (/^file:.*central\.html(#.*)?$/.test(u)) { ativar('central'); mostrarJanela(); }
     else externo(u);
   });
+  // o botão "Entregar e seguir" do painel (tipo 'tarefa') e o Parar: na aba do personagem que o painel mostra
+  ipcMain.handle('lupa:acao', (e, { tipo, nome } = {}) => {
+    if (!painel || e.sender !== painel.webContents || !['tarefa', 'parar'].includes(tipo)) return { erro: 'Pedido inválido.' };
+    const a = abas.find((x) => x.tipo === 'jogo' && x.view && pref.nomes[x.id] === nome);
+    if (!a) return { erro: 'Não achei a aba desse personagem.' };
+    if (tipo === 'parar') { a.view.webContents.send('acao:parar'); encerrarAcao(a); return { ok: true }; }
+    if (emAndamento()) return { erro: acaoAtual.aba === a.id ? 'Já tem uma ação em andamento nesta conta.' : 'A outra conta está no meio de uma ação: espere ela terminar.' };
+    if (modo() !== a.id && modo() !== 'lado') ativar(a.id);      // a ação acontece à vista
+    return pedirAcao(a, 'tarefa') ? { ok: true } : { erro: 'A aba do jogo não está pronta.' };
+  });
+  // as entradas que o acao-jogo.js pede: clique em px CSS da página e as teclas B e M; devolve se mandou
+  ipcMain.handle('acao:clicar', async (e, p) => {
+    const v = abaAutorizada(e.sender);
+    if (!v) return false;
+    const wc = v.a.view.webContents, pt = Acoes.pontoNaView(p, wc.getZoomFactor(), v.r);
+    if (!pt || !Acoes.gastar(acaoAtual)) return false;
+    // o foco vai para o jogo, como num clique de verdade: com o foco no painel (onde está o botão "Entregar e seguir"), o
+    // Chromium descartava o apertar e o soltar e só o mover chegava. Mover, apertar e soltar com um intervalo, como a mão
+    await tomarFoco(wc);
+    for (const ev of Acoes.clique(pt)) { if (wc.isDestroyed()) return false; wc.sendInputEvent(ev); await new Promise((ok) => setTimeout(ok, Acoes.INTERVALO)); }
+    return true;
+  });
+  ipcMain.handle('acao:tecla', async (e, p) => {
+    const v = abaAutorizada(e.sender), evs = Acoes.tecla(p?.tecla);
+    if (!v || !evs || !Acoes.gastar(acaoAtual)) return false;
+    const wc = v.a.view.webContents;
+    await tomarFoco(wc);      // a tecla vai para a view em foco
+    for (const ev of evs) { if (wc.isDestroyed()) return false; wc.sendInputEvent(ev); await new Promise((ok) => setTimeout(ok, Acoes.INTERVALO)); }
+    return true;
+  });
+  ipcMain.handle('acao:fim', (e) => { const a = abaDe(e.sender); if (a) encerrarAcao(a); });
   ipcMain.handle('casca:estado', () => estadoCasca());
   ipcMain.handle('casca:ativar', (_e, id) => ativar(id));
   ipcMain.handle('casca:painel', () => alternarPainel());

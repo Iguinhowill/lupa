@@ -1,6 +1,7 @@
 // Lupa · painel lateral
 // Casco do painel: lê o storage, escolhe o personagem e desenha as abas com as peças de ui.js.
-// Não fala com o jogo: só lê o storage e grava a configuração.
+// Não fala com o jogo: só lê o storage e grava a configuração. No app, o botão "Entregar e seguir" pede a ação ao app
+// (lupaApp.acao), que é quem clica no jogo; o andamento volta pelo storage (acao:<nome>).
 'use strict';
 
 const NO_APP = !!globalThis.lupaApp;   // no app de PC a escolha de personagem e a Central ficam nas abas do app
@@ -9,6 +10,7 @@ const ABAS = [['ficha', 'Ficha'], ['cacada', 'Caçada'], ['tarefa', 'Tarefa'], [
 // ---------- estado ----------
 let config = mesclarConfig(), estados = {}, cacadas = {}, eventos = {}, icones = {}, menores = {}, escolhido = null, semBonus = false;
 let nuvem = {};      // "nuvem:status" escrito pelo envio.js (a sessão com os tokens fica em outra chave e não vem para cá)
+let acoes = {};      // "acao:<nome>": o andamento do "Entregar e seguir" (só no app)
 let aba = (() => { try { return localStorage.getItem('lupa-aba') || 'ficha'; } catch { return 'ficha'; } })();
 if (!ABAS.some(([id]) => id === aba)) aba = 'ficha';
 
@@ -20,8 +22,14 @@ function guardar(k, v) {
   else if (k.startsWith('estado:')) { if (v) estados[k.slice(7)] = v; else delete estados[k.slice(7)]; }
   else if (k.startsWith('cacada:')) { if (v) cacadas[k.slice(7)] = v; else delete cacadas[k.slice(7)]; }
   else if (k.startsWith('eventos:')) { if (v) eventos[k.slice(8)] = v; else delete eventos[k.slice(8)]; }
+  else if (k.startsWith('acao:')) { if (v) acoes[k.slice(5)] = v; else delete acoes[k.slice(5)]; }
 }
-const salvarConfig = (mud) => chrome.storage.local.set({ config: { ...config, ...mud, recolhidos: { ...config.recolhidos, ...(mud.recolhidos || {}) }, avisos: { ...config.avisos, ...(mud.avisos || {}) } } });
+// o app recusou o pedido (aba fechada, sem personagem...): o motivo aparece no cartão como um erro
+async function pedirAcao(tipo, nome) {
+  const r = await globalThis.lupaApp.acao(tipo, nome).catch((e) => ({ erro: String(e?.message || e) }));
+  if (r?.erro) { acoes[nome] = { tipo: 'tarefa', estado: 'erro', texto: r.erro, em: Date.now() }; desenhar(true); }
+}
+const salvarConfig = (mud) => chrome.storage.local.set({ config: { ...config, ...mud, avisos: { ...config.avisos, ...(mud.avisos || {}) } } });
 const alternarAviso = (k) => salvarConfig({ avisos: { [k]: !config.avisos[k] } });
 
 // contexto entregue às funções de ui.js (getters: sempre o valor atual)
@@ -32,8 +40,11 @@ const ctx = {
   get icones() { return icones; },
   get menores() { return menores; },
   get semBonus() { return semBonus; },
+  get acoes() { return acoes; },
   setSemBonus(v) { semBonus = !!v; desenhar(true); },
   salvarConfig, alternarAviso,
+  // só no app (que sabe clicar no jogo); na extensão o cartão "Entregar e seguir" nem aparece
+  iniciarAcao: NO_APP && typeof globalThis.lupaApp.acao === 'function' ? pedirAcao : null,
   redesenhar() { desenhar(true); }
 };
 
@@ -61,7 +72,7 @@ function desenhar(forcar = false) {
     : !e ? null
     : aba === 'ficha' ? [e.ficha, e.mochila, e.pontos, e.zona, e.nivel, e.tarefa === null, planoAbertoChave(), Object.keys(icones).length, menores]
     : aba === 'cacada' ? [cacadas[e.nome], semBonus, config.novaSessao, config.novaSessaoPor?.[e.nome], e.bonus, minuto]
-    : aba === 'tarefa' ? [e.tarefa, e.diarias, e.rastreio, config.avisos.tarefa, minuto]
+    : aba === 'tarefa' ? [e.tarefa, e.diarias, e.rastreio, config.avisos.tarefa, minuto, acoes[e.nome]]
     : aba === 'timers' ? [e.timers, e.rastreio, config.avisos]
     : [e.chat, e.recentes, config.esconderLoot, Object.keys(icones).length];
   // Ajustes não depende do XP; nas outras abas, ele entra para a barra e a caçada andarem
@@ -106,18 +117,14 @@ function desenharAbas(e) {
 
 // ---------- Ajustes ----------
 function desenharAjustes() {
-  const rec = config.recolhidos, av = config.avisos;
-  const recolher = (k) => () => salvarConfig({ recolhidos: { [k]: !rec[k] } });
+  const av = config.avisos;
   return h('div', { class: 'pilha' },
     secaoNuvem(),
     secao('Lateral do jogo',
       chave(config.tema, 'Tema da Lupa: painéis escuros e botões discretos no lugar do visual do jogo', () => salvarConfig({ tema: !config.tema })),
-      chave(config.lateralFechada, 'Fechar a lateral inteira (Alt+L)', () => salvarConfig({ lateralFechada: !config.lateralFechada })),
-      chave(rec.status, 'Recolher o cartão do jogador', recolher('status')),
-      chave(rec.local, 'Recolher o Local', recolher('local')),
-      chave(rec.abas, 'Recolher as abas', recolher('abas')),
       chave(config.semBonusLateral, 'Esconder a lista de bônus de XP (Twitch, Kick, voto e guilda estão na aba Timers)', () => salvarConfig({ semBonusLateral: !config.semBonusLateral })),
-      nota('O jogo já tem em ⚙ Configurações → Coluna da direita: esconder o Local, a faixa de redes e a guilda, mudar a ordem dos blocos e a altura do chat, e o Modo economia (não desenha o mapa) para deixar rodando.')),
+      nota('Esconder a coluna e recolher os blocos agora é do próprio jogo: a setinha na borda entre o jogo e a coluna e o ▾ de cada bloco'
+        + (NO_APP ? ' (no app, Alt+L aperta a setinha).' : '.') + ' Em ⚙ Configurações → Coluna da direita ficam também esconder o Local, a faixa de redes e a guilda, a ordem dos blocos, a altura do chat e o Modo economia.')),
     secao('Jogo em segundo plano',
       chave(config.manterAcordado, 'Manter o PC acordado enquanto o jogo estiver aberto', () => salvarConfig({ manterAcordado: !config.manterAcordado })),
       nota('A tela pode apagar; o computador não entra em suspensão. A Lupa também impede o navegador de descartar a aba do jogo.')),
@@ -178,7 +185,7 @@ function secaoNuvem() {
 if (NO_APP) {
   document.getElementById('central')?.setAttribute('hidden', '');
   const r = document.querySelector('.rodape span');
-  if (r) r.textContent = 'Só leitura: não clica e não aperta teclas.';
+  if (r) r.textContent = 'Lê a tela; só clica no jogo quando você aperta Entregar e seguir ou o Alt+L.';
 }
 document.getElementById('central')?.addEventListener('click', () => chrome.tabs.create({ url: chrome.runtime.getURL('central.html') }));
 chrome.storage.local.get(null).then((tudo) => { for (const [k, v] of Object.entries(tudo)) guardar(k, v); desenhar(true); });

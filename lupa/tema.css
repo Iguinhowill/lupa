@@ -45,8 +45,8 @@ html.lupa-tema #lateral #direita .rotulo {
 }
 html.lupa-tema #lateral #st-nome { font-family: var(--lupa-fonte) !important; font-weight: 700 !important; font-size: 16px !important; text-shadow: none !important; color: var(--texto) !important; }
 
-/* ---------- botões do jogo (menos os de item e habilidade, que têm arte própria) ---------- */
-html.lupa-tema #lateral :is(.botao, #cartao-redes > button, #controle-som button, #controle-som .seletor-idioma button, #painel-status > header button, #st-guilda, #buff-twitch, #buff-kick, #buff-voto, #buff-guilda, #buff-barao, #buff-disciplina, .ficha-ouro, .ficha-dia, .ficha-gemas, .ficha-poder, .rastreio) {
+/* ---------- botões do jogo (menos os de item e habilidade, que têm arte própria, e a setinha ▾ de recolher o bloco) ---------- */
+html.lupa-tema #lateral :is(.botao, #cartao-redes > button, #controle-som button, #controle-som .seletor-idioma button, #painel-status > header button:not(.bloco-min), #st-guilda, #buff-twitch, #buff-kick, #buff-voto, #buff-guilda, #buff-barao, #buff-disciplina, .ficha-ouro, .ficha-dia, .ficha-gemas, .ficha-poder, .rastreio) {
   background: var(--lupa-cartao) !important;
   background-image: none !important;
   border: 1px solid var(--lupa-borda) !important;
@@ -58,12 +58,12 @@ html.lupa-tema #lateral :is(.botao, #cartao-redes > button, #controle-som button
   clip-path: none !important;
   filter: none !important;
 }
-html.lupa-tema #lateral :is(.botao, #cartao-redes > button, #controle-som button, #painel-status > header button, #st-guilda, #buff-twitch, #buff-kick, #buff-guilda):hover {
+html.lupa-tema #lateral :is(.botao, #cartao-redes > button, #controle-som button, #painel-status > header button:not(.bloco-min), #st-guilda, #buff-twitch, #buff-kick, #buff-guilda):hover {
   border-color: var(--lupa-borda-forte) !important;
   background: #232836 !important;
 }
-html.lupa-tema #lateral :is(.botao, #cartao-redes > button, #painel-status > header button, #buff-twitch, #buff-kick, #buff-voto, #buff-guilda, #st-guilda)::before,
-html.lupa-tema #lateral :is(.botao, #cartao-redes > button, #painel-status > header button, #buff-twitch, #buff-kick, #buff-voto, #buff-guilda, #st-guilda)::after {
+html.lupa-tema #lateral :is(.botao, #cartao-redes > button, #painel-status > header button:not(.bloco-min), #buff-twitch, #buff-kick, #buff-voto, #buff-guilda, #st-guilda)::before,
+html.lupa-tema #lateral :is(.botao, #cartao-redes > button, #painel-status > header button:not(.bloco-min), #buff-twitch, #buff-kick, #buff-voto, #buff-guilda, #st-guilda)::after {
   display: none !important;
 }
 html.lupa-tema #lateral .botao { font-size: 13px !important; font-weight: 600 !important; }
@@ -143,47 +143,3 @@ html.lupa-tema #lateral #cartao-redes > button em { font-size: 12px !important; 
 /* ---------- modo enxuto (cada um liga separado no painel) ---------- */
 html.lupa-sem-bonus #lateral :is(#buff-twitch, #buff-kick, #buff-voto, #buff-guilda) { display: none !important; }
 html.lupa-sem-redes #lateral #cartao-redes { display: none !important; }
-
-/* ---------- lateral recolhível (vale com ou sem o tema) ---------- */
-html.lupa-lateral-fechada body:not(.gaveta) #lateral,
-html.lupa-lateral-fechada body:not(.gaveta) #lat-puxador { display: none !important; }
-html.lupa-lateral-fechada body:not(.gaveta) #cliente { grid-template-columns: minmax(0, 1fr) !important; max-width: none !important; }
-#painel-status.lupa-recolhido > .corpo,
-#painel-local.lupa-recolhido > .corpo,
-#direita.lupa-recolhido > .aba-conteudo { display: none !important; }
-#painel-local > header:has(> .lupa-recolher) { display: flex; align-items: center; gap: 6px; }
-
-/* aba presa na borda da tela (some na gaveta do celular) */
-body #lupa-aba-lateral {
-  all: unset; box-sizing: border-box; position: fixed !important; z-index: 2147483000; width: 30px; height: 96px;
-  display: flex !important; flex-direction: column; align-items: center; justify-content: space-between; padding: 8px 0;
-  background: #1d212c; border: 1px solid #3d4556; border-right: 0; border-radius: 8px 0 0 8px;
-  color: #a3aab7; font: 600 10px/1 "Segoe UI", system-ui, sans-serif; letter-spacing: .12em; cursor: pointer;
-}
-body #lupa-aba-lateral:hover { background: #232836; }
-body #lupa-aba-lateral > svg { color: #f3d08a; flex: none; transition: transform .15s; }
-html.lupa-lateral-fechada body #lupa-aba-lateral > svg { transform: rotate(180deg); }
-body #lupa-aba-lateral .lupa-aba-txt { writing-mode: vertical-rl; }
-body #lupa-aba-lateral .lupa-selo {
-  min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: #f0904a; color: #1a1208;
-  font: 700 10px/16px "Segoe UI", system-ui, sans-serif; letter-spacing: 0; text-align: center;
-}
-body #lupa-aba-lateral .lupa-selo[hidden] { display: none !important; }
-body #lupa-aba-lateral:focus-visible, #lateral button.lupa-recolher:focus-visible { outline: 2px solid #f3d08a !important; outline-offset: 1px !important; }
-body.gaveta #lupa-aba-lateral, body.gaveta #lateral .lupa-recolher, body.gaveta #lateral .lupa-resumo { display: none !important; }
-
-/* chevrons dos cards: seletor forte para vencer os botões do jogo e o tema */
-html body #lateral :is(#painel-status, #painel-local, #direita) button.lupa-recolher.lupa-recolher.lupa-recolher {
-  all: unset !important; box-sizing: border-box !important; flex: none !important; margin-left: auto !important;
-  width: 32px !important; height: 28px !important; display: inline-flex !important; align-items: center; justify-content: center;
-  background: transparent !important; border: 0 !important; box-shadow: none !important; border-radius: 6px !important;
-  color: #a3aab7 !important; cursor: pointer !important;
-}
-html body #lateral button.lupa-recolher.lupa-recolher.lupa-recolher:hover { color: #f3d08a !important; }
-html body #lateral button.lupa-recolher.lupa-recolher[aria-expanded="false"] > svg { transform: rotate(-90deg); }
-#lateral .lupa-resumo {
-  flex: 1 1 auto; min-width: 0; margin-left: 8px; font: 400 12.5px "Segoe UI", system-ui, sans-serif; letter-spacing: 0; text-transform: none;
-  color: #a3aab7; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-#lateral .lupa-resumo:empty { display: none; }
-#lateral .lupa-resumo + .lupa-recolher { margin-left: 0 !important; }

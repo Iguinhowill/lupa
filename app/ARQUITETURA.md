@@ -1,8 +1,10 @@
 # Lupa (app de PC) · arquitetura
 
 App Electron 44.7.0 que mostra o LoL Idle (lolidle.com) com duas contas (em abas ou lado a lado) e o painel da Lupa ao lado. Mesma
-regra da extensão: **só lê a tela**. Nunca clica, aperta tecla, compra, vende ou faz pedido ao servidor do jogo por
-fora. Liberado pelo dono do jogo (Brunox) em 26/10/2026: não dá vantagem, só otimiza a jogabilidade.
+regra da extensão: **lê a tela**, nunca compra, vende ou faz pedido ao servidor do jogo por fora. Liberado pelo dono do
+jogo (Brunox) em 26/10/2026: não dá vantagem, só otimiza a jogabilidade. A única exceção são as duas **ações que o
+jogador pede** (seção abaixo): o botão "Entregar e seguir" e o Alt+L, liberados por ele em 27/10/2026, inclusive
+passando pela proteção contra bots do jogo.
 
 O código da Lupa (pasta `../lupa`, que continua sendo também a extensão do Chrome) é reaproveitado sem cópia manual:
 `copiar-lupa.mjs` copia para `app/lupa/` e gera `app/gerado/preload-jogo.js`. As duas pastas são geradas (fora do git).
@@ -15,10 +17,13 @@ O código da Lupa (pasta `../lupa`, que continua sendo também a extensão do Ch
 | `layout.js` | processo principal | contas puras: retângulos de cada view por modo, zoom automático por metade, zoom guardado, janela ainda visível num monitor; casos em `layout.test.js` |
 | `alertas.js` | processo principal | puro: alertas de uma conta a partir do `estado:<nome>` (tarefa, mochila, pontos, prêmio, sem leitura) e notas da versão em texto puro; casos em `alertas.test.js` |
 | `atalhos.js` | processo principal | puro: quais teclas são do app (`atalhoDe`) e a lista mostrada no menu; casos em `alertas.test.js` |
+| `acoes.js` | processo principal | puro: as regras das ações que o jogador pede (tempo e número de entradas por pedido), o ponto do clique com o zoom e as entradas de clique e tecla; casos em `acoes.test.js` |
+| `oferta.js` | preload das abas do jogo | puro: lê o texto das ofertas do Capitão (tempo, XP, ouro, zona) e escolhe a de mais XP por minuto; casos em `acoes.test.js` |
+| `acao-jogo.js` | preload das abas do jogo | a sequência do "Entregar e seguir" e a setinha do Alt+L: confere a tela, pede cada clique ou tecla ao main e grava o andamento em `acao:<nome>` |
 | `armazem.js` | processo principal | o `chrome.storage.local` do app: um JSON em `userData/lupa-dados.json`, gravado 1,5 s depois da última mudança e no máximo 10 s depois da primeira; a versão anterior fica em `.bak`, lida se o principal estiver estragado; casos em `armazem.test.js` |
 | `regras.js` | processo principal | regras de navegação da aba do jogo e das janelas de login (`DA_CONTA`, `DO_JOGO`, `NO_LOGIN`, `DO_GOOGLE`, `permitido`); casos em `regras.test.js`, rodar com `npm test` |
 | `shim-jogo.js` | preload das abas do jogo | o objeto `chrome` que o `content.js` usa (só no mundo isolado, nunca exposto à página) |
-| `gerado/preload-jogo.js` | preload das abas do jogo | `shim-jogo.js` + `../lupa/content.js`, rodando no DOMContentLoaded só em lolidle.com |
+| `gerado/preload-jogo.js` | preload das abas do jogo | `shim-jogo.js` + `../lupa/content.js` + `oferta.js` + `acao-jogo.js`, rodando no DOMContentLoaded só em lolidle.com |
 | `preload-lupa.js` | painel e Central | expõe `window.lupaChrome` (o mesmo `chrome` da extensão) e `window.lupaApp` |
 | `preload-casca.js` | barra de abas | expõe `window.lupaCasca` |
 | `casca.html/.css/.js` | barra de abas | abas com ponto de alerta, etiquetas do lado a lado, botão Painel, recarregar, atualizar, menu de ajustes (⚙) |
@@ -96,7 +101,7 @@ mostra a janela.
 ### Atalhos
 
 `before-input-event` em todas as views (casca, jogos, painel, Central), com `preventDefault` **só** nas teclas abaixo; o
-resto chega ao jogo normalmente. O app nunca envia tecla, clique ou comando ao jogo.
+resto chega ao jogo normalmente. Fora das ações que o jogador pede (abaixo), o app não envia tecla, clique ou comando ao jogo.
 
 | Tecla | Ação |
 |---|---|
@@ -105,6 +110,7 @@ resto chega ao jogo normalmente. O app nunca envia tecla, clique ou comando ao j
 | Ctrl+4 | Central |
 | Ctrl+Tab (Ctrl+Shift+Tab) | próxima (anterior) aba |
 | Ctrl+B | mostrar/esconder o painel do modo atual |
+| Alt+L | aperta a setinha do próprio jogo que esconde ou mostra a coluna da direita (na aba ativa; no lado a lado, a metade em foco) |
 | F5 | recarregar o jogo da aba (no lado a lado, o da metade em foco) |
 | Ctrl + / Ctrl − / Ctrl 0 | zoom do modo atual (passo de 10%, 0 volta ao padrão) |
 
@@ -114,6 +120,45 @@ resto chega ao jogo normalmente. O app nunca envia tecla, clique ou comando ao j
 `soConta1`, `zoom`, `nomes` e `janela` (`{ x, y, width, height, maximizada }`, gravada 0,6 s depois da última mudança; na
 volta só vale se couber em algum monitor). Para rodar o app sem tocar nas contas de verdade: `LUPA_DADOS=<pasta>` troca o
 `userData` (login, sessão do Lupa Online, armazém), só fora do pacote (`!app.isPackaged`).
+
+## Ações que o jogador pede
+
+Duas, e só quando o jogador pede (liberadas pelo Brunox em 27/10/2026, que pediu que passassem pela proteção contra bots
+do jogo, a "p751": clique, change e input com `isTrusted` falso são ignorados e contados como "clique-falso" no servidor).
+Por isso cada clique ou tecla é uma entrada de verdade, `webContents.sendInputEvent`, no ponto do botão do próprio jogo.
+
+- **Entregar e seguir** (botão da aba Tarefa do painel, `lupa:acao` tipo `tarefa`): o main troca para a aba do personagem
+  (se não estiver à vista), autoriza aquela aba (`acoes.js`: 4 min e até 24 entradas: até 9 passos, cada um podendo repetir a entrada uma vez) e manda `acao:iniciar`. O
+  `acao-jogo.js` confere na tela que a tarefa está pronta (classe `pronta` do `#rastreio-tarefa`; a leitura da Lupa pode
+  estar até 5 s atrasada), volta à Fonte (o botão Voltar, ou a tecla B com a coluna escondida) e espera chegar, clica no
+  rastreio (o personagem anda até o Capitão), em "entregar", em "tarefa", na oferta de mais XP por minuto (`oferta.js`),
+  abre o mapa (o botão ou a tecla M), clica na zona e no "Ir", e espera chegar. Cada passo espera a tela mudar (com prazo);
+  se nada mudou no prazo e o botão continua ali, repete a entrada uma vez. Prazos: 1,5 s em "entregar", "tarefa", na
+  oferta, na zona e no "Ir"; 2,5 s no mapa (botão ou M, que abrem e fecham); 3 s no rastreio (o personagem anda); 5 s na
+  volta à Fonte (botão ou B). Repetir é seguro: "entregar", "tarefa" e a oferta somem no instante em que o clique pega (só repetem
+  se ele se perdeu), voltar já voltando, falar de novo com o Capitão, escolher a zona de novo e a viagem repetida não mudam
+  nada no jogo. A aba Missões (abre e fecha) não repete. O primeiro passo que falha para tudo e vira o erro no painel. O andamento vai para `acao:<nome>` no armazém
+  (`{ tipo, estado: 'rodando' | 'ok' | 'erro' | 'parado', texto, em }`). O Parar (`lupa:acao` tipo `parar`) interrompe.
+- **Alt+L**: autoriza a aba ativa por 5 s e 1 entrada; o `acao-jogo.js` clica no `#bt-esconder-coluna` do jogo.
+
+Uma ação por vez entre as contas (`acaoAtual` no main): no lado a lado, duas juntas disputariam o foco entre o apertar e o
+soltar do mouse. Um pedido com outra em andamento é recusado ("Já tem uma ação em andamento…"; o Alt+L é ignorado), sem
+trocar nem renovar a autorização da primeira. A autorização some no `acao:fim`, no Parar, ao fechar a Conta 2 e se a
+página do jogo recarregar ou cair no meio (aí o `acao:<nome>` vira erro com o motivo, gravado só depois que a página velha
+saiu, e o painel não fica parado em "rodando"). Durante a ação o teclado fica no jogo dela (as teclas precisam do foco, e o
+painel avisa); no fim, se ele ainda está lá, volta para quem o tinha antes da última entrada (o painel do botão, ou a outra
+metade do lado a lado se a pessoa foi digitar lá no meio).
+
+O main só manda a entrada se a aba que pede está autorizada, ainda no prazo e com entradas, e à vista (janela aberta, não
+minimizada, a view no layout). O clique vem em px CSS e vira px da view pelo zoom do jogo; ponto fora da view é recusado.
+Antes de clicar ou apertar, o main dá `focus()` à view do jogo (com o foco no painel, onde fica o botão, o Chromium
+descartava o apertar e o soltar) e manda entrar, mover, apertar e soltar com 40 ms entre eles. Teclas: só `b` e `m`.
+Com a janela coberta por outra (ou a tela travada), o Chromium marca a página como escondida e descarta o apertar do mouse:
+o `acao-jogo.js` espera a página voltar à vista (até 1 min, avisando no painel) antes de cada entrada. Teste ponta a ponta: `npm run teste:acao` roda o app de verdade
+contra o jogo falso de `teste-acao/jogo-falso.html` (com a mesma proteção e o mesmo caminho: rastreio, Capitão, ofertas,
+mapa), com zoom 1,2, um pedido duplo e o Alt+L no meio, apertar de novo logo depois, a coluna escondida (teclas), o Alt+L,
+a página recarregando no meio e o Parar; fotos e resultado em `teste-acao/saida/`. Não cobre duas contas ao mesmo tempo. Se o jogo mudar os
+botões, atualizar o jogo falso junto.
 
 ## IPC (canais)
 
@@ -137,6 +182,12 @@ Lupa:
 | `lupa:abrir` | invoke | `url`: termina em `central.html` → vai para a aba Central; `central.html#mini` → mini janela; `http(s)` de fora → navegador do sistema |
 | `lupa:escolher` | main → painel | `nome` do personagem da aba ativa, ou da metade em foco no lado a lado (o painel passa a mostrar esse) |
 | `lupa:uaFirefox` | sendSync | → o User-Agent de Firefox (só o preload das páginas do Google usa) |
+| `lupa:acao` | invoke | só do painel: `{ tipo: 'tarefa' \| 'parar', nome }` → `{ ok }` ou `{ erro }` |
+| `acao:iniciar` | main → jogo | `{ tipo: 'tarefa' \| 'coluna' }`: começa a ação na aba autorizada |
+| `acao:parar` | main → jogo | interrompe o "Entregar e seguir" no próximo passo |
+| `acao:clicar` | invoke | do jogo: `{ x, y }` em px CSS → `true` se mandou o clique |
+| `acao:tecla` | invoke | do jogo: `{ tecla: 'b' \| 'm' }` → `true` se mandou |
+| `acao:fim` | invoke | do jogo: a ação acabou; a autorização da aba some |
 
 Casca:
 
@@ -160,7 +211,7 @@ Estado = {
   modo: 'conta' | 'lado' | 'central',
   painelAberto: boolean,       // do modo atual (no lado a lado, o `painelLado`)
   menuAberto: boolean,
-  versao: '0.9.0',
+  versao: '0.10.0',
   atualizacao: { tipo: 'dev' | 'procurando' | 'em-dia' | 'disponivel' | 'baixando' | 'pronta' | 'erro', versao?, pct?, msg?, notas? },
                                // notas: releaseNotes em texto puro (~300 caracteres), no tooltip do botão Atualizar
   instalado: boolean,          // app.isPackaged: false no npm start
@@ -189,6 +240,7 @@ tabs.update() / windows.update()                          → Promise rejeitada 
 ```
 
 `window.lupaApp.aoEscolher(fn(nome))`: o painel troca de personagem quando a aba ativa muda.
+`window.lupaApp.acao(tipo, nome)`: o botão "Entregar e seguir" (`tarefa`) e o Parar (`parar`) → `lupa:acao`.
 
 `window.lupaCasca`: `estado()`, `ativar(id)`, `alternarPainel()`, `recarregar()`, `procurar()`, `atualizar()`,
 `iniciarComWindows(bool)`, `menu(bool)`, `opcao(chave, valor)`, `aoMudar(fn(estado))`.

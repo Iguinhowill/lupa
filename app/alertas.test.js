@@ -68,6 +68,8 @@ test('atalhos do app', () => {
   assert.equal(tecla('=', { control: true }), 'zoom:mais');
   assert.equal(tecla('+', { control: true, shift: true }), 'zoom:mais');
   assert.equal(tecla('-', { control: true }), 'zoom:menos');
+  assert.equal(tecla('l', { alt: true }), 'coluna');
+  assert.equal(tecla('L', { alt: true }), 'coluna');
 });
 
 test('o resto das teclas passa para o jogo', () => {
@@ -77,6 +79,10 @@ test('o resto das teclas passa para o jogo', () => {
   assert.equal(tecla('c', { control: true }), null);
   assert.equal(tecla('5', { control: true }), null);
   assert.equal(tecla('1', { control: true, alt: true }), null);
+  assert.equal(tecla('l'), null);
+  assert.equal(tecla('l', { alt: true, control: true }), null);
+  assert.equal(tecla('l', { alt: true, shift: true }), null);
+  assert.equal(tecla('k', { alt: true }), null);
   assert.equal(tecla('F5', { shift: true }), null);
   assert.equal(atalhoDe({ type: 'keyUp', key: 'F5', control: false }), null);
   assert.equal(atalhoDe(null), null);
