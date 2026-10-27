@@ -5,7 +5,7 @@
 // aqui clica, aperta tecla ou fala com o servidor do jogo. Liberado pelo Brunox em 26/10/2026. Ver ARQUITETURA.md.
 'use strict';
 
-const { app, BaseWindow, BrowserWindow, Menu, WebContentsView, ipcMain, Notification, powerSaveBlocker, shell, session } = require('electron');
+const { app, BaseWindow, BrowserWindow, Menu, Tray, WebContentsView, ipcMain, Notification, nativeImage, powerSaveBlocker, screen, shell, session } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -13,6 +13,10 @@ const vm = require('node:vm');
 const { Armazem } = require('./armazem');
 // regras de navegação (o que fica na aba do jogo e nas janelas de login), com teste em regras.test.js
 const { DA_CONTA, DO_GOOGLE, permitido: permitidoNo } = require('./regras');
+// posição e zoom das views, alertas das abas e teclas do app: tudo puro, com teste (layout/alertas.test.js)
+const Layout = require('./layout');
+const { alertasDe, notasEmTexto } = require('./alertas');
+const { atalhoDe, LISTA: ATALHOS } = require('./atalhos');
 
 const JOGO = process.env.LUPA_JOGO || 'https://lolidle.com/jogar';
 const ORIGEM_JOGO = new URL(JOGO).origin;
@@ -20,10 +24,12 @@ const permitido = (url, atual) => permitidoNo(url, atual, ORIGEM_JOGO);
 // a sessão do Lupa Online (tokens) fica só no processo principal, com o envio.js: nenhuma página lê, grava ou recebe
 const PRIVADAS = new Set(['nuvem:sessao']);
 const semPrivadas = (o) => Object.fromEntries(Object.entries(o || {}).filter(([k]) => !PRIVADAS.has(k)));
-const ALTURA_CASCA = 44, LARGURA_PAINEL = 380;
 const LUPA = path.join(__dirname, 'lupa');
 const ICONE = path.join(__dirname, 'icone.png');
 
+// só para testar o app sem tocar nas contas de verdade: LUPA_DADOS troca a pasta de dados (login, sessão do Lupa Online,
+// armazém). Vale só fora do pacote: o app instalado nunca lê essa variável
+if (!app.isPackaged && process.env.LUPA_DADOS) app.setPath('userData', process.env.LUPA_DADOS);
 if (!app.requestSingleInstanceLock()) app.exit(0);
 app.setAppUserModelId('com.iguinhowill.lupa');
 Menu.setApplicationMenu(null);
@@ -35,14 +41,22 @@ const UA_CHROME = app.userAgentFallback.replace(new RegExp(`\\s(Electron|${nomeN
 const UA_FIREFOX = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:140.0) Gecko/20100101 Firefox/140.0';
 app.userAgentFallback = UA_CHROME;
 
-let armazem, janela, casca, painel, central, mini = null;
+let armazem, janela, casca, painel, central, mini, bandeja = null;
+// as views: um jogo por conta e a Central. As "abas" da casca são modos (`modos()`): o Lado a lado não tem view própria
 const abas = [
   { id: 'conta1', tipo: 'jogo', particao: 'persist:conta1', padrao: 'Conta 1' },
   { id: 'conta2', tipo: 'jogo', particao: 'persist:conta2', padrao: 'Conta 2' },
   { id: 'central', tipo: 'central', padrao: 'Central' }
 ];
-let pref = { ativa: 'conta1', painelAberto: true, nomes: {} };
+// `ativa` é o modo: conta1, conta2, lado ou central. O painel tem uma chave por modo (no lado a lado começa escondido);
+// `zoom` é o ajuste do usuário por grupo de modo (ver layout.js)
+const PREF_PADRAO = { ativa: 'conta1', painelAberto: true, painelLado: false, larguraPainel: 380, fecharParaBandeja: true, avisouBandeja: false, soConta1: false, janela: null };
+let pref = { ...PREF_PADRAO, zoom: { solo: 1, lado: 1, central: 1 }, nomes: {} };
 let atualizacao = { tipo: app.isPackaged ? 'procurando' : 'dev' };
+let ultimoFoco = 'conta1';      // a metade do lado a lado que teve o foco por último
+let menuAberto = false;         // o menu de ajustes da casca aberto: a casca cobre a janela toda
+let saindo = false;             // "Sair", atualização ou fim da sessão do Windows: aí o X fecha de verdade
+const INICIO = Date.now();
 
 // aberto pelo Windows ao iniciar: vem com este argumento e começa minimizado (o mesmo args precisa ir no get e no set)
 const AO_INICIAR = ['--ao-iniciar'];
@@ -55,9 +69,22 @@ function migrarInicio() {
   }
 }
 const prefs = (preload, extra = {}) => ({ preload, contextIsolation: true, sandbox: true, nodeIntegration: false, ...extra });
-const abaAtiva = () => abas.find((a) => a.id === pref.ativa) || abas[0];
 const abaDe = (wc) => abas.find((a) => a.view?.webContents === wc);
 const salvarPref = () => armazem.set({ 'app:pref': pref });
+// movimentos de janela e zoom gravam com calma, não a cada pixel
+let esperaPref = null;
+const salvarPrefDepois = () => { clearTimeout(esperaPref); esperaPref = setTimeout(salvarPref, 600); };
+
+// modos da casca (as abas) e o que cada um mostra
+const modos = () => [
+  { id: 'conta1', tipo: 'jogo' },
+  ...(pref.soConta1 ? [] : [{ id: 'conta2', tipo: 'jogo' }, { id: 'lado', tipo: 'lado' }]),
+  { id: 'central', tipo: 'central' }
+];
+const modo = () => pref.ativa;
+// a view "da vez": a do modo, ou no lado a lado a metade que teve o foco por último
+const abaAtiva = () => abas.find((a) => a.id === (modo() === 'lado' ? ultimoFoco : modo())) || abas[0];
+const painelVisivel = () => (modo() === 'lado' ? pref.painelLado : modo() === 'central' ? false : pref.painelAberto);
 
 // ---------- o envio.js da Lupa, no processo principal ----------
 // O mesmo arquivo do service worker da extensão, rodando num vm com o `chrome` que ele usa (armazém, mensagens, alarmes).
@@ -78,7 +105,9 @@ function iniciarEnvio() {
       onAlarm: { addListener: (fn) => ouvintesAlarme.push(fn) }
     }
   };
-  const ctx = vm.createContext({ chrome, fetch, console, setTimeout, clearTimeout, setInterval, clearInterval, structuredClone, URL, URLSearchParams, AbortController });
+  // lupaAvisar(id, titulo, texto): o envio.js avisa (preço novo etc.) sem aba; o clique só mostra a janela
+  const lupaAvisar = (_id, titulo, texto) => avisar({ titulo, texto }, null);
+  const ctx = vm.createContext({ chrome, lupaAvisar, fetch, console, setTimeout, clearTimeout, setInterval, clearInterval, structuredClone, URL, URLSearchParams, AbortController });
   for (const f of ['planos.js', 'envio.js']) vm.runInContext(fs.readFileSync(path.join(LUPA, f), 'utf8'), ctx, { filename: f });
   return ctx;
 }
@@ -93,13 +122,22 @@ function despachar(msg) {
 
 // ---------- avisos e PC acordado ----------
 const avisosVivos = new Set();      // sem referência, o Windows perde o clique do aviso
-function avisar(msg, aba) {
+function mostrarAviso(titulo, texto, aba) {
   if (!Notification.isSupported()) return;
-  const n = new Notification({ title: String(msg.titulo || 'Lupa'), body: String(msg.texto || ''), icon: ICONE });
+  const n = new Notification({ title: titulo, body: texto, icon: ICONE });
   avisosVivos.add(n);
+  if (avisosVivos.size > 50) avisosVivos.delete(avisosVivos.values().next().value);
   n.on('click', () => { if (aba) ativar(aba.id); mostrarJanela(); });
-  n.on('close', () => avisosVivos.delete(n));
+  for (const ev of ['close', 'failed']) n.on(ev, () => avisosVivos.delete(n));
   n.show();
+}
+// o jogador está olhando para esta conta agora: janela em foco e a conta na tela (aba ativa ou lado a lado)
+const aVista = (aba) => !!aba && !!janela && janela.isVisible() && !janela.isMinimized() && janela.isFocused() && (modo() === aba.id || modo() === 'lado');
+function avisar(msg, aba) {
+  if (aVista(aba)) return;
+  const nome = aba && pref.nomes[aba.id], titulo = String(msg.titulo || 'Lupa');
+  mostrarAviso(nome && !titulo.includes(nome) ? `${nome} · ${titulo}` : titulo, String(msg.texto || ''), aba);
+  if (janela && !janela.isFocused()) janela.flashFrame(true);      // pisca na barra de tarefas até a janela ganhar foco
 }
 let bloqueio = null;
 function aplicarAcordado() {
@@ -126,6 +164,9 @@ function criarJogo(a) {
   a.view = new WebContentsView({ webPreferences: prefs(path.join(__dirname, 'gerado', 'preload-jogo.js'), { partition: a.particao }) });
   const wc = a.view.webContents;
   proteger(wc);
+  ligarAtalhos(wc);
+  wc.on('focus', () => { if (ultimoFoco !== a.id) { ultimoFoco = a.id; if (modo() === 'lado') { escolherNoPainel(); avisarCasca(); } } });
+  wc.on('did-navigate', () => aplicarZoom());      // o Chromium pode devolver o zoom ao padrão na troca de página
   const tema = fs.readFileSync(path.join(LUPA, 'tema.css'), 'utf8');
   wc.on('dom-ready', () => { if (/^https?:\/\/((www\.)?lolidle\.com|127\.0\.0\.1|localhost)[:/]/.test(wc.getURL())) wc.insertCSS(tema).catch(() => {}); });
   wc.loadURL(JOGO);
@@ -171,44 +212,137 @@ function proteger(wc, inicial = '') {
   wc.on('did-create-window', (filha, { url }) => { janelasDeLogin.add(filha.webContents); proteger(filha.webContents, url); });
 }
 
+const novaView = (preload, ouvirTeclas = true) => {
+  const v = new WebContentsView({ webPreferences: prefs(preload) });
+  v.setBackgroundColor('#161922');
+  if (ouvirTeclas) ligarAtalhos(v.webContents);
+  return v;
+};
+
+// tamanho e posição da última vez, se ainda couberem num monitor (o monitor pode ter sumido)
+function limitesIniciais() {
+  const j = pref.janela, base = { width: 1520, height: 940 };
+  if (j && Layout.visivel(j, screen.getAllDisplays().map((d) => d.workArea))) return { x: j.x, y: j.y, width: j.width, height: j.height };
+  return base;
+}
+function guardarJanela() {
+  if (!janela || janela.isDestroyed()) return;
+  pref.janela = { ...janela.getNormalBounds(), maximizada: janela.isMaximized() };
+  salvarPrefDepois();
+}
+
 function criarJanela() {
-  janela = new BaseWindow({ width: 1520, height: 940, minWidth: 960, minHeight: 600, title: 'Lupa', backgroundColor: '#161922', icon: ICONE, show: false });
+  // o fundo da janela aparece no filete de 1 px entre as metades do lado a lado
+  janela = new BaseWindow({ ...limitesIniciais(), minWidth: 960, minHeight: 600, title: 'Lupa', backgroundColor: '#2a303d', icon: ICONE, show: false });
+  if (pref.janela?.maximizada) janela.maximize();
   casca = new WebContentsView({ webPreferences: prefs(path.join(__dirname, 'preload-casca.js')) });
-  casca.setBackgroundColor('#161922');
+  casca.setBackgroundColor('#00000000');      // transparente: com o menu de ajustes aberto a casca cobre a janela toda
+  ligarAtalhos(casca.webContents);
+  // a casca recarregou ou caiu com o menu aberto: fecha o menu, senão ela ficaria cobrindo os jogos e prendendo os cliques
+  for (const ev of ['did-start-loading', 'render-process-gone']) casca.webContents.on(ev, () => { if (menuAberto) fecharMenu(); });
   casca.webContents.loadFile(path.join(__dirname, 'casca.html'));
   janela.contentView.addChildView(casca);
-  for (const a of abas) if (a.tipo === 'jogo') criarJogo(a);
-  painel = new WebContentsView({ webPreferences: prefs(path.join(__dirname, 'preload-lupa.js')) });
-  painel.setBackgroundColor('#161922');
+  for (const a of abas) if (a.tipo === 'jogo' && !(a.id === 'conta2' && pref.soConta1)) criarJogo(a);
+  painel = novaView(path.join(__dirname, 'preload-lupa.js'));
   painel.webContents.loadFile(path.join(LUPA, 'painel.html'));
   painel.webContents.on('did-finish-load', escolherNoPainel);
-  central = new WebContentsView({ webPreferences: prefs(path.join(__dirname, 'preload-lupa.js')) });
-  central.setBackgroundColor('#161922');
+  central = novaView(path.join(__dirname, 'preload-lupa.js'));
   central.webContents.loadFile(path.join(LUPA, 'central.html'));
   abas.find((a) => a.id === 'central').view = central;
   janela.contentView.addChildView(painel);
   janela.contentView.addChildView(central);
   for (const v of [casca, painel, central]) v.webContents.setWindowOpenHandler(({ url }) => { externo(url); return { action: 'deny' }; });
   janela.on('resize', arrumar);
+  janela.on('restore', arrumar);
+  for (const ev of ['resize', 'move', 'maximize', 'unmaximize']) janela.on(ev, guardarJanela);
+  janela.on('focus', () => janela.flashFrame(false));
+  janela.on('blur', () => { if (menuAberto) fecharMenu(); });
+  // o X esconde na bandeja (a primeira vez avisa); "Sair", a atualização e o fim da sessão fecham de verdade
+  janela.on('close', (e) => {
+    guardarJanela();
+    if (saindo || !pref.fecharParaBandeja || !bandeja) return;
+    e.preventDefault();
+    janela.hide();
+    if (!pref.avisouBandeja) { pref.avisouBandeja = true; salvarPref(); mostrarAviso('Lupa', 'A Lupa continua rodando na bandeja', null); }
+  });
+  // não segurar o desligamento do Windows; se outro programa vetar o "query", o X volta a esconder na bandeja em 1 min
+  let vetado = 0;
+  janela.on('query-session-end', () => { saindo = true; clearTimeout(vetado); vetado = setTimeout(() => { saindo = false; }, 60e3); });
+  janela.on('session-end', () => { clearTimeout(vetado); saindo = true; });
   janela.on('closed', () => { janela = null; app.quit(); });
   arrumar();
   if (process.argv.includes(AO_INICIAR[0])) janela.minimize();      // oculta, já aparece direto minimizada
   else janela.show();
 }
 
-// a aba ativa ocupa a área abaixo da casca; num jogo, o painel da Lupa fica à direita
+// ---------- bandeja ----------
+function criarBandeja() {
+  bandeja = new Tray(nativeImage.createFromPath(ICONE).resize({ width: 32, height: 32 }));
+  bandeja.setToolTip('Lupa');
+  bandeja.on('double-click', mostrarJanela);
+  atualizarBandeja();
+}
+let assinaturaBandeja = '';
+function atualizarBandeja() {
+  if (!bandeja) return;
+  const itens = modos().map((m) => ({ id: m.id, label: m.id === 'lado' ? 'Lado a lado' : m.id === 'central' ? 'Central' : rotulo(abas.find((a) => a.id === m.id)) }));
+  const ass = JSON.stringify(itens);
+  if (ass === assinaturaBandeja) return;
+  assinaturaBandeja = ass;
+  bandeja.setContextMenu(Menu.buildFromTemplate([
+    { label: 'Mostrar', click: mostrarJanela },
+    { type: 'separator' },
+    ...itens.map((m) => ({ label: m.label, click: () => { ativar(m.id); mostrarJanela(); } })),
+    { type: 'separator' },
+    { label: 'Sair', click: sair }
+  ]));
+}
+function sair() { saindo = true; app.quit(); }
+
+// ---------- posição das views ----------
+function layoutAtual() {
+  const [L, A] = janela.getContentSize();
+  return Layout.calcular({ largura: L, altura: A, modo: modo(), painelAberto: painelVisivel(), larguraPainel: pref.larguraPainel });
+}
+
+// o modo ativo ocupa a área abaixo da casca (a casca cresce 22 px no lado a lado, para as etiquetas); com painel, ele
+// fica à direita
 function arrumar() {
   if (!janela) return;
-  const [L, A] = janela.getContentSize(), alt = Math.max(0, A - ALTURA_CASCA), aba = abaAtiva();
-  const comPainel = aba.tipo === 'jogo' && pref.painelAberto;
-  casca.setBounds({ x: 0, y: 0, width: L, height: ALTURA_CASCA });
+  const [L, A] = janela.getContentSize();
+  if (L <= 0 || A <= 0) return;      // minimizada: o Windows informa tamanho zero; o restore arruma de novo
+  const r = layoutAtual();
+  casca.setBounds(menuAberto ? { x: 0, y: 0, width: L, height: A } : r.casca);
   for (const a of abas) {
-    const vis = a === aba;
-    a.view.setVisible(vis);
-    if (vis) a.view.setBounds({ x: 0, y: ALTURA_CASCA, width: comPainel ? Math.max(0, L - LARGURA_PAINEL) : L, height: alt });
+    if (!a.view) continue;
+    const rect = a.tipo === 'jogo' ? r.jogos[a.id] : modo() === 'central' ? r.central : null;
+    a.view.setVisible(!!rect);
+    if (rect) a.view.setBounds(rect);
   }
-  painel.setVisible(comPainel);
-  if (comPainel) painel.setBounds({ x: L - LARGURA_PAINEL, y: ALTURA_CASCA, width: LARGURA_PAINEL, height: alt });
+  painel.setVisible(!!r.painel);
+  if (r.painel) painel.setBounds(r.painel);
+  aplicarZoom(r);
+  if (modo() === 'lado') avisarCasca();      // as etiquetas seguem as metades
+}
+
+// zoom de cada view: no lado a lado, o automático da metade (mantém o layout normal do jogo) vezes o ajuste do usuário
+function aplicarZoom(r = layoutAtual()) {
+  const gj = modo() === 'lado' ? 'lado' : 'solo';      // os jogos escondidos já ficam com o zoom do modo seguinte
+  for (const a of abas) {
+    if (!a.view) continue;
+    // só os jogos: as páginas do app são todas file://, e o Chromium guarda o zoom por host (a Central levaria a casca junto)
+    const largura = (a.tipo === 'jogo' ? r.jogos[a.id] : r.central)?.width || a.view.getBounds().width;
+    const z = a.tipo === 'jogo' ? Layout.zoomDoJogo(gj, largura, pref.zoom[gj]) : 1;
+    const wc = a.view.webContents;
+    if (!wc.isDestroyed() && Math.abs(wc.getZoomFactor() - z) > 0.001) wc.setZoomFactor(z);
+  }
+}
+function ajustarZoomAtivo(acao) {
+  if (modo() === 'central') return;      // a Central não tem zoom (ver aplicarZoom)
+  const g = Layout.grupoDe(modo());
+  pref.zoom[g] = Layout.ajustarZoom(pref.zoom[g], acao);
+  aplicarZoom();
+  salvarPrefDepois();
 }
 
 function escolherNoPainel() {
@@ -217,7 +351,7 @@ function escolherNoPainel() {
 }
 
 function ativar(id) {
-  if (!abas.some((a) => a.id === id)) return;
+  if (!modos().some((m) => m.id === id)) return;
   pref.ativa = id;
   salvarPref();
   arrumar();
@@ -239,12 +373,94 @@ function rotulo(a) {
   const campeao = vm.runInContext('typeof LUPA_PLANOS === "object" ? LUPA_PLANOS : {}', envio)[nome]?.campeao;
   return campeao ? `${nome} · ${campeao}` : nome;
 }
-const estadoCasca = () => ({
-  abas: abas.map((a) => ({ id: a.id, tipo: a.tipo, rotulo: rotulo(a) })),
-  ativa: pref.ativa, painelAberto: pref.painelAberto, versao: app.getVersion(), atualizacao,
-  instalado: app.isPackaged, iniciarComWindows: iniciaComWindows()
-});
-function avisarCasca() { if (casca && !casca.webContents.isDestroyed()) casca.webContents.send('casca:mudou', estadoCasca()); }
+const rotuloDoModo = (m) => (m.id === 'lado' ? 'Lado a lado' : rotulo(abas.find((a) => a.id === m.id)));
+const estadoCasca = () => {
+  const m = modos().find((x) => x.id === modo());
+  return {
+    abas: modos().map((x) => ({ id: x.id, tipo: x.tipo, rotulo: rotuloDoModo(x), alertas: alertas[x.id] || [] })),
+    ativa: modo(), modo: m.tipo === 'jogo' ? 'conta' : m.tipo, painelAberto: painelVisivel(), menuAberto,
+    versao: app.getVersion(), atualizacao, instalado: app.isPackaged, iniciarComWindows: iniciaComWindows(),
+    fecharParaBandeja: pref.fecharParaBandeja, larguraPainel: pref.larguraPainel, soConta1: pref.soConta1,
+    // só no lado a lado: onde fica a etiqueta de cada metade (x e largura em px da janela)
+    etiquetas: janela && modo() === 'lado'
+      ? layoutAtual().etiquetas.map((e) => ({ ...e, rotulo: rotulo(abas.find((a) => a.id === e.id)), alertas: alertas[e.id] || [], foco: e.id === ultimoFoco }))
+      : [],
+    atalhos: ATALHOS
+  };
+};
+function avisarCasca() {
+  if (casca && !casca.webContents.isDestroyed()) casca.webContents.send('casca:mudou', estadoCasca());
+  atualizarBandeja();
+}
+function fecharMenu() { menuAberto = false; arrumar(); avisarCasca(); }
+
+// ---------- alertas (o ponto nas abas e o selo na barra de tarefas) ----------
+// calculados aqui, do último estado:<nome> de cada conta (alertas.js); a cada estado novo e a cada 30 s (sem leitura)
+const estados = new Map();      // nome do personagem → último estado:<nome>
+let alertas = {}, totalAlertas = 0, iconePonto = null;
+function recalcularAlertas() {
+  const agora = Date.now(), novo = {};
+  for (const a of abas) if (a.tipo === 'jogo' && a.view) novo[a.id] = alertasDe(estados.get(pref.nomes[a.id]), agora, INICIO, modo() === a.id || modo() === 'lado');
+  if (JSON.stringify(novo) === JSON.stringify(alertas)) return;
+  alertas = novo;
+  atualizarSelo();
+  avisarCasca();
+}
+// um ponto vermelho 16x16 (BGRA, com borda suave) sem arquivo novo
+function pontoDoSelo() {
+  const T = 16, buf = Buffer.alloc(T * T * 4);
+  for (let y = 0; y < T; y++) for (let x = 0; x < T; x++) {
+    const d = Math.hypot(x + 0.5 - T / 2, y + 0.5 - T / 2), alfa = Math.max(0, Math.min(1, T / 2 - 0.5 - d + 1)), o = (y * T + x) * 4;
+    buf[o] = 0x4d; buf[o + 1] = 0x48; buf[o + 2] = 0xe5; buf[o + 3] = Math.round(alfa * 255);
+  }
+  return nativeImage.createFromBitmap(buf, { width: T, height: T });
+}
+function atualizarSelo() {
+  const total = Object.values(alertas).reduce((s, l) => s + l.length, 0);
+  if (total === totalAlertas || !janela) return;
+  totalAlertas = total;
+  iconePonto ||= pontoDoSelo();
+  janela.setOverlayIcon(total ? iconePonto : null, total ? `${total} alerta${total > 1 ? 's' : ''}` : '');
+}
+
+// ---------- atalhos do app ----------
+// só as teclas do atalhos.js são do app: o preventDefault vale só para elas, o resto segue para a página. O app nunca
+// injeta tecla, clique ou comando no jogo
+function ligarAtalhos(wc) {
+  wc.on('before-input-event', (e, input) => {
+    const acao = atalhoDe(input);
+    if (!acao) return;
+    e.preventDefault();
+    if (input.isAutoRepeat && !acao.startsWith('zoom')) return;
+    executarAtalho(acao);
+  });
+}
+function executarAtalho(acao) {
+  if (acao.startsWith('aba:')) {
+    const ids = modos().map((m) => m.id), alvo = acao.slice(4), i = ids.indexOf(modo());
+    if (alvo === 'proxima') ativar(ids[(i + 1) % ids.length]);
+    else if (alvo === 'anterior') ativar(ids[(i + ids.length - 1) % ids.length]);
+    else ativar(alvo);      // ativar() ignora o que não existe (Conta 2 desligada)
+  } else if (acao === 'painel') alternarPainel();
+  else if (acao === 'recarregar') recarregarAba();
+  else if (acao.startsWith('zoom:')) ajustarZoomAtivo(acao.slice(5));
+}
+function alternarPainel() {
+  if (modo() === 'central') return;
+  if (modo() === 'lado') pref.painelLado = !pref.painelLado; else pref.painelAberto = !pref.painelAberto;
+  salvarPref(); arrumar(); escolherNoPainel(); avisarCasca();
+}
+function recarregarAba() { const a = abaAtiva(); if (a.tipo === 'jogo') a.view.webContents.reload(); }
+
+// "Usar só a Conta 1": a view da Conta 2 nem existe (economiza memória); a aba e o Lado a lado somem
+function aplicarSoConta1() {
+  const a = abas.find((x) => x.id === 'conta2');
+  if (pref.soConta1 && a.view) { janela.contentView.removeChildView(a.view); a.view.webContents.close(); a.view = null; }
+  else if (!pref.soConta1 && !a.view) criarJogo(a);
+  if (pref.soConta1 && ultimoFoco === 'conta2') ultimoFoco = 'conta1';
+  pref.ativa = Layout.modoValido(pref.ativa, pref.soConta1);
+  salvarPref(); recalcularAlertas(); arrumar(); escolherNoPainel(); avisarCasca();
+}
 
 // ---------- atualização (Releases do GitHub Iguinhowill/lupa) ----------
 function mudarAtualizacao(x) { atualizacao = x; avisarCasca(); }
@@ -253,17 +469,22 @@ function prepararAtualizacao() {
   if (!app.isPackaged) return;
   autoUpdater.autoDownload = false;
   autoUpdater.on('checking-for-update', () => mudarAtualizacao({ tipo: 'procurando' }));
-  autoUpdater.on('update-available', (i) => mudarAtualizacao({ tipo: 'disponivel', versao: i.version }));
+  autoUpdater.on('update-available', (i) => mudarAtualizacao({ tipo: 'disponivel', versao: i.version, notas: notasEmTexto(i.releaseNotes) }));
   autoUpdater.on('update-not-available', () => mudarAtualizacao({ tipo: 'em-dia' }));
-  autoUpdater.on('download-progress', (p) => mudarAtualizacao({ tipo: 'baixando', versao: atualizacao.versao, pct: Math.round(p.percent || 0) }));
-  autoUpdater.on('update-downloaded', (i) => mudarAtualizacao({ tipo: 'pronta', versao: i.version }));
+  autoUpdater.on('download-progress', (p) => mudarAtualizacao({ tipo: 'baixando', versao: atualizacao.versao, notas: atualizacao.notas, pct: Math.round(p.percent || 0) }));
+  autoUpdater.on('update-downloaded', (i) => mudarAtualizacao({ tipo: 'pronta', versao: i.version, notas: atualizacao.notas }));
   autoUpdater.on('error', (e) => mudarAtualizacao({ tipo: 'erro', msg: String(e?.message || e).slice(0, 200) }));
   procurar();
   setInterval(procurar, 6 * 3600e3);
 }
 function atualizar() {
-  if (atualizacao.tipo === 'disponivel') { mudarAtualizacao({ tipo: 'baixando', versao: atualizacao.versao, pct: 0 }); autoUpdater.downloadUpdate().catch(() => {}); }
-  else if (atualizacao.tipo === 'pronta') { armazem.gravar(); autoUpdater.quitAndInstall(true, true); }
+  if (atualizacao.tipo === 'disponivel') { mudarAtualizacao({ tipo: 'baixando', versao: atualizacao.versao, notas: atualizacao.notas, pct: 0 }); autoUpdater.downloadUpdate().catch(() => {}); }
+  else if (atualizacao.tipo === 'pronta') {
+    armazem.gravar();
+    saindo = true;      // senão o X da janela só a esconderia na bandeja e a instalação não começaria
+    setTimeout(() => { saindo = false; }, 20e3);      // se a instalação não fechar o app, o X volta ao normal
+    autoUpdater.quitAndInstall(true, true);
+  }
 }
 
 // ---------- IPC (ver ARQUITETURA.md) ----------
@@ -275,7 +496,9 @@ function ligarIpc() {
     obj = semPrivadas(obj);
     // a primeira ficha lida numa aba diz de quem é a conta
     const a = abaDe(e.sender), nome = a && Object.keys(obj).find((k) => k.startsWith('estado:'))?.slice(7);
+    if (nome) estados.set(nome, obj['estado:' + nome]);
     if (nome && pref.nomes[a.id] !== nome) { pref.nomes[a.id] = nome; salvarPref(); avisarCasca(); if (a === abaAtiva()) escolherNoPainel(); }
+    if (nome) recalcularAlertas();
     armazem.set(obj);
   });
   ipcMain.handle('armazem:remove', (_e, c) => armazem.remove([].concat(c || []).filter((k) => !PRIVADAS.has(k))));
@@ -292,8 +515,21 @@ function ligarIpc() {
   });
   ipcMain.handle('casca:estado', () => estadoCasca());
   ipcMain.handle('casca:ativar', (_e, id) => ativar(id));
-  ipcMain.handle('casca:painel', () => { pref.painelAberto = !pref.painelAberto; salvarPref(); arrumar(); avisarCasca(); });
-  ipcMain.handle('casca:recarregar', () => { const a = abaAtiva(); if (a.tipo === 'jogo') a.view.webContents.reload(); });
+  ipcMain.handle('casca:painel', () => alternarPainel());
+  ipcMain.handle('casca:recarregar', () => recarregarAba());
+  ipcMain.handle('casca:menu', (_e, aberto) => {
+    menuAberto = !!aberto;
+    if (menuAberto) { janela.contentView.addChildView(casca); casca.webContents.focus(); }      // de novo = vai para o topo, sobre os jogos
+    arrumar(); avisarCasca();
+  });
+  // opções do menu de ajustes: { chave, valor }, só as conhecidas
+  ipcMain.handle('casca:opcao', (_e, { chave, valor } = {}) => {
+    if (chave === 'fecharParaBandeja') pref.fecharParaBandeja = !!valor;
+    else if (chave === 'larguraPainel' && Layout.LARGURAS_PAINEL.includes(valor)) pref.larguraPainel = valor;
+    else if (chave === 'soConta1') { pref.soConta1 = !!valor; aplicarSoConta1(); return; }
+    else return;
+    salvarPref(); arrumar(); avisarCasca();
+  });
   ipcMain.handle('casca:procurar', () => procurar());
   ipcMain.handle('casca:atualizar', () => atualizar());
   ipcMain.handle('casca:iniciarComWindows', (_e, sim) => { if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: !!sim, args: AO_INICIAR }); avisarCasca(); });
@@ -301,6 +537,9 @@ function ligarIpc() {
   // cada mudança do armazém vai para o envio.js e para as páginas da Lupa (jogos, painel, Central, mini)
   armazem.on('mudou', (mud) => {
     for (const fn of ouvintesMud) { try { fn(mud, 'local'); } catch {} }
+    let novoEstado = false;
+    for (const k of Object.keys(mud)) if (k.startsWith('estado:')) { estados.set(k.slice(7), mud[k].newValue); novoEstado = true; }
+    if (novoEstado) recalcularAlertas();
     const pub = semPrivadas(mud);
     if (Object.keys(pub).length) {
       const alvos = [...abas.map((a) => a.view), painel].map((v) => v?.webContents);
@@ -314,14 +553,21 @@ function ligarIpc() {
 // ---------- início ----------
 app.on('second-instance', mostrarJanela);
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', () => { try { armazem?.gravar(); } catch {} });
+app.on('before-quit', () => { saindo = true; try { bandeja?.destroy(); bandeja = null; } catch {} try { clearTimeout(esperaPref); guardarJanela(); salvarPref(); armazem?.gravar(); } catch {} });
 app.whenReady().then(() => {
   armazem = new Armazem(path.join(app.getPath('userData'), 'lupa-dados.json'));
-  pref = { ...pref, ...(armazem.get('app:pref')['app:pref'] || {}) };
+  const salvo = armazem.get('app:pref')['app:pref'] || {};
+  pref = { ...pref, ...salvo, zoom: { ...pref.zoom, ...salvo.zoom }, nomes: { ...salvo.nomes } };
+  pref.ativa = Layout.modoValido(pref.ativa, pref.soConta1);
+  if (!Layout.LARGURAS_PAINEL.includes(pref.larguraPainel)) pref.larguraPainel = 380;
+  for (const [k, v] of Object.entries(armazem.get(null))) if (k.startsWith('estado:')) estados.set(k.slice(7), v);
   ligarIpc();
   migrarInicio();
   envio = iniciarEnvio();
   criarJanela();
+  criarBandeja();
+  recalcularAlertas();
+  setInterval(recalcularAlertas, 30e3);      // o "sem leitura" nasce do tempo passando, não de um estado novo
   aplicarAcordado();
   prepararAtualizacao();
 });

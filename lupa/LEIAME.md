@@ -3,20 +3,36 @@
 Painel de qualidade de vida para o [LoL Idle](https://lolidle.com). Ele reorganiza o que o jogo já mostra na tela,
 sem dar vantagem a ninguém.
 
+## Dois jeitos de usar
+
+- **App de PC (recomendado):** abre o jogo numa janela própria, com as abas **Conta 1**, **Conta 2**, **Lado a lado** e
+  **Central**. A Lupa vem embutida (o painel fica ao lado do jogo) e se atualiza pelo botão de atualização do app.
+  Não precisa de janela anônima nem de carregar extensão.
+- **Extensão do Chrome/Edge (alternativa):** a mesma Lupa, instalada como abaixo em "Como instalar".
+
+No app o painel esconde o botão **Central** e a escolha de personagem (quem escolhe é a aba do app) e usa um rodapé
+de uma linha. Na extensão, tudo continua como descrito aqui.
+
 ## O que ela faz
 
 **Painel lateral** (clique no ícone da lupa):
 
 - **Ficha:** o seu plano no topo, os itens equipados com a imagem, refino, qualidade e carta; a barra de combate com
   o ícone e a habilidade de cada tecla (a tecla R pode ser o G, por exemplo); ranks, atributos, mochila e cartas.
-- **Caçada:** abates, XP e ouro por hora caçando, por sessão e por zona. Fica salvo por personagem e não zera ao
+- **Caçada:** abates, XP e ouro por hora caçando, por sessão e por zona (a melhor zona por XP/h ganha uma estrela), com o multiplicador de bônus ("XP ×1,45 · ouro ×1,20")
+  e o gráfico de 5 em 5 min que alterna entre XP e Abates. "Nova sessão" vale só para o personagem aberto. Fica salvo por personagem e não zera ao
   recarregar a página. Também mostra uma estimativa sem os bônus da Kick e da Twitch e exporta em CSV.
-- **Tarefa:** progresso, quanto falta, previsão de término e um alerta quando você caça fora da zona da tarefa.
-- **Timers:** bônus da Kick, da Twitch, voto no TopIdle, evento de XP, convites da Dungeon, guilda e VIP. O sino
-  liga uma notificação do navegador.
+- **Tarefa:** o cartão **Hoje ainda falta** (prêmio diário não pego, diárias prontas ou pendentes, Covil liberado,
+  Vilemaw acordada, Guerra de hoje, e quanto falta para virar o dia em Brasília; sem pendência: "Nada pendente
+  hoje"), progresso, quanto falta, previsão de término e um alerta quando você caça fora da zona da tarefa.
+- **Timers:** bônus da Kick, da Twitch, voto no TopIdle, evento de XP, convites da Dungeon, guilda e VIP, mais os
+  buffs do Barão, da Guerra (×2), da Loja (XP e ouro) e da Disciplina quando ativos. O sino liga uma notificação do
+  navegador. Abaixo, "No jogo agora": Guerra de Guildas, Vilemaw, Covil, chaves de fortaleza, sorteio e caveira/frags.
+  O aviso de reinício do servidor aparece em destaque no topo.
 - **Chat:** resumo do loot dos últimos 15 minutos e as mensagens do servidor sem as linhas de loot.
 - **Ajustes:** tema da lateral do jogo, fechar a lateral, recolher cards, esconder a lista de bônus e as linhas de
-  loot, manter o PC acordado e os avisos (mochila quase cheia, item no chão, morte, pontos livres, nível).
+  loot, manter o PC acordado e os avisos (mochila quase cheia, item no chão, morte, pontos livres, nível e, novos: lendário,
+  prêmio diário não pego, diária pronta, Guerra de Guildas, Vilemaw acordada, Covil liberado e reinício do servidor).
 - No topo, a barra de XP com a previsão do próximo nível e o botão **Central**.
 
 **Central** (botão Central do painel): tudo numa página só, para uma aba ou outro monitor: o feed ao vivo (drops com
@@ -59,8 +75,10 @@ mostra a notificação do navegador em qualquer página aberta, mesmo em segundo
 
 ## Dois personagens ao mesmo tempo (duas contas)
 
-Cada perfil do Chrome tem a sua própria Lupa, e uma não enxerga a outra. Para ver os dois numa tela só, use o mesmo
-Chrome com duas janelas:
+No app de PC, use as abas **Conta 1** e **Conta 2** (ou **Lado a lado**): não há o que configurar.
+
+Só na **extensão**: cada perfil do Chrome tem a sua própria Lupa, e uma não enxerga a outra. Para ver os dois numa tela
+só, use o mesmo Chrome com duas janelas (o truque da janela anônima vale apenas para a extensão):
 
 1. Em `chrome://extensions`, abra **Detalhes** da Lupa e ligue **Permitir no modo anônimo**.
 2. Janela normal: entre no jogo com uma conta.

@@ -3,6 +3,7 @@
 // Não fala com o jogo: só lê o storage e grava a configuração.
 'use strict';
 
+const NO_APP = !!globalThis.lupaApp;   // no app de PC a escolha de personagem e a Central ficam nas abas do app
 const ABAS = [['ficha', 'Ficha'], ['cacada', 'Caçada'], ['tarefa', 'Tarefa'], ['timers', 'Timers'], ['chat', 'Chat'], ['ajustes', 'Ajustes']];
 
 // ---------- estado ----------
@@ -57,9 +58,9 @@ function desenhar(forcar = false) {
   const fatia = aba === 'ajustes' ? [config, nuvem]
     : !e ? null
     : aba === 'ficha' ? [e.ficha, e.mochila, e.pontos, e.zona, e.nivel, e.tarefa === null, planoAbertoChave(), Object.keys(icones).length]
-    : aba === 'cacada' ? [cacadas[e.nome], semBonus, config.novaSessao, minuto]
-    : aba === 'tarefa' ? [e.tarefa, e.diarias, config.avisos.tarefa, minuto]
-    : aba === 'timers' ? [e.timers, config.avisos]
+    : aba === 'cacada' ? [cacadas[e.nome], semBonus, config.novaSessao, config.novaSessaoPor?.[e.nome], e.bonus, minuto]
+    : aba === 'tarefa' ? [e.tarefa, e.diarias, e.rastreio, config.avisos.tarefa, minuto]
+    : aba === 'timers' ? [e.timers, e.rastreio, config.avisos]
     : [e.chat, e.recentes, config.esconderLoot, Object.keys(icones).length];
   // Ajustes não depende do XP; nas outras abas, ele entra para a barra e a caçada andarem
   const k = JSON.stringify(aba === 'ajustes' ? [aba, fatia] : [aba, e?.nome, fatia, e?.xpNivel, cacadas[e?.nome]?.sessoes?.at(-1)?.xp]);
@@ -86,7 +87,7 @@ function desenharTopo(e) {
   st.textContent = !e ? 'sem leitura' : fresco ? 'lendo a página' : idade > 60e3 ? `sem leitura há ${Math.max(1, Math.floor(idade / 60e3))} min` : `última leitura ${hora(e.ts)}`;
   const recentes = Object.values(estados).filter((x) => Date.now() - x.ts < 10 * 60e3).sort((a, b) => a.nome.localeCompare(b.nome));
   const box = document.getElementById('personagens');
-  box.hidden = recentes.length < 2;
+  box.hidden = NO_APP || recentes.length < 2;
   if (!box.hidden) box.replaceChildren(...recentes.map((x) => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(x.nome === e?.nome), onclick: () => { escolhido = x.nome; desenhar(true); } }, x.nome)));
   const xp = document.getElementById('xp-topo'), barra = e ? barraXp(e, ctx) : null;
   xp.hidden = !barra;
@@ -124,6 +125,13 @@ function desenharAjustes() {
       chave(av.morte, 'Morte do personagem', () => alternarAviso('morte')),
       chave(av.pontos, 'Pontos livres de habilidade ou atributo', () => alternarAviso('pontos')),
       chave(av.nivel, 'Subiu de nível', () => alternarAviso('nivel')),
+      chave(av.lendario, 'Caiu um lendário', () => alternarAviso('lendario')),
+      chave(av.premio, 'Prêmio diário ainda não pego', () => alternarAviso('premio')),
+      chave(av.diaria, 'Missão diária pronta para entregar', () => alternarAviso('diaria')),
+      chave(av.guerra, 'Guerra de Guildas (abriu ou começou)', () => alternarAviso('guerra')),
+      chave(av.vilemaw, 'Vilemaw acordou', () => alternarAviso('vilemaw')),
+      chave(av.covil, 'Covil liberado', () => alternarAviso('covil')),
+      chave(av.reinicio, 'Reinício do servidor chegando', () => alternarAviso('reinicio')),
       nota('Os avisos de bônus (Kick, Twitch, voto, evento e convites) ficam nos sinos da aba Timers; o da tarefa, na aba Tarefa.')),
     secao('Chat do jogo',
       chave(config.esconderLoot, 'Esconder as linhas de loot (aba Servidor)', () => salvarConfig({ esconderLoot: !config.esconderLoot }))),
@@ -165,6 +173,11 @@ function secaoNuvem() {
 }
 
 // ---------- início ----------
+if (NO_APP) {
+  document.getElementById('central')?.setAttribute('hidden', '');
+  const r = document.querySelector('.rodape span');
+  if (r) r.textContent = 'Só leitura: não clica e não aperta teclas.';
+}
 document.getElementById('central')?.addEventListener('click', () => chrome.tabs.create({ url: chrome.runtime.getURL('central.html') }));
 chrome.storage.local.get(null).then((tudo) => { for (const [k, v] of Object.entries(tudo)) guardar(k, v); desenhar(true); });
 chrome.storage.onChanged.addListener((mud, area) => {

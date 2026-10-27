@@ -45,15 +45,22 @@ async function registrarAba(id) {
   aplicarAcordado();
 }
 
+// a notificação de um aviso; com a aba de origem, clicar nela traz o jogo para a frente
+function mostrarAviso(chave, titulo, texto, aba) {
+  const id = `lupa-${chave}-${Date.now()}`;
+  if (aba) abaDoAviso.set(id, { aba: aba.id, janela: aba.windowId });
+  chrome.notifications.create(id, { type: 'basic', iconUrl: 'icones/128.png', title: titulo, message: texto, priority: 1 });
+}
+// o envio.js (alerta de preço) avisa por aqui: não tem aba de origem
+self.lupaAvisar = (id, titulo, texto) => mostrarAviso(id, titulo, texto, null);
+
 chrome.runtime.onMessage.addListener((msg, remetente) => {
   if (msg?.tipo === 'ola') {
     if (remetente.tab) registrarAba(remetente.tab.id);
     return;
   }
   if (msg?.tipo !== 'aviso') return;
-  const id = `lupa-${msg.id}-${Date.now()}`;
-  if (remetente.tab) abaDoAviso.set(id, { aba: remetente.tab.id, janela: remetente.tab.windowId });
-  chrome.notifications.create(id, { type: 'basic', iconUrl: 'icones/128.png', title: msg.titulo, message: msg.texto, priority: 1 });
+  mostrarAviso(msg.id, msg.titulo, msg.texto, remetente.tab);
 });
 
 chrome.storage.onChanged.addListener((mud, area) => { if (area === 'local' && mud.config) aplicarAcordado(); });
