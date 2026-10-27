@@ -10,6 +10,8 @@
 //     menores,                // { [chave]: { ouro, gemas, n, em } }  (chave "mercado:menores": menor preço visto no Mercado por versão)
 //     acoes,                  // { [nome]: { tipo, estado: 'rodando'|'ok'|'erro'|'parado', texto, em } }  (chave "acao:<nome>", só no app)
 //     iniciarAcao(tipo, nome),// só no app: 'tarefa' (Entregar e seguir) ou 'parar'; sem ela o cartão nem aparece
+//     gastos,                 // { [nome]: resultado do Onde gastar o ouro }  (chave "gastar:<nome>", que o app calcula)
+//     calcularGasto(nome),    // só no app: pede a conta (botão Calcular); sem ela e sem conta guardada, o cartão nem aparece
 //     salvarConfig(mud),      // grava uma mudança parcial em config (avisos é mesclado)
 //     alternarAviso(k),       // liga/desliga config.avisos[k]
 //     semBonus,               // boolean: Caçada sem bônus de live
@@ -287,6 +289,7 @@ function desenharFicha(e, ctx, opts = {}) {
     opts.semPlano ? null : desenharPlano(e, ctx, { compacto: true }),
     avisoMochila(e),
     secao('Equipamento', f.equip.length ? f.equip.map((i) => linhaItem(i, ctx, 40)) : vazio('Nenhum item equipado.')),
+    cartaoGastar(e, ctx),
     secao('Barra de combate',
       h('div', { class: 'grade-4' }, barra.map((b) => (!b ? h('div', { class: 'hab vaga' }, 'vazia') : h('div', { class: 'hab', title: b.nome },
         h('span', { class: 'tecla' + (b.tecla && b.tecla !== b.t ? ' troca' : '') }, b.tecla ? `tecla ${b.tecla}` : 'sem tecla'),
@@ -474,6 +477,65 @@ function cartaoEntregar(e, ctx) {
       rodando ? h('button', { type: 'button', class: 'botao', onclick: () => ctx.iniciarAcao('parar', e.nome) }, 'Parar')
         : h('button', { type: 'button', class: 'botao principal', disabled: !pode, onclick: () => ctx.iniciarAcao('tarefa', e.nome) }, 'Entregar e seguir')),
     msg);
+}
+
+// ---------- Onde gastar o ouro ----------
+// A conta é do app (gastar.js): simula no motor do próprio jogo cada compra que o ouro pode fazer (forja +1, carta, item do
+// Mercado, item da mochila, reset de atributos) contra a build atual. Aqui só desenha "gastar:<nome>" (ctx.gastos). No app vem
+// o botão Calcular (ctx.calcularGasto); no site, o que o app mandou. Só informa: nunca compra, forja nem troca nada.
+const pctGanho = (f, casas = 1) => (f < 0 ? '−' : '+') + Math.abs(f * 100).toFixed(casas).replace('.', ',') + '%';
+// ouro como a ficha escreve ("11.4M", "950.2k", "9800")
+function ouroDaFicha(t) {
+  const m = /^([\d.,]+)([kKmM])?$/.exec(String(t ?? '').trim().replace(/\s/g, ''));
+  if (!m) return null;
+  const v = m[2] ? Number(m[1].replace(',', '.')) * (/m/i.test(m[2]) ? 1e6 : 1e3) : Number(m[1].replace(/[.,]/g, ''));
+  return Number.isFinite(v) ? v : null;
+}
+const horasCaca = (hs) => (hs == null ? null : hs < 1 ? 'menos de 1 h' : hs < 100 ? `${hs} h` : `${inteiro(hs)} h (${inteiro(hs / 24)} dias seguidos)`);
+function linhaGasto(l, ouro) {
+  const falta = l.custo > 0 && ouro != null && l.custo > ouro ? l.custo - ouro : 0;
+  return h('li', { class: 'gasto' },
+    h('span', { class: 'gasto-titulo' }, h('b', null, l.titulo), falta ? h('span', { class: 'gasto-falta' }, `faltam ${milhar(falta)}`) : null),
+    h('span', { class: 'gasto-ganho' }, h('span', { class: 'num' }, pctGanho(l.ganho)), ` de XP e ouro por hora (±${(l.erro * 100).toFixed(1).replace('.', ',')})`,
+      l.xpH > 0 ? [' · ', h('span', { class: 'num' }, `+${curto(l.xpH)}`), ' XP/h'] : null),
+    h('span', { class: 'gasto-custo' }, l.custo === 0 ? 'De graça.' : [`Custa ${milhar(l.custo)}`, l.custoP90 ? ` (até ${milhar(l.custoP90)} em 90% das vezes)` : '',
+      l.horas != null ? ` · se paga em ${horasCaca(l.horas)} de caça` : '']),
+    l.detalhe ? h('span', { class: 'gasto-detalhe fraco' }, l.detalhe) : null);
+}
+// opts.completo: todas as opções (no site); no painel, as 3 melhores
+let gastoAberto = false;
+function cartaoGastar(e, ctx, opts = {}) {
+  const g = ctx?.gastos?.[e.nome], noApp = typeof ctx?.calcularGasto === 'function';
+  if (!g && !noApp && !opts.completo) return null;
+  const rodando = g?.estado === 'rodando' || g?.estado === 'na-fila';
+  const ouro = ouroDaFicha(e.ficha?.stats?.ouro) ?? g?.ouro ?? null;
+  const ETAPA = { motor: 'Baixando o motor do jogo…', triagem: 'Testando todas as opções…', conferir: 'Conferindo as melhores…' };
+  const status = rodando ? (g.estado === 'na-fila' ? 'Na fila: o outro personagem está sendo calculado.' : `${ETAPA[g.etapa] || 'Calculando…'}${g.total ? ` ${g.feito}/${g.total}` : ''}`)
+    : g?.estado === 'erro' ? `Não deu para calcular: ${g.erro}` : null;
+  const partes = [];
+  if (status) partes.push(h('p', { class: 'entregar-status' + (g?.estado === 'erro' ? ' erro' : ''), role: 'status' }, status));
+  if (g?.opcoes) {
+    const atual = (e.ficha?.equip || []).map((i) => i.id).join(), mudou = (g.equip || []).join() !== atual || String(g.nivel) !== String(parseInt(e.nivel, 10));
+    partes.push(h('p', { class: 'gasto-quando fraco' }, `Conta de ${dataHora(g.em)} · nível ${g.nivel} · ${g.zona?.nome || '?'}${ouro != null ? ` · seu ouro: ${milhar(ouro)}` : ''}`,
+      mudou ? h('span', { class: 'gasto-mudou' }, noApp ? ' · sua build mudou: a conta refaz sozinha em 2 min' : ' · a build mudou desde esta conta') : null));
+    const mostrar = opts.completo || gastoAberto ? g.opcoes : g.opcoes.slice(0, 3);
+    partes.push(g.opcoes.length ? h('ul', { class: 'gasto-lista' }, mostrar.map((l) => linhaGasto(l, ouro)))
+      : h('p', { class: 'gasto-nada' }, 'Nada do que o ouro compra agora aumenta o seu farm de um jeito que dê para medir. Guardar também é uma opção.'));
+    if (!opts.completo && g.opcoes.length > 3) partes.push(h('button', { type: 'button', class: 'botao plano-ver', 'aria-expanded': String(gastoAberto), onclick: () => { gastoAberto = !gastoAberto; ctx.redesenhar(); } }, gastoAberto ? 'Mostrar só as 3 melhores' : `Ver as ${g.opcoes.length}`));
+    if (g.semGanho?.length) partes.push(h('details', { class: 'gasto-sem' }, h('summary', null, `Não mudam nada que dê para medir (${g.semGanho.length})`),
+      h('ul', { class: 'lista-simples' }, g.semGanho.map((l) => h('li', null, `${l.titulo}: ${pctGanho(l.ganho)} (±${(l.erro * 100).toFixed(1).replace('.', ',')})${l.custo ? ` · custa ${milhar(l.custo)}` : ''}`)))));
+    const econ = g.base?.economia;
+    if (!opts.completo) partes.push(nota(`Simulação do próprio jogo, contra a sua build nas mesmas condições. Testei ${g.testadas} opções; o "se paga" usa ${econ?.medido ? 'o ouro/h que a Lupa mediu' : 'o ouro/h de tabela'} na zona. Os detalhes estão no site, em Calcular.`));
+    else partes.push(nota(`Simulação do próprio jogo: ${g.sim?.conferir?.cacadas || 8} caçadas de ${g.sim?.conferir?.minutos || 60} min por opção, contra a sua build nas mesmas condições (sem chefes nem monstros furiosos). `
+      + `Testei ${g.testadas} opções e conferi as ${g.conferidas} melhores. Mais abates na mesma zona dão o mesmo tanto a mais de XP e de ouro; `
+      + (econ?.medido ? `o "se paga" usa o ouro/h que a Lupa mediu em ${g.zona?.nome} (${curto(econ.ouroH)}/h). ` : `o "se paga" usa o ouro/h de tabela da zona (${curto(econ?.ouroH || 0)}/h): a Lupa ainda não mediu você lá. `)
+      + 'Preços: menor anúncio visto no Mercado nos últimos 7 dias. Forja: média de 2.000 forjas simuladas, sem VIP e sem falhas acumuladas.'));
+  } else if (!rodando && g?.estado !== 'erro') partes.push(h('p', { class: 'entregar-status fraco' }, noApp ? 'Ainda não calculei. Leva cerca de 1 min (o app simula cada compra no motor do jogo).' : 'O app ainda não mandou esta conta.'));
+  return h('section', { class: 'cartao entregar gastar', 'aria-label': 'Onde gastar o ouro' },
+    h('div', { class: 'linha-topo' },
+      h('span', { class: 'entregar-titulo' }, h('b', null, 'Onde gastar o ouro'), h('span', { class: 'fraco entregar-sub' }, 'O que o ouro compra e quanto rende de caça, pela simulação do jogo.')),
+      noApp ? h('button', { type: 'button', class: 'botao', disabled: rodando, onclick: () => ctx.calcularGasto(e.nome) }, rodando ? 'Calculando…' : g?.opcoes ? 'Recalcular' : 'Calcular') : null),
+    partes);
 }
 
 // ---------- Tarefa ----------

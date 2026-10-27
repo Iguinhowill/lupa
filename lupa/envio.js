@@ -168,10 +168,12 @@ async function enviarTudo() {
   const marcar = () => chrome.storage.local.set({ 'nuvem:marcas': m });
   const estados = Object.keys(tudo).filter((k) => k.startsWith('estado:')).map((k) => tudo[k]).filter((e) => e?.nome);
   try {
-    // a última leitura de cada personagem
-    const novos = estados.filter((e) => e.ts > (m.estado[e.nome] || 0));
-    await gravar(s, 'estados', novos.map((e) => ({ dono: s.uid, personagem: e.nome, lido_em: iso(e.ts), nivel: numeroDe(e.nivel), zona: e.zona || null, dados: e })), 'dono,personagem', 'merge-duplicates');
-    for (const e of novos) m.estado[e.nome] = e.ts;
+    // a última leitura de cada personagem, com a última conta do Onde gastar o ouro (só o app calcula: "gastar:<nome>") dentro
+    m.gastar ||= {};
+    const gastoDe = (e) => { const g = tudo['gastar:' + e.nome]; return g?.opcoes ? { ...g, estado: 'pronto', etapa: undefined, feito: undefined, total: undefined } : null; };
+    const novos = estados.filter((e) => e.ts > (m.estado[e.nome] || 0) || (gastoDe(e)?.em || 0) > (m.gastar[e.nome] || 0));
+    await gravar(s, 'estados', novos.map((e) => ({ dono: s.uid, personagem: e.nome, lido_em: iso(e.ts), nivel: numeroDe(e.nivel), zona: e.zona || null, dados: { ...e, gastar: gastoDe(e) } })), 'dono,personagem', 'merge-duplicates');
+    for (const e of novos) { m.estado[e.nome] = e.ts; m.gastar[e.nome] = gastoDe(e)?.em || 0; }
 
     // um pulso a cada 5 min de quem está lendo agora: o buraco entre pulsos é o tempo parado
     const pulsos = estados.filter((e) => agora - e.ts < FRESCO && agora - (m.pulso[e.nome] || 0) >= PULSO - 20e3).map((e) => {
