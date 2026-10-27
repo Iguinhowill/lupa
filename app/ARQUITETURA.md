@@ -97,7 +97,7 @@ Estado = {
   abas: [{ id, rotulo, tipo: 'jogo' | 'central' }],
   ativa: id,
   painelAberto: boolean,
-  versao: '0.6.0',
+  versao: '0.6.2',
   atualizacao: { tipo: 'dev' | 'procurando' | 'em-dia' | 'disponivel' | 'baixando' | 'pronta' | 'erro', versao?, pct?, msg? },
   instalado: boolean,          // app.isPackaged: false no npm start
   iniciarComWindows: boolean
