@@ -22,6 +22,7 @@ O código da Lupa (pasta `../lupa`, que continua sendo também a extensão do Ch
 | `acoes.js` | processo principal | puro: as regras das ações que o jogador pede (tempo e número de entradas por pedido), o ponto do clique com o zoom e as entradas de clique e tecla; casos em `acoes.test.js` |
 | `oferta.js` | preload das abas do jogo | puro: lê o texto das ofertas do Capitão (quantidade, tempo, XP, ouro, zona), o ritmo do jogador por zona (as sessões `cacada:<nome>`) e escolhe a de mais XP por hora caçando com ela; casos em `acoes.test.js` |
 | `gastar.js` | processo principal | puro: o Onde gastar o ouro. Lê a build da ficha, monta as compras (forja +1, carta, item do Mercado, item da mochila, reset de atributos), pede os combates ao simulador em duas etapas e resume quanto cada uma rende e em quantas horas se paga; casos em `gastar.test.js` |
+| `treino.js` | processo principal | puro: os Pontos e barra. Para onde vão os pontos dos próximos 5 níveis (todos numa habilidade ou num atributo) e qual combinação de 4 habilidades aprendidas rende mais na barra, no mesmo simulador; casos em `treino.test.js` |
 | `simulador.js` | processo principal | baixa o motor público do jogo para `userData/motor-jogo/` (de 6 em 6 h, se pedir) e roda os combates dele numa janela escondida e isolada (`lupasim://`, sessão em memória, sandbox, sem rede) |
 | `sim/sim.html`, `sim/sim.js`, `sim/sim-trabalho.js` | janela escondida do simulador | distribui os combates entre alguns Web Workers, que importam o motor e rodam a caçada (sem chefes nem monstro furioso, como o `gerar-tabelas.mjs` do site) |
 | `acao-jogo.js` | preload das abas do jogo | a sequência do "Entregar e seguir" e a setinha do Alt+L: confere a tela, pede cada clique ou tecla ao main e grava o andamento em `acao:<nome>` |
@@ -209,7 +210,33 @@ ganhos que importam aqui).
 - **Teste**: `npm run teste:gastar` baixa o motor numa pasta temporária, confere que a página não acessa a internet nem
   sai da pasta do motor e roda a conta inteira com `teste-gastar/estado-yasuo.json` (resultado em `teste-gastar/saida/`).
   `npm run teste:gastar-app` abre o app de verdade (abas numa página em branco local, dados numa pasta temporária) e
-  confere a conta automática e o botão Calcular do painel. Fora do pacote, `LUPA_GASTO_ESPERA` (ms) encurta a espera.
+  confere a conta automática, os Pontos e barra na mesma rodada e o botão Calcular do painel. Fora do pacote,
+  `LUPA_GASTO_ESPERA` (ms) encurta a espera.
+
+## Pontos e barra
+
+Na mesma rodada do Onde gastar o ouro (logo depois dele, com a mesma cópia do motor), `treino.js` responde para onde vão os
+pontos e qual barra usar. Grava `treino:<nome>` (`{ estado, em, assinatura, nivel, zona, campeao, livres, barraAtual,
+habilidade: { nivel, pontos, testadas, opcoes }, atributo: { nivel, pontos, testadas, opcoes }, barra: { testadas, opcoes },
+base, sim }`, linha = `{ parte, titulo, nivel, ganho, erro, rende, xpH, ouroH, mortesH }`), que o cartão Pontos e barra da
+Ficha (e da Central; no site, Calcular → Pontos e barra) desenha. O envio.js sobe a última conta dentro de `estados.dados.treino`.
+
+- **Pontos**: um ponto sozinho mexe uns 0,2 a 0,4%, menos que a margem da simulação. Por isso a conta olha 5 níveis à frente:
+  os pontos livres mais os que vêm (1 de habilidade por nível até o 50, 3 de atributo por nível), todos numa habilidade (até o
+  rank que o nível de chegada deixa) ou todos num atributo, comparados no nível de chegada contra uma base nesse nível com os
+  pontos guardados. Habilidade fora da barra (o jogo não a usa) entra na barra no lugar de cada uma, e fica o melhor lugar: a
+  nova é comparada com a barra atual (aprender e pôr na barra é uma coisa só); a aprendida, com uma base que já tem a mesma
+  barra, para o ganho ser só o dos pontos (a troca de barra sozinha aparece na parte Barra). As regras de rank
+  (`rankMaximo`, `KIT_HABS`, `BARRA`, `PONTOS_POR_NIVEL`, `NIVEL_PONTOS_HAB`) vêm do `dados-jogo.js`, conferidas pelo gerador
+  contra o `rankMaximoNoNivel` do motor em todos os campeões e níveis; o campeão sai do nome das habilidades da ficha
+  (`campeaoPelasHabs`).
+- **Barra**: as combinações de 4 das habilidades aprendidas que não são passivas (a ordem não importa: o jogo usa as da barra
+  pela prioridade do campeão). Triagem de todas e conferência das 4 melhores.
+- **Conferência**: as 4 melhores habilidades, os 5 atributos e as 4 melhores barras, em 8 caçadas de 1 h. No cartão,
+  as que ficam dentro da margem da melhor aparecem como empate.
+- Em 27/10 (simulação): Yasuo, os próximos 5 pontos em Lâmina Fantasma (F) +2,8%, Respiração do Vento +1,1%; 15 pontos
+  em Foco ou em Força empatam (+1,5%); a barra Q R F G é a melhor das 35. Aphelios: Eclipse Duplo +1%, Foco e Força
+  empatam (+1,3%), a barra Q W B G é a melhor das 5.
 
 ## IPC (canais)
 
@@ -234,7 +261,7 @@ Lupa:
 | `lupa:escolher` | main → painel | `nome` do personagem da aba ativa, ou da metade em foco no lado a lado (o painel passa a mostrar esse) |
 | `lupa:uaFirefox` | sendSync | → o User-Agent de Firefox (só o preload das páginas do Google usa) |
 | `lupa:acao` | invoke | só do painel: `{ tipo: 'tarefa' \| 'parar', nome }` → `{ ok }` ou `{ erro }` |
-| `lupa:gastar` | invoke | do painel ou da Central: `{ nome }` → `{ ok }` (a conta roda e grava `gastar:<nome>`) ou `{ erro }` |
+| `lupa:gastar` | invoke | do painel ou da Central: `{ nome }` → `{ ok }` (a rodada grava `gastar:<nome>` e `treino:<nome>`) ou `{ erro }` |
 | `acao:iniciar` | main → jogo | `{ tipo: 'tarefa' \| 'coluna' }`: começa a ação na aba autorizada |
 | `acao:parar` | main → jogo | interrompe o "Entregar e seguir" no próximo passo |
 | `acao:clicar` | invoke | do jogo: `{ x, y }` em px CSS → `true` se mandou o clique |
@@ -263,7 +290,7 @@ Estado = {
   modo: 'conta' | 'lado' | 'central',
   painelAberto: boolean,       // do modo atual (no lado a lado, o `painelLado`)
   menuAberto: boolean,
-  versao: '0.11.0',
+  versao: '0.12.0',
   atualizacao: { tipo: 'dev' | 'procurando' | 'em-dia' | 'disponivel' | 'baixando' | 'pronta' | 'erro', versao?, pct?, msg?, notas? },
                                // notas: releaseNotes em texto puro (~300 caracteres), no tooltip do botão Atualizar
   instalado: boolean,          // app.isPackaged: false no npm start

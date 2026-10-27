@@ -23,6 +23,7 @@ const { atalhoDe, LISTA: ATALHOS } = require('./atalhos');
 const Acoes = require('./acoes');
 // Onde gastar o ouro: as opções e o resumo (puro, gastar.test.js) e o simulador (o motor do jogo numa página isolada)
 const Gastar = require('./gastar');
+const Treino = require('./treino');      // Pontos e barra: a mesma rodada do simulador, depois do Onde gastar o ouro
 const Simulador = require('./simulador');
 Simulador.registrarEsquema();      // o lupasim:// precisa ser registrado antes do app ficar pronto
 
@@ -434,27 +435,39 @@ const pastaMotor = () => path.join(app.getPath('userData'), 'motor-jogo');
 const lerChave = (k) => armazem.get(k)[k];
 let gastoRodando = null;
 const filaGasto = [], esperasGasto = new Map();
-const gravarGasto = (nome, mud) => armazem.set({ ['gastar:' + nome]: { ...(lerChave('gastar:' + nome) || {}), ...mud } });
+// as duas contas da mesma rodada: o Onde gastar o ouro (gastar:<nome>) e os Pontos e barra (treino:<nome>), uma depois da outra
+const CONTAS = ['gastar', 'treino'];
+const gravarConta = (chave, mud) => armazem.set({ [chave]: { ...(lerChave(chave) || {}), ...mud } });
+const gravarGasto = (nome, mud) => { for (const c of CONTAS) gravarConta(c + ':' + nome, mud); };
 async function calcularGasto(nome, motivo) {
   if (gastoRodando === nome || filaGasto.includes(nome)) return;
   if (gastoRodando) { filaGasto.push(nome); gravarGasto(nome, { estado: 'na-fila', motivo }); return; }
   gastoRodando = nome;
   clearTimeout(esperasGasto.get(nome)?.t); esperasGasto.delete(nome);
-  let ultimoAndar = 0, sig = null;
+  let sig = null;
   try { const b0 = Gastar.buildDoEstado(estados.get(nome), lerChave('cacada:' + nome)?.sessoes || []); sig = b0 && Gastar.assinatura(b0); } catch {}
-  // o andamento vai para o painel no máximo a cada 2 s (cada gravação no armazém vai para todas as páginas)
-  const andar = (etapa, a) => { if (Date.now() - ultimoAndar < 2000) return; ultimoAndar = Date.now(); gravarGasto(nome, { etapa, feito: a?.feito || 0, total: a?.total || 0 }); };
   try {
-    gravarGasto(nome, { estado: 'rodando', etapa: 'motor', feito: 0, total: 0, desde: Date.now(), motivo, erro: null });
-    const motor = await Simulador.motorPronto(pastaMotor());
-    const r = await Gastar.calcular({
-      estado: estados.get(nome), sessoes: lerChave('cacada:' + nome)?.sessoes || [], menores: lerChave('mercado:menores') || {},
-      motor: { sha: motor.sha.slice(0, 12), baixadoEm: motor.em, velho: !!motor.velho },
-      rodar: (jobs, etapa) => Simulador.rodarCombates({ pastaSim: path.join(__dirname, 'sim'), pastaJogo: pastaMotor(), jobs, aoAndar: (a) => andar(etapa, a) }),
-    });
-    armazem.set({ ['gastar:' + nome]: { ...r, motivo } });
-  } catch (e) {
-    gravarGasto(nome, { estado: 'erro', erro: String(e?.message || e).slice(0, 300), erroEm: Date.now(), erroAssinatura: sig });
+    // a primeira conta começa já; a segunda espera a vez
+    gravarGasto(nome, { estado: 'rodando', etapa: 'espera', feito: 0, total: 0, desde: Date.now(), motivo, erro: null });
+    let motor = null;
+    for (const conta of CONTAS) {
+      const chave = conta + ':' + nome;
+      let ultimoAndar = 0;
+      // o andamento vai para o painel no máximo a cada 2 s (cada gravação no armazém vai para todas as páginas)
+      const andar = (etapa, a) => { if (Date.now() - ultimoAndar < 2000) return; ultimoAndar = Date.now(); gravarConta(chave, { etapa, feito: a?.feito || 0, total: a?.total || 0 }); };
+      const rodar = (jobs, etapa) => Simulador.rodarCombates({ pastaSim: path.join(__dirname, 'sim'), pastaJogo: pastaMotor(), jobs, aoAndar: (a) => andar(etapa, a) });
+      gravarConta(chave, { etapa: motor ? 'triagem' : 'motor' });
+      try {
+        motor ||= await Simulador.motorPronto(pastaMotor());
+        const base = { estado: estados.get(nome), sessoes: lerChave('cacada:' + nome)?.sessoes || [], rodar };
+        const r = conta === 'gastar'
+          ? await Gastar.calcular({ ...base, menores: lerChave('mercado:menores') || {}, motor: { sha: motor.sha.slice(0, 12), baixadoEm: motor.em, velho: !!motor.velho } })
+          : await Treino.calcular(base);
+        armazem.set({ [chave]: { ...r, motivo } });
+      } catch (e) {
+        gravarConta(chave, { estado: 'erro', erro: String(e?.message || e).slice(0, 300), erroEm: Date.now(), erroAssinatura: sig });
+      }
+    }
   } finally {
     gastoRodando = null;
     const prox = filaGasto.shift();
@@ -480,8 +493,12 @@ function vigiarGasto(nome, e, agora = Date.now()) {
   }
   if (g?.esperandoFicha) gravarGasto(nome, { esperandoFicha: false });
   const sig = Gastar.assinatura(b);
-  const emDia = g?.assinatura === sig && agora - (g.em || 0) < GASTO.velho;
-  // depois de um erro, a mesma build espera 30 min (sem internet, por exemplo); uma build nova tenta já
+  // em dia: o Onde gastar o ouro pronto para esta build e com menos de 6 h, e os Pontos e barra prontos para ela ou já tendo falhado
+  // nela (um erro que se repete na mesma build, como o campeão não reconhecido, não faz a rodada inteira voltar a cada 30 min).
+  // Depois de um erro do Onde gastar o ouro, a mesma build espera 30 min (sem internet, por exemplo); uma build nova tenta já
+  const tr = lerChave('treino:' + nome);
+  const emDia = g?.estado === 'pronto' && g.assinatura === sig && agora - (g.em || 0) < GASTO.velho
+    && ((tr?.estado === 'pronto' && tr.assinatura === sig) || (tr?.estado === 'erro' && tr.erroAssinatura === sig));
   const esperaErro = g?.estado === 'erro' && g.erroAssinatura === sig && agora - (g.erroEm || 0) < GASTO.depoisDoErro;
   if (emDia || esperaErro) { if (pend) { clearTimeout(pend.t); esperasGasto.delete(nome); } return; }
   if (pend?.sig === sig) return;
@@ -735,7 +752,7 @@ app.whenReady().then(() => {
   recalcularAlertas();
   setInterval(recalcularAlertas, 30e3);      // o "sem leitura" nasce do tempo passando, não de um estado novo
   // uma conta que ficou na fila de um app fechado no meio não roda sozinha: volta ao estado anterior
-  for (const [k, v] of Object.entries(armazem.get(null))) if (k.startsWith('gastar:') && ['rodando', 'na-fila'].includes(v?.estado)) armazem.set({ [k]: { ...v, estado: v.opcoes ? 'pronto' : 'erro', erro: v.opcoes ? null : 'A conta parou no meio (o app fechou).', erroEm: 0 } });
+  for (const [k, v] of Object.entries(armazem.get(null))) if (/^(gastar|treino):/.test(k) && ['rodando', 'na-fila'].includes(v?.estado)) armazem.set({ [k]: { ...v, estado: v.assinatura ? 'pronto' : 'erro', erro: v.assinatura ? null : 'A conta parou no meio (o app fechou).', erroEm: 0 } });
   aplicarAcordado();
   prepararAtualizacao();
 });

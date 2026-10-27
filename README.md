@@ -1,6 +1,6 @@
 # Lupa
 
-A Lupa é um painel para o LoL Idle que **lê a tela**: nunca joga sozinha e não faz pedidos ao servidor do jogo por fora. Foi liberada pelo dono do jogo (Brunox), porque não dá vantagem, só ajuda a otimizar a jogabilidade. A extensão só lê; o app de PC clica no jogo em duas ações que o jogador pede, também liberadas por ele: o botão **Entregar e seguir** e o **Alt+L** (ver `app/ARQUITETURA.md`). O app também mostra **onde gastar o ouro**, simulando as compras no motor público do jogo numa página isolada.
+A Lupa é um painel para o LoL Idle que **lê a tela**: nunca joga sozinha e não faz pedidos ao servidor do jogo por fora. Foi liberada pelo dono do jogo (Brunox), porque não dá vantagem, só ajuda a otimizar a jogabilidade. A extensão só lê; o app de PC clica no jogo em duas ações que o jogador pede, também liberadas por ele: o botão **Entregar e seguir** e o **Alt+L** (ver `app/ARQUITETURA.md`). O app também mostra **onde gastar o ouro** e **para onde vão os pontos e qual barra usar**, simulando no motor público do jogo numa página isolada.
 
 ## Pastas
 

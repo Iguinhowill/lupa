@@ -13,6 +13,7 @@
   // ---------- estado ----------
   let config = mesclarConfig(), estados = {}, cacadas = {}, eventos = {}, icones = {}, menores = {}, escolhido = null, semBonus = false;
   let gastos = {};         // "gastar:<nome>" (no app); no site a conta vem dentro do estado que o app mandou (estado.gastar)
+  let treinos = {};        // "treino:<nome>" (no app); no site, estado.treino
   let filtro = 'tudo';
   let modo = null;         // 'todos' (lado a lado) | 'um' | null = automático (lado a lado com 2+ personagens lendo)
   let pip = null;          // janela de documentPictureInPicture, se aberta
@@ -26,6 +27,7 @@
     else if (k.startsWith('cacada:')) { if (v) cacadas[k.slice(7)] = v; else delete cacadas[k.slice(7)]; }
     else if (k.startsWith('eventos:')) { if (v) eventos[k.slice(8)] = v; else delete eventos[k.slice(8)]; }
     else if (k.startsWith('gastar:')) { if (v) gastos[k.slice(7)] = v; else delete gastos[k.slice(7)]; }
+    else if (k.startsWith('treino:')) { if (v) treinos[k.slice(7)] = v; else delete treinos[k.slice(7)]; }
   }
   // o botão Calcular do Onde gastar o ouro (só no app): o app recusou → o motivo aparece no cartão
   async function pedirGasto(nome) {
@@ -42,6 +44,7 @@
     get icones() { return icones; },
     get menores() { return menores; },
     get gastos() { return Object.fromEntries(Object.entries(estados).map(([n, e]) => [n, gastos[n] || e?.gastar]).filter(([, g]) => g)); },
+    get treinos() { return Object.fromEntries(Object.entries(estados).map(([n, e]) => [n, treinos[n] || e?.treino]).filter(([, g]) => g)); },
     calcularGasto: typeof globalThis.lupaApp?.gastar === 'function' ? pedirGasto : null,
     get semBonus() { return semBonus; },
     setSemBonus(v) { semBonus = !!v; desenhar(); },

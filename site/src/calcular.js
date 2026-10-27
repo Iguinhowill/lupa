@@ -474,9 +474,15 @@ function graficoCurva(larg, nivel, alvo) {
     if (!e) return cartao('Onde gastar o ouro', vazio('Ainda não tenho este personagem: a Lupa precisa enviar o personagem primeiro.'));
     return cartaoGastar(e, { gastos: e.gastar ? { [quem]: e.gastar } : {}, redesenhar: desenhar }, { completo: true });
   }
+  // ================= 6) pontos e barra (também do app, na mesma rodada) =================
+  function abaTreino() {
+    const e = estados[quem];
+    if (!e) return cartao('Pontos e barra', vazio('Ainda não tenho este personagem: a Lupa precisa enviar o personagem primeiro.'));
+    return cartaoTreino(e, { treinos: e.treino ? { [quem]: e.treino } : {}, redesenhar: desenhar }, { completo: true });
+  }
 
   // ================= página =================
-  const ABAS = [['nivel', 'Tempo até o nível'], ['gastar', 'Onde gastar o ouro'], ['forja', 'Forja do Ornn'], ['venda', 'Valor de venda'], ['comparar', 'Comparar builds']];
+  const ABAS = [['nivel', 'Tempo até o nível'], ['gastar', 'Onde gastar o ouro'], ['treino', 'Pontos e barra'], ['forja', 'Forja do Ornn'], ['venda', 'Valor de venda'], ['comparar', 'Comparar builds']];
   // quem estava com o foco: o id, ou o botão de um grupo de chips pelo texto (os chips não têm id)
   const chaveFoco = (el) => !el || el === document.body ? null : el.id ? { id: el.id } : el.closest('[role=group]') ? { grupo: el.closest('[role=group]').getAttribute('aria-label'), texto: el.textContent } : null;
   function devolverFoco(k) {
@@ -494,7 +500,7 @@ function graficoCurva(larg, nivel, alvo) {
       h('h1', null, 'Calculadoras', h('small', null, 'Estimativas com as tabelas públicas do jogo. O site só calcula: não mexe no jogo.')),
       chips('Calculadora', ABAS, aba, (v) => { aba = v; gravarPref('calc-aba', v); desenhar(); }),
       nomes.length > 1 ? chips('Personagem', nomes.map((n) => [n, nomeCurto(n)]), quem, (v) => { quem = v; gravarPref('calc-quem', v); desenhar(); }) : null);
-    raiz.replaceChildren(cab, aba === 'forja' ? abaForja() : aba === 'venda' ? abaVenda() : aba === 'comparar' ? abaComparar() : aba === 'gastar' ? abaGastar() : abaNivel(), rodape());
+    raiz.replaceChildren(cab, aba === 'forja' ? abaForja() : aba === 'venda' ? abaVenda() : aba === 'comparar' ? abaComparar() : aba === 'gastar' ? abaGastar() : aba === 'treino' ? abaTreino() : abaNivel(), rodape());
     raiz.removeAttribute('aria-busy');
     devolverFoco(ativo);
   }

@@ -170,6 +170,15 @@ function gastoParaNuvem(g) {
     opcoes: g.opcoes.map((l) => soCampos(l, CAMPOS_LINHA)), semGanho: (g.semGanho || []).map((l) => soCampos(l, CAMPOS_LINHA)) };
 }
 
+// a última conta pronta dos Pontos e barra, só com o que o cartão desenha
+const CAMPOS_TREINO = ['v', 'em', 'nivel', 'zona', 'campeao', 'livres', 'barraAtual', 'sim'];
+const CAMPOS_LINHA_TREINO = ['parte', 'titulo', 'nivel', 'ganho', 'erro', 'rende', 'xpH', 'ouroH', 'mortesH'];
+function treinoParaNuvem(g) {
+  if (!g?.assinatura || !(g.habilidade || g.atributo || g.barra)) return null;
+  const parte = (p) => (p ? { ...soCampos(p, ['nivel', 'pontos', 'testadas']), opcoes: (p.opcoes || []).map((l) => soCampos(l, CAMPOS_LINHA_TREINO)) } : null);
+  return { ...soCampos(g, CAMPOS_TREINO), estado: 'pronto', habilidade: parte(g.habilidade), atributo: parte(g.atributo), barra: parte(g.barra) };
+}
+
 async function enviarTudo() {
   const s = await nuvemSessao();
   if (!s) return;
@@ -180,10 +189,11 @@ async function enviarTudo() {
   try {
     // a última leitura de cada personagem, com a última conta do Onde gastar o ouro (só o app calcula: "gastar:<nome>") dentro
     m.gastar ||= {};
-    const gastoDe = (e) => gastoParaNuvem(tudo['gastar:' + e.nome]);
-    const novos = estados.filter((e) => e.ts > (m.estado[e.nome] || 0) || (gastoDe(e)?.em || 0) > (m.gastar[e.nome] || 0));
-    await gravar(s, 'estados', novos.map((e) => ({ dono: s.uid, personagem: e.nome, lido_em: iso(e.ts), nivel: numeroDe(e.nivel), zona: e.zona || null, dados: { ...e, gastar: gastoDe(e) } })), 'dono,personagem', 'merge-duplicates');
-    for (const e of novos) { m.estado[e.nome] = e.ts; m.gastar[e.nome] = gastoDe(e)?.em || 0; }
+    const gastoDe = (e) => gastoParaNuvem(tudo['gastar:' + e.nome]), treinoDe = (e) => treinoParaNuvem(tudo['treino:' + e.nome]);
+    const contaEm = (e) => Math.max(gastoDe(e)?.em || 0, treinoDe(e)?.em || 0);
+    const novos = estados.filter((e) => e.ts > (m.estado[e.nome] || 0) || contaEm(e) > (m.gastar[e.nome] || 0));
+    await gravar(s, 'estados', novos.map((e) => ({ dono: s.uid, personagem: e.nome, lido_em: iso(e.ts), nivel: numeroDe(e.nivel), zona: e.zona || null, dados: { ...e, gastar: gastoDe(e), treino: treinoDe(e) } })), 'dono,personagem', 'merge-duplicates');
+    for (const e of novos) { m.estado[e.nome] = e.ts; m.gastar[e.nome] = contaEm(e); }
 
     // um pulso a cada 5 min de quem está lendo agora: o buraco entre pulsos é o tempo parado
     const pulsos = estados.filter((e) => agora - e.ts < FRESCO && agora - (m.pulso[e.nome] || 0) >= PULSO - 20e3).map((e) => {

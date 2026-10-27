@@ -163,11 +163,13 @@ function candidatos(b, { menores = {}, agora = Date.now() } = {}) {
         custo: v.ouro + tirar, precoEm: v.em, equip: comItem(b, k, novo) });
     }
   }
-  // 5) reset de atributos (Mestre da Legião): tudo no atributo de dano, ou parte dele em Agilidade (ataque) / Foco (habilidade)
-  const total = Object.values(b.atrib).reduce((s, v) => s + v, 0), outro = b.perfil === 'ap' ? 'foco' : 'agilidade';
+  // 5) reset de atributos (Mestre da Legião): tudo no atributo de dano, ou parte dele em Agilidade ou Foco
+  // (Foco também para quem bate com ataque: ele aumenta o dano das habilidades de quem não usa mana, e no Yasuo e no Aphelios empatou
+  // com Força na simulação de 27/10)
+  const total = Object.values(b.atrib).reduce((s, v) => s + v, 0), outros = b.perfil === 'ap' ? ['foco'] : ['agilidade', 'foco'];
   if (total > 0) {
     const vazio = Object.fromEntries(ATRIBUTOS.map(([k]) => [k, 0])), nomes = Object.fromEntries(ATRIBUTOS);
-    const variantes = [{ ...vazio, forca: total }, ...[0.15, 0.3].map((p) => ({ ...vazio, forca: total - Math.round(p * total), [outro]: Math.round(p * total) }))];
+    const variantes = [{ ...vazio, forca: total }, ...outros.flatMap((outro) => [0.15, 0.3].map((p) => ({ ...vazio, forca: total - Math.round(p * total), [outro]: Math.round(p * total) })))];
     for (const a of variantes) {
       if (ATRIBUTOS.every(([k]) => a[k] === b.atrib[k])) continue;
       const txt = ATRIBUTOS.filter(([k]) => a[k]).map(([k]) => `${nomes[k]} ${a[k]}`).join(', ');
@@ -178,9 +180,10 @@ function candidatos(b, { menores = {}, agora = Date.now() } = {}) {
   return lista;
 }
 
-// os combates de uma etapa: a build atual ("base") e cada opção, com as mesmas sementes
-const jobsDe = (b, opcoes, sim) => [{ id: 'base' }, ...opcoes].map((c) => ({
-  id: c.id, habs: b.habs, nivel: b.nivel, zona: b.zona.id, atrib: c.atrib || b.atrib, ranks: b.ranks, barra: b.barra,
+// os combates de uma etapa: a build atual ("base") e cada opção, com as mesmas sementes. A opção pode mudar itens, atributos, ranks,
+// barra e nível (o treino.js compara o próximo ponto no nível de cima, contra uma base nesse nível)
+const jobsDe = (b, opcoes, sim, bases = [{ id: 'base' }]) => [...bases, ...opcoes].map((c) => ({
+  id: c.id, habs: b.habs, nivel: c.nivel || b.nivel, zona: b.zona.id, atrib: c.atrib || b.atrib, ranks: c.ranks || b.ranks, barra: c.barra || b.barra,
   itens: (c.equip || b.equip).map(chaveDe), minutos: sim.minutos, sementes: sim.sementes,
 }));
 // ganho da opção contra a base, semente a semente (as duas caçadas com a mesma semente começam iguais): { ganho, erro } em fração;
@@ -265,4 +268,4 @@ async function calcular({ estado, sessoes = [], menores = {}, agora = Date.now()
   return resumir({ b, opcoes: escolhidas, conferir, sessoes, agora, motor, testadas: opcoes.length });
 }
 
-module.exports = { calcular, buildDoEstado, assinatura, candidatos, jobsDe, ganhoPareado, escolherParaConferir, economiaMedida, resumir, numero, lerItem, nomeCarta, cartaPorNome, SIM, SIGNIFICATIVO };
+module.exports = { calcular, buildDoEstado, assinatura, candidatos, jobsDe, ganhoPareado, escolherParaConferir, economiaMedida, economiaSimulada, resumir, numero, lerItem, nomeCarta, cartaPorNome, SIM, SIGNIFICATIVO, ATRIBUTOS };
