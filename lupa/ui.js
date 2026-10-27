@@ -18,10 +18,13 @@
 const COR_RARIDADE = { basico: '#d0d0d0', epico: '#c88aff', lendario: '#ffc040', mitico: '#ff5a78' };
 const PADRAO = {
   esconderLoot: false, tema: true, semBonusLateral: false, semRedes: false, novaSessao: 0,
-  manterAcordado: false, lateralFechada: false,
+  manterAcordado: false, lateralFechada: false, novaSessaoPor: {},
   recolhidos: { status: false, local: false, abas: false },
-  avisos: { kick: true, twitch: true, voto: true, tarefa: true, evento: true, convites: false, mochila: true, chao: true, morte: true, pontos: true, nivel: true }
+  avisos: { kick: true, twitch: true, voto: true, tarefa: true, evento: true, convites: false, mochila: true, chao: true, morte: true, pontos: true, nivel: true,
+    premio: true, diaria: true, guerra: true, vilemaw: true, covil: true, reinicio: true, lendario: true }
 };
+// mesma cor de --borda-forte do CSS (o atributo style não enxerga as variáveis do :root)
+const COR_BORDA_FORTE = '#3a4150';
 const PAUSA = 15 * 60e3, BALDE = 5 * 60e3;
 
 // Mescla o config salvo com os padrões (inclusive os objetos aninhados).
@@ -38,6 +41,15 @@ const hora = (ts) => new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit',
 const dataHora = (ts) => new Date(ts).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 const porHora = (v, seg) => (seg >= 60 ? v / (seg / 3600) : null);
 const ouTraco = (v, f = curto) => (v == null ? '—' : f(v));
+const mult = (n) => '×' + Number(n).toFixed(2).replace('.', ',');
+// ms até a meia-noite de Brasília (o jogo vira o dia lá); o fuso vem do Intl, não é fixo
+function msAteViradaDia(agora = Date.now()) {
+  try {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Sao_Paulo', hourCycle: 'h23', hour: 'numeric', minute: 'numeric', second: 'numeric' }).formatToParts(agora).map((x) => [x.type, x.value]));
+    return (86400 - (+p.hour * 3600 + +p.minute * 60 + +p.second)) * 1000;
+  } catch { return null; }
+}
+const textoVirada = (ms) => { const m = Math.ceil(ms / 60e3); return `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min`; };
 
 // ---------- DOM ----------
 function h(tag, props, ...filhos) {
@@ -81,7 +93,7 @@ const chave = (ligada, texto, aoMudar) => h('button', { type: 'button', class: '
 // Imagem copiada do jogo (dataURL em ctx.icones). Sem ela, um quadrado com borda na cor da raridade.
 // opções: tam (px, padrão 32), raridade, selo (texto curto sobreposto no canto, ex.: refino+qualidade), alt.
 function imagem(chaveIcone, ctx, { tam = 32, raridade, selo, alt } = {}) {
-  const cor = COR_RARIDADE[raridade] || '#3a4150';
+  const cor = COR_RARIDADE[raridade] || COR_BORDA_FORTE;
   const url = chaveIcone && ctx?.icones?.[chaveIcone];
   const base = url
     ? h('img', { class: 'img-ico', src: url, alt: alt ?? '', width: tam, height: tam, style: `border-color:${cor}` })
@@ -142,7 +154,7 @@ function desenharFicha(e, ctx, opts = {}) {
   const stats = [
     ...(f.atributos || []).filter((a) => a.valor && a.valor !== '0').map((a) => [a.nome, a.valor]),
     ['Dano', st.dano], ['Poder de hab.', st.poderHab], ['Vel. ataque', st.velAtaque], ['Crítico', st.critico],
-    ['Dano crítico', st.danoCritico], ['Recarga', st.recarga], ['Armadura', st.armadura], ['Res. mágica', st.resMagica], ['Poder', st.poder]
+    ['Dano crítico', st.danoCritico], ['Recarga', st.recarga], ['Esquiva', st.esquiva], ['Armadura', st.armadura], ['Res. mágica', st.resMagica], ['Poder', st.poder]
   ].filter(([, v]) => v);
   return h('div', { class: 'pilha' },
     opts.semPlano ? null : desenharPlano(e, ctx, { compacto: true }),
@@ -186,19 +198,25 @@ function barraXp(e, ctx) {
 // ---------- Caçada ----------
 const zonaPrincipal = (sessao) => Object.entries(sessao.zonas || {}).sort((a, b) => b[1].seg - a[1].seg)[0]?.[0] || '';
 
-function grafico(sessao, campo, ativa) {
+let serieGrafico = 'xp';   // 'xp' | 'abates': qual série o gráfico da caçada mostra (uma de cada vez, sem dois eixos)
+function grafico(sessao, campoXp, ativa, ctx) {
   const baldes = (sessao.baldes || []).filter((b) => !(ativa && b.t + BALDE > Date.now())).slice(-24);
   if (baldes.length < 2) return nota('O gráfico aparece depois de uns 10 minutos de caçada.');
-  const max = Math.max(...baldes.map((b) => b[campo])) || 1, passo = 320 / (baldes.length - 1);
-  const pontos = baldes.map((b, k) => `${(k * passo).toFixed(1)},${(66 - (b[campo] / max) * 60).toFixed(1)}`).join(' ');
+  const abates = serieGrafico === 'abates', campo = abates ? 'abates' : campoXp, nomeSerie = abates ? 'Abates' : 'XP';
+  const val = (b) => b[campo] || 0, fmt = abates ? inteiro : curto;
+  const max = Math.max(...baldes.map(val)) || 1, passo = 320 / (baldes.length - 1);
+  const pontos = baldes.map((b, k) => `${(k * passo).toFixed(1)},${(66 - (val(b) / max) * 60).toFixed(1)}`).join(' ');
   const trocas = baldes.map((b, k) => (k && b.zona !== baldes[k - 1].zona ? k : null)).filter((k) => k != null);
-  const media = baldes.reduce((t, b) => t + b[campo], 0) / baldes.length;
+  const media = baldes.reduce((t, b) => t + val(b), 0) / baldes.length;
   return h('div', { class: 'cartao grafico' },
-    h('span', { class: 'fraco', style: 'font-size:13px' }, 'XP a cada 5 min'),
-    s('svg', { viewBox: '0 0 320 70', preserveAspectRatio: 'none', role: 'img', 'aria-label': `XP a cada 5 minutos: média de ${curto(media)}, máximo de ${curto(max)}` },
+    h('div', { class: 'linha-topo' },
+      h('span', { class: 'fraco', style: 'font-size:13px' }, `${nomeSerie} a cada 5 min`),
+      h('div', { class: 'segmento mini-seg', role: 'group', 'aria-label': 'Série do gráfico' },
+        [['xp', 'XP'], ['abates', 'Abates']].map(([id, nome]) => h('button', { type: 'button', 'aria-pressed': String(serieGrafico === id), onclick: () => { serieGrafico = id; ctx?.redesenhar?.(); } }, nome)))),
+    s('svg', { viewBox: '0 0 320 70', preserveAspectRatio: 'none', role: 'img', 'aria-label': `${nomeSerie} a cada 5 minutos: média de ${fmt(media)}, máximo de ${fmt(max)}` },
       trocas.map((k) => s('line', { class: 'guia', x1: k * passo, y1: 0, x2: k * passo, y2: 70 })),
       s('polyline', { class: 'linha', points: pontos })),
-    h('div', { class: 'eixo' }, h('span', null, hora(baldes[0].t)), h('span', null, hora(baldes.at(-1).t + BALDE))),
+    h('div', { class: 'eixo' }, h('span', null, hora(baldes[0].t)), h('span', null, `média ${fmt(media)} · máx. ${fmt(max)}`), h('span', null, hora(baldes.at(-1).t + BALDE))),
     trocas.length ? nota(trocas.map((k) => `${baldes[k - 1].zona} → ${baldes[k].zona} às ${hora(baldes[k].t)}`).join(' · ')) : null);
 }
 
@@ -224,6 +242,11 @@ function desenharCacada(e, ctx) {
   const zonas = Object.entries(x.zonas || {}).filter(([, z]) => z.seg >= 30 || z.abates).sort((a, b) => b[1].seg - a[1].seg);
   const drops = Object.entries(x.drops || {}).sort((a, b) => b[1] - a[1]).slice(0, 6);
   const anteriores = sessoes.slice(0, -1).slice(-5).reverse();
+  // melhor zona por XP/h: só entre as que têm 2 min para a taxa valer, e se houver mais de uma para comparar
+  const taxaZona = (z) => (z.seg >= 120 ? porHora(z[campo], z.seg) : null);
+  const candidatas = zonas.filter(([, z]) => taxaZona(z) > 0);
+  const melhor = candidatas.length >= 2 ? candidatas.reduce((m, c) => (taxaZona(c[1]) > taxaZona(m[1]) ? c : m))[0] : null;
+  const novaDe = Math.max(config.novaSessao || 0, config.novaSessaoPor?.[e.nome] || 0);
   return h('div', { class: 'pilha' },
     h('div', { class: 'linha-topo' },
       h('b', null, `${ativa ? 'Sessão atual' : `Última sessão (até ${hora(x.fim)})`} · ${duracao(x.seg)} caçando`),
@@ -235,18 +258,21 @@ function desenharCacada(e, ctx) {
       stat('Abates/h', ouTraco(porHora(x.abates, x.seg), inteiro), 'grande'),
       stat('XP/h', ouTraco(porHora(x[campo], x.seg)), 'grande destaque'),
       stat('Ouro/h', ouTraco(porHora(x.ouro, x.seg)), 'grande')),
+    e.bonus && (e.bonus.xp > 1 || e.bonus.ouro > 1) ? h('p', { class: 'bonus-mult', title: 'Multiplicador somado dos bônus ativos' },
+      'Bônus agora: ', [e.bonus.xp > 1 ? `XP ${mult(e.bonus.xp)}` : null, e.bonus.ouro > 1 ? `ouro ${mult(e.bonus.ouro)}` : null].filter(Boolean).join(' · ')) : null,
     nota(`${inteiro(x.abates)} abates · ${curto(x[campo])} de XP · ${curto(x.ouro)} de ouro · ${x.mortes} ${x.mortes === 1 ? 'morte' : 'mortes'}`
       + (semBonus ? '. Sem bônus de live é uma estimativa: tira o bônus da Kick e da Twitch de cada abate.' : '')),
-    grafico(x, campo, ativa),
+    grafico(x, campo, ativa, ctx),
     zonas.length ? secao('Por zona', h('div', { class: 'tabela' },
       ['Zona', 'Tempo', 'Abates/h', 'XP/h'].map((c) => h('span', { class: 'cab' }, c)),
-      zonas.map(([nome, z]) => [h('span', { class: 'forte', title: nome }, nome), h('span', null, duracao(z.seg)),
-        h('span', { class: 'num' }, ouTraco(porHora(z.abates, z.seg), inteiro)), h('span', { class: 'num' }, ouTraco(porHora(z[campo], z.seg)))]))) : null,
+      zonas.map(([nome, z]) => { const mz = nome === melhor ? ' melhor' : ''; return [h('span', { class: 'forte' + mz, title: mz ? `${nome} · melhor XP/h` : nome }, mz ? '★ ' : '', nome), h('span', { class: mz.trim() }, duracao(z.seg)),
+        h('span', { class: 'num' + mz }, ouTraco(porHora(z.abates, z.seg), inteiro)), h('span', { class: 'num' + mz }, ouTraco(porHora(z[campo], z.seg)))]; }),
+      melhor ? h('span', { class: 'nota tabela-nota' }, '★ melhor XP/h entre as zonas desta sessão') : null)) : null,
     drops.length ? secao('O que caiu nesta sessão', h('ul', { class: 'lista-simples' }, drops.map(([n, q]) => h('li', { class: 'com-img' }, imagem(n, ctx, { tam: 24 }), `${inteiro(q)}× ${n}`)))) : null,
     h('div', { class: 'botoes' },
-      h('button', { type: 'button', class: 'botao', onclick: () => ctx.salvarConfig({ novaSessao: Date.now() }) }, 'Nova sessão'),
+      h('button', { type: 'button', class: 'botao', onclick: () => ctx.salvarConfig({ novaSessaoPor: { ...config.novaSessaoPor, [e.nome]: Date.now() } }) }, 'Nova sessão'),
       h('button', { type: 'button', class: 'botao', onclick: () => exportarCsv(e.nome, sessoes) }, 'Exportar CSV')),
-    config.novaSessao > x.ini ? nota('Uma sessão nova começa no próximo abate.') : null,
+    novaDe > x.ini ? nota('Uma sessão nova começa no próximo abate.') : null,
     anteriores.length ? secao('Sessões anteriores', h('div', { class: 'tabela' },
       ['Início', 'Tempo', 'Abates/h', 'XP/h'].map((c) => h('span', { class: 'cab' }, c)),
       anteriores.map((a) => [h('span', { class: 'forte', title: zonaPrincipal(a) }, `${dataHora(a.ini)} · ${zonaPrincipal(a)}`), h('span', null, duracao(a.seg)),
@@ -254,9 +280,40 @@ function desenharCacada(e, ctx) {
     nota('Conta só o tempo caçando (com abate no último minuto), pelas linhas de loot do chat do servidor.'));
 }
 
+// ---------- Hoje ainda falta ----------
+// Lista o que está pendente hoje (só o que existe nos dados) e quanto falta para virar o dia em Brasília.
+function itensHoje(e) {
+  const r = e.rastreio || {}, itens = [];
+  if (r.login) itens.push({ ic: 'estrela', tom: 'ouro', texto: r.login.dia ? `Prêmio diário (dia ${r.login.dia}) ainda não pego` : r.login.texto || 'Prêmio diário ainda não pego' });
+  for (const d of e.diarias || []) {
+    if (d.pronta) itens.push({ ic: 'ok', tom: 'ouro', texto: `Entregar a diária: ${d.nome}`, sub: d.texto });
+    else itens.push({ ic: 'proximo', tom: d.fora ? 'laranja' : '', texto: `Diária: ${d.nome}`, sub: d.texto });
+  }
+  if (r.covil?.livre) itens.push({ ic: 'info', tom: 'verde', texto: r.covil.texto || 'Covil liberado' });
+  if (r.vilemaw?.ativa) itens.push({ ic: 'alerta', tom: 'laranja', texto: r.vilemaw.texto || 'Vilemaw acordada' });
+  if (r.guerra) {
+    const fase = { agendada: 'agendada', aberta: 'aberta', acontecendo: 'acontecendo agora' }[r.guerra.fase] || '';
+    itens.push({ ic: 'coroa', tom: r.guerra.fase === 'acontecendo' ? 'laranja' : '', texto: r.guerra.texto || `Guerra de Guildas ${fase}`.trim() });
+  }
+  return itens;
+}
+
+function cartaoHoje(e) {
+  const itens = itensHoje(e), ms = msAteViradaDia(), virada = ms == null ? '' : `vira o dia em ${textoVirada(ms)}`;
+  if (!itens.length) return h('section', { class: 'cartao hoje vazio-hoje', 'aria-label': 'Hoje ainda falta' },
+    icone('ok', 16), h('span', null, 'Nada pendente hoje', virada ? h('span', { class: 'fraco' }, ` · ${virada}`) : null));
+  return h('section', { class: 'cartao hoje', 'aria-label': 'Hoje ainda falta' },
+    h('div', { class: 'linha-topo' }, h('h2', { class: 'rotulo' }, 'Hoje ainda falta'), virada ? h('span', { class: 'fraco hoje-virada' }, virada) : null),
+    h('ul', { class: 'plano-lista' }, itens.map((i) => h('li', { class: 'plano-linha hoje-' + (i.tom || 'neutro') },
+      h('span', { class: 'plano-ico' }, icone(i.ic, 16)),
+      h('span', null, i.texto, i.sub ? h('span', { class: 'hoje-sub' }, i.sub) : null)))));
+}
+
 // ---------- Tarefa ----------
-function desenharTarefa(e, ctx) {
+// opts.semHoje: a Central põe o cartão "Hoje ainda falta" em outro lugar
+function desenharTarefa(e, ctx, opts = {}) {
   const t = e.tarefa, partes = [];
+  if (!opts.semHoje) partes.push(cartaoHoje(e));
   if (!t) partes.push(vazio('Nenhuma tarefa ativa. Pegue uma com o Capitão da Legião, na Fonte.'));
   else {
     if (t.pronta) partes.push(h('div', { class: 'alerta pronta', role: 'status' }, icone('estrela', 20), h('span', null, 'Tarefa pronta! Volte à Fonte e fale com o Capitão da Legião.')));
@@ -299,12 +356,30 @@ function desenharTimers(e, ctx) {
     { nome: 'Bônus da guilda', detalhe: '1% por membro online, até 4%', valor: t.guilda || '—', ativo: !!t.guilda },
     { nome: 'VIP', detalhe: t.vip?.dica || '', valor: (t.vip?.texto || '—').replace(/^VIP\s*/, '').replace(/^(\d+)d$/, (_, n) => `${n} ${n === '1' ? 'dia' : 'dias'}`) || 'sem VIP', ativo: false }
   ];
+  // buffs novos: só aparecem enquanto ativos (texto vazio = inativo)
+  for (const [k, nome, detalhe] of [['barao', 'Bônus do Barão', 'Barão Nashor derrotado'], ['guerra', 'Bônus da Guerra ×2', 'prêmio da Guerra de Guildas'], ['lojaXp', 'Loja: bônus de XP', ''], ['lojaOuro', 'Loja: bônus de ouro', ''], ['disciplina', 'Disciplina', '']]) {
+    if (t[k]) linhas.push({ nome, detalhe, valor: t[k], ativo: true });
+  }
+  const r = e.rastreio || {}, info = [], fases = { agendada: 'agendada', aberta: 'aberta', acontecendo: 'acontecendo agora' };
+  if (r.guerra) info.push({ nome: r.guerra.texto || 'Guerra de Guildas', detalhe: fases[r.guerra.fase] || '', valor: '', ativo: r.guerra.fase !== 'agendada', extra: r.guerra.pronto === true ? 'pronto' : r.guerra.pronto === false ? 'não pronto' : '' });
+  if (r.vilemaw) info.push({ nome: r.vilemaw.texto || 'Vilemaw', detalhe: '', valor: '', ativo: !!r.vilemaw.ativa });
+  if (r.covil) info.push({ nome: r.covil.texto || 'Covil', detalhe: '', valor: '', ativo: !!r.covil.livre });
+  for (const c of r.chaves || []) info.push({ nome: `Chave: ${c.nome}`, detalhe: c.acabando ? 'acabando' : '', valor: c.resta || '—', ativo: false, alerta: !!c.acabando });
+  if (r.sorteio) info.push({ nome: r.sorteio.texto || 'Sorteio', detalhe: r.sorteio.participando ? '' : 'você não entrou', valor: '', ativo: !!r.sorteio.participando });
+  if (r.caveira) info.push({ nome: r.caveira.texto || 'Caveira', detalhe: '', valor: '', ativo: false, alerta: !!r.caveira.vermelha });
+  const reinicio = r.reinicio ? h('div', { class: 'alerta ' + (r.reinicio.urgente ? 'fora' : 'pronta'), role: r.reinicio.urgente ? 'alert' : 'status' }, icone('relogio', 20),
+    h('span', null, h('b', null, 'Reinício do servidor'), ' · ', r.reinicio.texto)) : null;
   return h('div', { class: 'pilha' },
+    reinicio,
     h('div', { class: 'secao' }, linhas.map((l) => h('div', { class: 'timer' },
       h('div', { class: 'meio' }, h('b', null, l.nome), l.detalhe ? h('span', null, l.detalhe) : null),
       h('span', { class: 'valor' + (l.ativo ? ' ativo' : '') }, l.valor),
       l.sino ? h('button', { type: 'button', class: 'sino', 'aria-pressed': String(!!avisos[l.sino]), 'aria-label': `${avisos[l.sino] ? 'Desligar' : 'Ligar'} aviso ${l.fala}: ${l.nome}`, title: `Avisar ${l.fala}`, onclick: () => ctx.alternarAviso(l.sino) }, icone('sino', 20))
         : h('span', { class: 'sem-sino' })))),
+    info.length ? secao('No jogo agora', info.map((l) => h('div', { class: 'timer' },
+      h('div', { class: 'meio' }, h('b', { class: l.alerta ? 'perigo' : '' }, l.nome), l.detalhe ? h('span', null, l.detalhe) : null),
+      l.extra ? h('span', { class: 'pilula' + (l.extra === 'pronto' ? '' : ' neutra') }, l.extra) : null,
+      l.valor ? h('span', { class: 'valor longo' + (l.ativo ? ' ativo' : '') + (l.alerta ? ' perigo' : '') }, l.valor) : null))) : null,
     nota('O sino avisa por notificação do navegador. A Lupa não renova bônus nem clica em nada.'));
 }
 

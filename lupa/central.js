@@ -143,6 +143,7 @@
           h('span', null, [e.nivel && `nível ${e.nivel}`, e.zona].filter(Boolean).join(' · '))),
         h('span', { class: 'status ' + st.classe }, st.curto)),
       ...resumo(e, ctx, { drops: 0 }),
+      cartaoHoje(e),
       desenharPlano(e, ctx, { compacto: true }),
       secao('Ao vivo', desenharFeed(eventos[e.nome], ctx, { limite: 20, filtro })));
   }
@@ -201,7 +202,7 @@
     else {
       grade.replaceChildren(
         coluna('Ao vivo', filtros(), desenharFeed(eventos[e.nome], ctx, { limite: 40, filtro })),
-        coluna('Caçada e tarefa', desenharCacada(e, ctx), desenharTarefa(e, ctx), desenharTimers(e, ctx)),
+        coluna('Caçada e tarefa', cartaoHoje(e), desenharCacada(e, ctx), desenharTarefa(e, ctx, { semHoje: true }), desenharTimers(e, ctx)),
         coluna('Plano e ficha', desenharPlano(e, ctx, { compacto: false }), desenharFicha(e, ctx, { semPlano: true })));
     }
     desenharPip(e);
@@ -272,6 +273,7 @@
   }
 
   // ---------- início ----------
+  if (globalThis.lupaApp) { const r = DOC.querySelector('.rodape span'); if (r) r.textContent = 'Só leitura: não clica e não aperta teclas.'; }
   chrome.storage.local.get(null).then((tudo) => { for (const [k, v] of Object.entries(tudo)) guardar(k, v); desenhar(); });
   chrome.storage.onChanged.addListener((mud, area) => {
     if (area !== 'local') return;
