@@ -11,7 +11,7 @@
     "preparar": "node copiar-lupa.mjs",
     "start": "node copiar-lupa.mjs && electron .",
     "dist": "node copiar-lupa.mjs && electron-builder --win --publish never",
-    "test": "node --test regras.test.js"
+    "test": "node --test regras.test.js armazem.test.js"
   },
   "dependencies": {
     "electron-updater": "6.8.10"

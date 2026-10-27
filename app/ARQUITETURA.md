@@ -12,7 +12,7 @@ O código da Lupa (pasta `../lupa`, que continua sendo também a extensão do Ch
 | Arquivo | Onde roda | O que faz |
 |---|---|---|
 | `main.js` | processo principal | janela, abas (WebContentsView), armazém, envio.js num `vm`, avisos, PC acordado, atualização |
-| `armazem.js` | processo principal | o `chrome.storage.local` do app: um JSON em `userData/lupa-dados.json` |
+| `armazem.js` | processo principal | o `chrome.storage.local` do app: um JSON em `userData/lupa-dados.json`, gravado 1,5 s depois da última mudança e no máximo 10 s depois da primeira; a versão anterior fica em `.bak`, lida se o principal estiver estragado; casos em `armazem.test.js` |
 | `regras.js` | processo principal | regras de navegação da aba do jogo e das janelas de login (`DA_CONTA`, `DO_JOGO`, `NO_LOGIN`, `DO_GOOGLE`, `permitido`); casos em `regras.test.js`, rodar com `npm test` |
 | `shim-jogo.js` | preload das abas do jogo | o objeto `chrome` que o `content.js` usa (só no mundo isolado, nunca exposto à página) |
 | `gerado/preload-jogo.js` | preload das abas do jogo | `shim-jogo.js` + `../lupa/content.js`, rodando no DOMContentLoaded só em lolidle.com |
