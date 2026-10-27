@@ -319,11 +319,21 @@
       await chrome.storage.local.set({ [chave]: lista });
     }).catch(() => {});
   }
+  // desde 26/10 os lendários e míticos são sorteados no servidor: não vêm mais na linha "Loot de", e sim numa linha
+  // própria que já traz a qualidade (aplicarLendarios no jogo.js)
+  const RE_LENDARIO = /^(?:Caiu|(A tarefa também rendeu)) (.+) \(qualidade (C|B|A|S|SS)\)!$/;
   function lerOutra(p, corpo) {
     if (!base) return;
     const tipo = p.className || '';
     let m;
-    if ((m = corpo.match(/^(.+) foi avaliado: qualidade (C|B|A|S|SS)\.?$/))) avaliado(m[1].replace(/\s\+\d+$/, '').trim(), m[2]);
+    if ((m = corpo.match(RE_LENDARIO))) {
+      const item = m[2].replace(/\s\+\d+$/, '').trim();
+      registrar('drop', item, m[1] ? 'Prêmio da tarefa' : 'Caiu na caçada', { item, qual: m[3], servidor: true });
+    } else if (/^Caiu um lendário, mas a mochila está cheia/.test(corpo)) {
+      if (config.avisos.mochila) avisar('mochila', 'Mochila cheia', 'Caiu um lendário: ele espera até você abrir um espaço.');
+    } else if ((m = corpo.match(/^O servidor descartou (.+?): lendários seguidos demais/))) {
+      if (config.avisos.chao) avisar('chao', 'Lendário descartado', `O servidor descartou ${m[1]}.`);
+    } else if ((m = corpo.match(/^(.+) foi avaliado: qualidade (C|B|A|S|SS)\.?$/))) avaliado(m[1].replace(/\s\+\d+$/, '').trim(), m[2]);
     else if ((m = corpo.match(/^Sua mochila está cheia! (.+?) ficou no chão\.?$/))) {
       registrar('chao', 'Item ficou no chão', corpo, { item: m[1].replace(RE_QUAL, '').replace(/\s\+\d+$/, '').trim() });
       if (config.avisos.chao) avisar('chao', 'Mochila cheia', corpo);
@@ -335,7 +345,8 @@
     const agora = Date.now();
     atualizarConjuntos();
     evFila = evFila.filter((ev) => ev.tipo !== 'drop' || !ehEspolioOuRuna(ev.item));
-    for (const ev of evFila) if (ev.tipo === 'drop' && !ev.raridade) ev.raridade = nomesRaridade.get(ev.item) || '';
+    // o sorteado no servidor é lendário ou mítico: se a mochila não disser qual em 3 s, fica lendário
+    for (const ev of evFila) if (ev.tipo === 'drop' && !ev.raridade) ev.raridade = nomesRaridade.get(ev.item) || (ev.servidor && agora - ev.ts > 3000 ? 'lendario' : '');
     // drop sem raridade conhecida espera um pouco: o item pode ainda não ter chegado na mochila lida
     const prontos = evFila.filter((ev) => ev.tipo !== 'drop' || ev.raridade || agora - ev.ts > 3000);
     if (!prontos.length) { setTimeout(publicarL, 3100); return; }
@@ -346,7 +357,7 @@
     if (!prontos.length) return;
     const extras = prontos.filter((ev) => ev.tipo === 'drop' && /^(lendario|mitico)$/.test(ev.raridade))
       .map((ev) => ({ ts: ev.ts, tipo: 'lendario', titulo: ev.raridade === 'mitico' ? 'Mítico!' : 'Lendário!', texto: ev.item, item: ev.item, raridade: ev.raridade, qual: ev.qual }));
-    for (const ev of prontos) if (!ev.raridade) delete ev.raridade;
+    for (const ev of prontos) { if (!ev.raridade) delete ev.raridade; delete ev.servidor; }
     const todos = [...prontos, ...extras].sort((a, b) => a.ts - b.ts), chave = 'eventos:' + nome;
     evCadeia = evCadeia.then(async () => {
       const r = await chrome.storage.local.get(chave);
