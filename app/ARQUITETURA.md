@@ -213,7 +213,7 @@ Estado = {
   modo: 'conta' | 'lado' | 'central',
   painelAberto: boolean,       // do modo atual (no lado a lado, o `painelLado`)
   menuAberto: boolean,
-  versao: '0.10.0',
+  versao: '0.10.1',
   atualizacao: { tipo: 'dev' | 'procurando' | 'em-dia' | 'disponivel' | 'baixando' | 'pronta' | 'erro', versao?, pct?, msg?, notas? },
                                // notas: releaseNotes em texto puro (~300 caracteres), no tooltip do botão Atualizar
   instalado: boolean,          // app.isPackaged: false no npm start
