@@ -68,8 +68,11 @@ app.whenReady().then(async () => {
   const conferir = (ok, msg) => { if (!ok) falhas.push(msg); };
   const CAMINHO = (voltar, mapa) => [voltar, 'chegou:Fonte', 'rastreio', 'palavra:entregar', 'palavra:tarefa', 'aceitou:1', mapa, 'marcador:dragao', 'ir:dragao', 'chegou:Fosso do Dragão'].join(' → ');
   try {
-    await espera(6000);
+    // espera o jogo falso e o painel carregarem (e a Lupa fazer a primeira leitura)
+    for (let k = 0; k < 60 && !(achar(/127\.0\.0\.1:8770/) && achar(/painel\.html/)); k++) await espera(250);
+    await espera(5000);
     const jogo = achar(/127\.0\.0\.1:8770/), painel = achar(/painel\.html/), janela = BaseWindow.getAllWindows()[0];
+    if (!jogo || !painel) throw new Error('o jogo falso ou o painel não abriram em 15 s');
     janela.setAlwaysOnTop(true); janela.show(); janela.focus(); jogo.focus();
     // com a janela coberta por outra (o terminal), o Chromium marca a página como escondida e descarta os cliques: o teste
     // espera a janela ficar à vista de verdade antes de começar
@@ -168,6 +171,17 @@ app.whenReady().then(async () => {
     for (let k = 0; k < 30 && !(a6?.em >= t6 && a6.estado !== 'rodando'); k++) { await espera(300); a6 = await acaoDe(painel); }
     out.c5parado = a6;
     conferir(a6?.estado === 'parado', '5) o Parar não parou: ' + JSON.stringify(a6));
+
+    // 6) com o ritmo medido só na Toca dos Lobos (uma caçada guardada como a Lupa guarda), a escolha vai para a oferta de lá,
+    // mesmo pagando menos prêmio por minuto que a do Fosso
+    await jogo.executeJavaScript(`window.__preparar({ colunaEscondida: false })`);
+    await painel.executeJavaScript(`chrome.storage.local.set({ 'cacada:Teste 1': { sessoes: [{ ini: Date.now() - 3e6, fim: Date.now(), zonas: { 'Toca dos Lobos': { seg: 1800, abates: 1500, xp: 900000 } } }] } })`);
+    await espera(5500);
+    const antes6 = (await jogo.executeJavaScript('window.__d')).passos.length;
+    const r6 = await entregar(painel, Date.now(), true);
+    out.cenario6 = { a: r6.a, passos: (await jogo.executeJavaScript('window.__d')).passos.slice(antes6).join(' → ') };
+    conferir(r6.a?.estado === 'ok' && /no seu ritmo/.test(r6.a.texto || ''), '6) a escolha pelo seu ritmo não terminou bem: ' + r6.a?.texto);
+    conferir(/aceitou:0/.test(out.cenario6.passos) && /chegou:Toca dos Lobos/.test(out.cenario6.passos), '6) não foi para a zona medida: ' + out.cenario6.passos);
   } catch (e) { falhas.push(String(e?.stack || e)); }
   Object.assign(out, { falhas, pulados });
   fs.writeFileSync(path.join(SAIDA, 'resultado.json'), JSON.stringify(out, null, 2));

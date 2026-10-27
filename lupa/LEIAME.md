@@ -49,8 +49,11 @@ janela** abre uma janelinha que fica sempre por cima, com a tarefa, as taxas, os
   dos blocos e a altura do chat. O botão ▾ do chat minimiza o chat. A Lupa não repete essas opções.
 
 **Entregar e seguir (só no app de PC):** na aba Tarefa, com a tarefa pronta, o botão volta à Fonte (tecla B), entrega
-ao Capitão da Legião, aceita a oferta de mais XP por minuto (pelo tempo e o XP que o próprio jogo mostra) e viaja para
-a zona dela (tecla M e o mapa). O app faz isso pelos botões do jogo, com cliques e teclas de verdade, e confere a tela a
+ao Capitão da Legião, aceita a oferta que mais rende no seu ritmo e viaja para a zona dela (tecla M e o mapa). "Mais
+rende" é o XP por hora caçando com a tarefa (os abates mais o prêmio), pelo ritmo que a Lupa mediu nas suas caçadas de cada
+zona (últimos 7 dias, 10 min ou mais na zona). Zona em que você nunca caçou não entra na conta; se nenhuma oferta for de
+zona medida, vale o prêmio por minuto pelo tempo do jogo. O tempo que o jogo mostra supõe o mesmo ritmo em toda zona: por
+isso o Desafio da zona de cima parecia render mais. O app faz isso pelos botões do jogo, com cliques e teclas de verdade, e confere a tela a
 cada passo; se algo sair do esperado (mochila cheia, em combate, janela por cima), para e diz onde. O botão Parar
 interrompe no meio. Só roda quando você aperta: nunca sozinho nem em laço. Liberado pelo Brunox em 27/10/2026, que pediu
 também que passasse pela proteção contra bots do jogo.

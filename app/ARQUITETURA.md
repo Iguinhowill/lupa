@@ -18,7 +18,7 @@ O código da Lupa (pasta `../lupa`, que continua sendo também a extensão do Ch
 | `alertas.js` | processo principal | puro: alertas de uma conta a partir do `estado:<nome>` (tarefa, mochila, pontos, prêmio, sem leitura) e notas da versão em texto puro; casos em `alertas.test.js` |
 | `atalhos.js` | processo principal | puro: quais teclas são do app (`atalhoDe`) e a lista mostrada no menu; casos em `alertas.test.js` |
 | `acoes.js` | processo principal | puro: as regras das ações que o jogador pede (tempo e número de entradas por pedido), o ponto do clique com o zoom e as entradas de clique e tecla; casos em `acoes.test.js` |
-| `oferta.js` | preload das abas do jogo | puro: lê o texto das ofertas do Capitão (tempo, XP, ouro, zona) e escolhe a de mais XP por minuto; casos em `acoes.test.js` |
+| `oferta.js` | preload das abas do jogo | puro: lê o texto das ofertas do Capitão (quantidade, tempo, XP, ouro, zona), o ritmo do jogador por zona (as sessões `cacada:<nome>`) e escolhe a de mais XP por hora caçando com ela; casos em `acoes.test.js` |
 | `acao-jogo.js` | preload das abas do jogo | a sequência do "Entregar e seguir" e a setinha do Alt+L: confere a tela, pede cada clique ou tecla ao main e grava o andamento em `acao:<nome>` |
 | `armazem.js` | processo principal | o `chrome.storage.local` do app: um JSON em `userData/lupa-dados.json`, gravado 1,5 s depois da última mudança e no máximo 10 s depois da primeira; a versão anterior fica em `.bak`, lida se o principal estiver estragado; casos em `armazem.test.js` |
 | `regras.js` | processo principal | regras de navegação da aba do jogo e das janelas de login (`DA_CONTA`, `DO_JOGO`, `NO_LOGIN`, `DO_GOOGLE`, `permitido`); casos em `regras.test.js`, rodar com `npm test` |
@@ -131,7 +131,9 @@ Por isso cada clique ou tecla é uma entrada de verdade, `webContents.sendInputE
   (se não estiver à vista), autoriza aquela aba (`acoes.js`: 4 min e até 24 entradas: até 9 passos, cada um podendo repetir a entrada uma vez) e manda `acao:iniciar`. O
   `acao-jogo.js` confere na tela que a tarefa está pronta (classe `pronta` do `#rastreio-tarefa`; a leitura da Lupa pode
   estar até 5 s atrasada), volta à Fonte (o botão Voltar, ou a tecla B com a coluna escondida) e espera chegar, clica no
-  rastreio (o personagem anda até o Capitão), em "entregar", em "tarefa", na oferta de mais XP por minuto (`oferta.js`),
+  rastreio (o personagem anda até o Capitão), em "entregar", em "tarefa", na oferta que mais rende no ritmo do jogador
+  (`oferta.js`: XP por hora caçando com ela, abates mais prêmio, pelo ritmo medido em cada zona nos últimos 7 dias; zona sem
+  medição só entra se nenhuma tiver; o tempo que o jogo mostra supõe o mesmo ritmo em toda zona),
   abre o mapa (o botão ou a tecla M), clica na zona e no "Ir", e espera chegar. Cada passo espera a tela mudar (com prazo);
   se nada mudou no prazo e o botão continua ali, repete a entrada uma vez. Prazos: 1,5 s em "entregar", "tarefa", na
   oferta, na zona e no "Ir"; 2,5 s no mapa (botão ou M, que abrem e fecham); 3 s no rastreio (o personagem anda); 5 s na
