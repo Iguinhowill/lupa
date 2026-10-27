@@ -90,8 +90,9 @@ try {
       .filter(([, v]) => (typeof v === 'number' && Number.isFinite(v)) || (Array.isArray(v) && v.length && v.every((x) => typeof x === 'number' && Number.isFinite(x))))
       .map(([k, v]) => [k, Array.isArray(v) ? v.map((x) => +x.toFixed(6)) : v]))]))]));
     const CARTA_VALOR = Object.fromEntries(Object.entries(M.CARTAS).map(([id, c]) => [id, c.valor]));
+    const CARTA_TIRAR = Object.fromEntries(Object.entries(M.CARTA_NIVEIS).map(([n, c]) => [n, c.tirar]));
     console.log(JSON.stringify({
-      CAMPEOES, HABS, CARTA_VALOR, CARTA_TIPOS: M.ORDEM_TIPOS_CARTA, VEL_ATAQUE_MAX: M.VEL_ATAQUE_MAX, NIVEL_DIF: M.NIVEL_DIF, TETO_VIDA_ITEM: M.TETO_VIDA_ITEM, RM_MONSTRO: M.RM_MONSTRO,
+      CAMPEOES, HABS, CARTA_VALOR, CARTA_TIRAR, RESET_OURO: M.RESET_OURO, CARTA_TIPOS: M.ORDEM_TIPOS_CARTA, VEL_ATAQUE_MAX: M.VEL_ATAQUE_MAX, NIVEL_DIF: M.NIVEL_DIF, TETO_VIDA_ITEM: M.TETO_VIDA_ITEM, RM_MONSTRO: M.RM_MONSTRO,
       FOCO_DANO_HAB: M.FOCO_DANO_HAB, FOCO_FLUXO: M.FOCO_FLUXO, FLUXO_MAX: M.FLUXO_MAX,
       NIVEL_MAX: M.NIVEL_MAX, REFINO_MAX: M.REFINO_MAX, BONUS_REFINO: M.BONUS_REFINO,
       CHANCE_REFINO: M.CHANCE_REFINO, REGRESSAO_REFINO: M.REGRESSAO_REFINO, PERSISTENCIA_FORJA: M.PERSISTENCIA.forja,
@@ -121,6 +122,7 @@ try {
   for (const [nome, arr] of [['ZONAS', T.ZONAS], ['ITENS', T.ITENS]]) {
     if (!Array.isArray(arr) || !arr.length || !arr.every((x) => /^[\w-]+$/.test(String(x.id)))) throw new Error(`${nome}: ids fora do formato`);
   }
+  if (![1, 2, 3].every((n) => Number.isFinite(T.CARTA_TIRAR?.[n]) && T.CARTA_TIRAR[n] >= 0)) throw new Error('CARTA_TIRAR: esperava o preço das 3 raridades');
   const esp = Object.entries(T.ESPOLIOS || {});
   if (!esp.length || !esp.every(([id, e]) => /^[\w-]+$/.test(id) && typeof e.nome === 'string' && e.nome && Number.isFinite(e.valor) && e.valor >= 0)) throw new Error('ESPOLIOS: fora do formato');
 
@@ -219,6 +221,8 @@ const JOGO = (() => {
   const CAMPEOES = ${j(T.CAMPEOES)};
   const HABS = ${j(T.HABS)};                         // habilidades por rank dos campeões calibrados no farm (recarga, base, ratio, va, duração...)
   const CARTA_VALOR = ${j(T.CARTA_VALOR)};              // "ataque2" (Carta de Ataque Rara): 0,05; crítico e roubo de vida somam em pontos
+  const CARTA_TIRAR = ${j(T.CARTA_TIRAR)};              // ouro para tirar uma carta de um item, por raridade (1 básica, 2 rara, 3 lendária); ela volta para a bolsa
+  const RESET_OURO = ${num(T.RESET_OURO, 'RESET_OURO')};                    // reset de atributos no Mestre da Legião: isto × nível
   const NIVEL_DIF = ${j(T.NIVEL_DIF)};                  // monstro mais de "livre" níveis acima do jogador aguenta mais (danoJogador por nível, piso minDanoJogador)
   const TETO_VIDA_ITEM = ${num(T.TETO_VIDA_ITEM, 'TETO_VIDA_ITEM')}, RM_MONSTRO = ${num(T.RM_MONSTRO, 'RM_MONSTRO')}, VEL_ATAQUE_MAX = ${num(T.VEL_ATAQUE_MAX, 'VEL_ATAQUE_MAX')}, FOCO_DANO_HAB = ${num(T.FOCO_DANO_HAB, 'FOCO_DANO_HAB')}, FOCO_FLUXO = ${num(T.FOCO_FLUXO, 'FOCO_FLUXO')}, FLUXO_MAX = ${num(T.FLUXO_MAX, 'FLUXO_MAX')};
   const DT = 0.05;                                  // o combate do jogo roda em passos fixos de 0,05 s
@@ -302,7 +306,7 @@ const JOGO = (() => {
   const FARM = ${j(FARM)};      // parâmetros do modelo de farm (calculos.js: estimarFarm), calibrados pelo gerador contra a simulação do motor
 
   return { meta, NIVEL_MAX, REFINO_MAX, BONUS_REFINO, RITMO_REAL, CHANCE_REFINO, REGRESSAO_REFINO, PERSISTENCIA, VIP, DROP_CHEFE, ABATES_MIN_ZONA, TAREFA_TIPOS, QUALIDADES, ORDEM_QUAL,
-    XP_NIVEL, BALANCO, MONSTROS, ZONAS, ITENS, ESPOLIOS, ZONA, CURVA, CAMPEOES, HABS, CARTA_VALOR, CARTA_TIPOS, NIVEL_DIF, TETO_VIDA_ITEM, RM_MONSTRO, VEL_ATAQUE_MAX, DT, FARM, fichaDaBuild, periodoAtaque, chaveItem, refinoDe, qualDe, cartaDe, fatorDanoJogador, ARMADURA_MONSTRO, xpParaNivel, xpEntre, fatorXp, porAbateZona, zonaIdeal, item, valorVenda, itemPorNome, espolioPorNome, valorEspolio, precoRefino, chanceRefino, chanceForja, recompensaTarefa };
+    XP_NIVEL, BALANCO, MONSTROS, ZONAS, ITENS, ESPOLIOS, ZONA, CURVA, CAMPEOES, HABS, CARTA_VALOR, CARTA_TIRAR, RESET_OURO, CARTA_TIPOS, NIVEL_DIF, TETO_VIDA_ITEM, RM_MONSTRO, VEL_ATAQUE_MAX, DT, FARM, fichaDaBuild, periodoAtaque, chaveItem, refinoDe, qualDe, cartaDe, fatorDanoJogador, ARMADURA_MONSTRO, xpParaNivel, xpEntre, fatorXp, porAbateZona, zonaIdeal, item, valorVenda, itemPorNome, espolioPorNome, valorEspolio, precoRefino, chanceRefino, chanceForja, recompensaTarefa };
 })();
 if (typeof module !== 'undefined') module.exports = JOGO;
 `; };

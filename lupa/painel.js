@@ -11,6 +11,7 @@ const ABAS = [['ficha', 'Ficha'], ['cacada', 'Caçada'], ['tarefa', 'Tarefa'], [
 let config = mesclarConfig(), estados = {}, cacadas = {}, eventos = {}, icones = {}, menores = {}, escolhido = null, semBonus = false;
 let nuvem = {};      // "nuvem:status" escrito pelo envio.js (a sessão com os tokens fica em outra chave e não vem para cá)
 let acoes = {};      // "acao:<nome>": o andamento do "Entregar e seguir" (só no app)
+let gastos = {};     // "gastar:<nome>": a conta do Onde gastar o ouro (o app calcula)
 let aba = (() => { try { return localStorage.getItem('lupa-aba') || 'ficha'; } catch { return 'ficha'; } })();
 if (!ABAS.some(([id]) => id === aba)) aba = 'ficha';
 
@@ -23,6 +24,12 @@ function guardar(k, v) {
   else if (k.startsWith('cacada:')) { if (v) cacadas[k.slice(7)] = v; else delete cacadas[k.slice(7)]; }
   else if (k.startsWith('eventos:')) { if (v) eventos[k.slice(8)] = v; else delete eventos[k.slice(8)]; }
   else if (k.startsWith('acao:')) { if (v) acoes[k.slice(5)] = v; else delete acoes[k.slice(5)]; }
+  else if (k.startsWith('gastar:')) { if (v) gastos[k.slice(7)] = v; else delete gastos[k.slice(7)]; }
+}
+// o botão Calcular do Onde gastar o ouro: o app recusou (sem ficha...) → o motivo aparece no cartão
+async function pedirGasto(nome) {
+  const r = await globalThis.lupaApp.gastar(nome).catch((e) => ({ erro: String(e?.message || e) }));
+  if (r?.erro) { gastos[nome] = { ...(gastos[nome] || {}), estado: 'erro', erro: r.erro }; desenhar(true); }
 }
 // o app recusou o pedido (aba fechada, sem personagem...): o motivo aparece no cartão como um erro
 async function pedirAcao(tipo, nome) {
@@ -41,10 +48,13 @@ const ctx = {
   get menores() { return menores; },
   get semBonus() { return semBonus; },
   get acoes() { return acoes; },
+  get gastos() { return gastos; },
   setSemBonus(v) { semBonus = !!v; desenhar(true); },
   salvarConfig, alternarAviso,
   // só no app (que sabe clicar no jogo); na extensão o cartão "Entregar e seguir" nem aparece
   iniciarAcao: NO_APP && typeof globalThis.lupaApp.acao === 'function' ? pedirAcao : null,
+  // só no app (que tem o simulador); na extensão o cartão "Onde gastar o ouro" nem aparece
+  calcularGasto: NO_APP && typeof globalThis.lupaApp.gastar === 'function' ? pedirGasto : null,
   redesenhar() { desenhar(true); }
 };
 
@@ -70,7 +80,7 @@ function desenhar(forcar = false) {
   const minuto = Math.floor(Date.now() / 30e3);
   const fatia = aba === 'ajustes' ? [config, nuvem]
     : !e ? null
-    : aba === 'ficha' ? [e.ficha, e.mochila, e.pontos, e.zona, e.nivel, e.tarefa === null, planoAbertoChave(), Object.keys(icones).length, menores]
+    : aba === 'ficha' ? [e.ficha, e.mochila, e.pontos, e.zona, e.nivel, e.tarefa === null, planoAbertoChave(), Object.keys(icones).length, menores, gastos[e.nome], gastoAberto]
     : aba === 'cacada' ? [cacadas[e.nome], semBonus, config.novaSessao, config.novaSessaoPor?.[e.nome], e.bonus, minuto]
     : aba === 'tarefa' ? [e.tarefa, e.diarias, e.rastreio, config.avisos.tarefa, minuto, acoes[e.nome]]
     : aba === 'timers' ? [e.timers, e.rastreio, config.avisos]

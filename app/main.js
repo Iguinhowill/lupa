@@ -4,6 +4,7 @@
 // o envio.js da Lupa num vm com um `chrome` equivalente, mostra os avisos e segura o PC acordado. Lê a tela e nunca fala
 // com o servidor do jogo. Liberado pelo Brunox em 26/10/2026. Clica ou aperta tecla no jogo só em duas ações que o jogador
 // pede (o botão "Entregar e seguir" e o Alt+L), liberadas por ele em 27/10/2026: ver acoes.js e ARQUITETURA.md.
+// O "Onde gastar o ouro" roda o combate do motor público do jogo numa página escondida e sem rede (simulador.js, gastar.js).
 'use strict';
 
 const { app, BaseWindow, BrowserWindow, Menu, Tray, WebContentsView, ipcMain, Notification, nativeImage, powerSaveBlocker, screen, shell, session, webContents } = require('electron');
@@ -20,6 +21,10 @@ const { alertasDe, notasEmTexto } = require('./alertas');
 const { atalhoDe, LISTA: ATALHOS } = require('./atalhos');
 // as ações que o jogador pede (entregar a tarefa, a setinha da coluna): autorização e entradas, puro (acoes.test.js)
 const Acoes = require('./acoes');
+// Onde gastar o ouro: as opções e o resumo (puro, gastar.test.js) e o simulador (o motor do jogo numa página isolada)
+const Gastar = require('./gastar');
+const Simulador = require('./simulador');
+Simulador.registrarEsquema();      // o lupasim:// precisa ser registrado antes do app ficar pronto
 
 const JOGO = process.env.LUPA_JOGO || 'https://lolidle.com/jogar';
 const ORIGEM_JOGO = new URL(JOGO).origin;
@@ -419,6 +424,71 @@ function recalcularAlertas() {
   atualizarSelo();
   avisarCasca();
 }
+// ---------- Onde gastar o ouro (gastar.js + simulador.js) ----------
+// Roda quando o jogador pede (botão no painel) e sozinho quando a build fica 2 min parada diferente da última conta, ou quando a
+// conta passa de 6 h. Um personagem por vez. O resultado fica em "gastar:<nome>" (o painel desenha; o envio.js sobe para o site).
+const GASTO = { espera: 2 * 60e3, velho: 6 * 3600e3, depoisDoErro: 30 * 60e3, fresco: 2 * 60e3 };
+// só para o teste (teste-gastar/app.js), fora do pacote: a espera da conta automática em ms
+if (!app.isPackaged && Number(process.env.LUPA_GASTO_ESPERA) > 0) GASTO.espera = Number(process.env.LUPA_GASTO_ESPERA);
+const pastaMotor = () => path.join(app.getPath('userData'), 'motor-jogo');
+const lerChave = (k) => armazem.get(k)[k];
+let gastoRodando = null;
+const filaGasto = [], esperasGasto = new Map();
+const gravarGasto = (nome, mud) => armazem.set({ ['gastar:' + nome]: { ...(lerChave('gastar:' + nome) || {}), ...mud } });
+async function calcularGasto(nome, motivo) {
+  if (gastoRodando === nome || filaGasto.includes(nome)) return;
+  if (gastoRodando) { filaGasto.push(nome); gravarGasto(nome, { estado: 'na-fila', motivo }); return; }
+  gastoRodando = nome;
+  clearTimeout(esperasGasto.get(nome)?.t); esperasGasto.delete(nome);
+  let ultimoAndar = 0, sig = null;
+  try { const b0 = Gastar.buildDoEstado(estados.get(nome), lerChave('cacada:' + nome)?.sessoes || []); sig = b0 && Gastar.assinatura(b0); } catch {}
+  // o andamento vai para o painel no máximo a cada 2 s (cada gravação no armazém vai para todas as páginas)
+  const andar = (etapa, a) => { if (Date.now() - ultimoAndar < 2000) return; ultimoAndar = Date.now(); gravarGasto(nome, { etapa, feito: a?.feito || 0, total: a?.total || 0 }); };
+  try {
+    gravarGasto(nome, { estado: 'rodando', etapa: 'motor', feito: 0, total: 0, desde: Date.now(), motivo, erro: null });
+    const motor = await Simulador.motorPronto(pastaMotor());
+    const r = await Gastar.calcular({
+      estado: estados.get(nome), sessoes: lerChave('cacada:' + nome)?.sessoes || [], menores: lerChave('mercado:menores') || {},
+      motor: { sha: motor.sha.slice(0, 12), baixadoEm: motor.em, velho: !!motor.velho },
+      rodar: (jobs, etapa) => Simulador.rodarCombates({ pastaSim: path.join(__dirname, 'sim'), pastaJogo: pastaMotor(), jobs, aoAndar: (a) => andar(etapa, a) }),
+    });
+    armazem.set({ ['gastar:' + nome]: { ...r, motivo } });
+  } catch (e) {
+    gravarGasto(nome, { estado: 'erro', erro: String(e?.message || e).slice(0, 300), erroEm: Date.now(), erroAssinatura: sig });
+  } finally {
+    gastoRodando = null;
+    const prox = filaGasto.shift();
+    if (prox) calcularGasto(prox, lerChave('gastar:' + prox)?.motivo || 'fila');
+  }
+}
+// a cada estado novo: se a build (ou a zona) mudou desde a última conta, ou a conta ficou velha, agenda uma nova para daqui a 2 min
+const vistoGasto = new Map();      // nome → { chave, em }: o estado chega a cada segundo; a conta de verdade só quando a ficha muda ou a cada minuto
+function vigiarGasto(nome, e, agora = Date.now()) {
+  if (!e?.ficha || agora - (e.ts || 0) > GASTO.fresco || gastoRodando === nome || filaGasto.includes(nome)) return;
+  const f = e.ficha, chave = JSON.stringify([e.nivel, e.zona, (f.equip || []).map((i) => i.id), f.atributos, (f.habs || []).map((x) => x.t + x.rank), (f.barra || []).map((x) => x?.t)]);
+  const visto = vistoGasto.get(nome);
+  if (visto && visto.chave === chave && agora - visto.em < 60e3) return;
+  vistoGasto.set(nome, { chave, em: agora });
+  const b = Gastar.buildDoEstado(e, lerChave('cacada:' + nome)?.sessoes || []);
+  if (!b) return;
+  const g = lerChave('gastar:' + nome), pend = esperasGasto.get(nome);
+  // item sendo avaliado ou desconhecido: não roda (nem a que já estava agendada) e o cartão diz por quê; avisa só na virada
+  if (b.faltam > 0) {
+    if (pend) { clearTimeout(pend.t); esperasGasto.delete(nome); }
+    if (g && !g.esperandoFicha) gravarGasto(nome, { esperandoFicha: true });
+    return;
+  }
+  if (g?.esperandoFicha) gravarGasto(nome, { esperandoFicha: false });
+  const sig = Gastar.assinatura(b);
+  const emDia = g?.assinatura === sig && agora - (g.em || 0) < GASTO.velho;
+  // depois de um erro, a mesma build espera 30 min (sem internet, por exemplo); uma build nova tenta já
+  const esperaErro = g?.estado === 'erro' && g.erroAssinatura === sig && agora - (g.erroEm || 0) < GASTO.depoisDoErro;
+  if (emDia || esperaErro) { if (pend) { clearTimeout(pend.t); esperasGasto.delete(nome); } return; }
+  if (pend?.sig === sig) return;
+  clearTimeout(pend?.t);
+  esperasGasto.set(nome, { sig, t: setTimeout(() => { esperasGasto.delete(nome); calcularGasto(nome, 'build nova'); }, GASTO.espera) });
+}
+
 // um ponto vermelho 16x16 (BGRA, com borda suave) sem arquivo novo
 function pontoDoSelo() {
   const T = 16, buf = Buffer.alloc(T * T * 4);
@@ -602,6 +672,13 @@ function ligarIpc() {
     return true;
   });
   ipcMain.handle('acao:fim', (e) => { const a = abaDe(e.sender); if (a) encerrarAcao(a); });
+  // o botão "Calcular" do Onde gastar o ouro (painel e Central): só simula, não mexe no jogo
+  ipcMain.handle('lupa:gastar', (e, { nome } = {}) => {
+    if (![painel, central].some((v) => v && e.sender === v.webContents)) return { erro: 'Pedido inválido.' };
+    if (!estados.get(nome)?.ficha) return { erro: 'Ainda não li a ficha desse personagem.' };
+    calcularGasto(nome, 'botão');
+    return { ok: true };
+  });
   ipcMain.handle('casca:estado', () => estadoCasca());
   ipcMain.handle('casca:ativar', (_e, id) => ativar(id));
   ipcMain.handle('casca:painel', () => alternarPainel());
@@ -627,7 +704,7 @@ function ligarIpc() {
   armazem.on('mudou', (mud) => {
     for (const fn of ouvintesMud) { try { fn(mud, 'local'); } catch {} }
     let novoEstado = false;
-    for (const k of Object.keys(mud)) if (k.startsWith('estado:')) { estados.set(k.slice(7), mud[k].newValue); novoEstado = true; }
+    for (const k of Object.keys(mud)) if (k.startsWith('estado:')) { estados.set(k.slice(7), mud[k].newValue); novoEstado = true; vigiarGasto(k.slice(7), mud[k].newValue); }
     if (novoEstado) recalcularAlertas();
     const pub = semPrivadas(mud);
     if (Object.keys(pub).length) {
@@ -657,6 +734,8 @@ app.whenReady().then(() => {
   criarBandeja();
   recalcularAlertas();
   setInterval(recalcularAlertas, 30e3);      // o "sem leitura" nasce do tempo passando, não de um estado novo
+  // uma conta que ficou na fila de um app fechado no meio não roda sozinha: volta ao estado anterior
+  for (const [k, v] of Object.entries(armazem.get(null))) if (k.startsWith('gastar:') && ['rodando', 'na-fila'].includes(v?.estado)) armazem.set({ [k]: { ...v, estado: v.opcoes ? 'pronto' : 'erro', erro: v.opcoes ? null : 'A conta parou no meio (o app fechou).', erroEm: 0 } });
   aplicarAcordado();
   prepararAtualizacao();
 });

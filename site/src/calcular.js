@@ -1,5 +1,6 @@
-// Lupa Online · Calcular: quatro calculadoras com as tabelas PÚBLICAS do jogo (dados-jogo.js): tempo até o nível, forja do Ornn,
-// valor de venda e comparar builds. Tudo aqui é ESTIMATIVA: o site só calcula, não interage com o jogo.
+// Lupa Online · Calcular: calculadoras com as tabelas PÚBLICAS do jogo (dados-jogo.js): tempo até o nível, forja do Ornn, valor de
+// venda e comparar builds; e o Onde gastar o ouro, que o app de PC calcula em casa (simulando no motor do jogo) e manda pronto.
+// Tudo aqui é ESTIMATIVA: o site só calcula e mostra, não interage com o jogo.
 'use strict';
 
 // as contas (Monte Carlo da forja, XP/h medido, horas até o nível) ficam em calculos.js, que o node --test confere
@@ -466,8 +467,16 @@ function graficoCurva(larg, nivel, alvo) {
     return cartaoBase();
   }
 
+  // ================= 5) onde gastar o ouro =================
+  // a conta é do app de PC (simula cada compra no motor do jogo, em casa) e chega dentro do estado que ele manda; aqui só desenha
+  function abaGastar() {
+    const e = estados[quem];
+    if (!e) return cartao('Onde gastar o ouro', vazio('Ainda não tenho este personagem: a Lupa precisa enviar o personagem primeiro.'));
+    return cartaoGastar(e, { gastos: e.gastar ? { [quem]: e.gastar } : {}, redesenhar: desenhar }, { completo: true });
+  }
+
   // ================= página =================
-  const ABAS = [['nivel', 'Tempo até o nível'], ['forja', 'Forja do Ornn'], ['venda', 'Valor de venda'], ['comparar', 'Comparar builds']];
+  const ABAS = [['nivel', 'Tempo até o nível'], ['gastar', 'Onde gastar o ouro'], ['forja', 'Forja do Ornn'], ['venda', 'Valor de venda'], ['comparar', 'Comparar builds']];
   // quem estava com o foco: o id, ou o botão de um grupo de chips pelo texto (os chips não têm id)
   const chaveFoco = (el) => !el || el === document.body ? null : el.id ? { id: el.id } : el.closest('[role=group]') ? { grupo: el.closest('[role=group]').getAttribute('aria-label'), texto: el.textContent } : null;
   function devolverFoco(k) {
@@ -485,7 +494,7 @@ function graficoCurva(larg, nivel, alvo) {
       h('h1', null, 'Calculadoras', h('small', null, 'Estimativas com as tabelas públicas do jogo. O site só calcula: não mexe no jogo.')),
       chips('Calculadora', ABAS, aba, (v) => { aba = v; gravarPref('calc-aba', v); desenhar(); }),
       nomes.length > 1 ? chips('Personagem', nomes.map((n) => [n, nomeCurto(n)]), quem, (v) => { quem = v; gravarPref('calc-quem', v); desenhar(); }) : null);
-    raiz.replaceChildren(cab, aba === 'forja' ? abaForja() : aba === 'venda' ? abaVenda() : aba === 'comparar' ? abaComparar() : abaNivel(), rodape());
+    raiz.replaceChildren(cab, aba === 'forja' ? abaForja() : aba === 'venda' ? abaVenda() : aba === 'comparar' ? abaComparar() : aba === 'gastar' ? abaGastar() : abaNivel(), rodape());
     raiz.removeAttribute('aria-busy');
     devolverFoco(ativo);
   }

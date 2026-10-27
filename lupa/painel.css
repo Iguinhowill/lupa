@@ -219,6 +219,19 @@ button { font: inherit; color: inherit; }
 .entregar-status { margin: 0; font-size: 13px; }
 .entregar-status.erro { color: var(--laranja); }
 .entregar-status.ok { color: var(--verde); }
+/* Onde gastar o ouro (a conta vem do app) */
+.gasto-quando { margin: 0; font-size: 12.5px; }
+.gasto-mudou { color: var(--laranja); }
+.gasto-lista { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.gasto { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; background: var(--cartao-2); border: 1px solid var(--borda); border-radius: 8px; font-size: 13px; }
+.gasto-titulo { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.gasto-falta { font-size: 12px; color: var(--laranja); white-space: nowrap; }
+.gasto-ganho { color: var(--verde); }
+.gasto-ganho .num { font-family: var(--mono); font-size: 12.5px; }
+.gasto-detalhe { font-size: 12px; }
+.gasto-nada { margin: 0; font-size: 13px; color: var(--texto-2); }
+.gasto-sem summary { cursor: pointer; font-size: 13px; color: var(--fraco); }
+.gasto-sem .lista-simples { margin-top: 6px; font-size: 12.5px; color: var(--fraco); }
 .nuvem-linha { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; }
 .nuvem-erro { margin: 0; font-size: 13px; color: var(--alerta-texto); }
 .nuvem-erro:empty { display: none; }
