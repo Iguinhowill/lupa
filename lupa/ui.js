@@ -454,7 +454,7 @@ function cartaoHoje(e) {
 }
 
 // ---------- Entregar e seguir (só no app) ----------
-// Com a tarefa pronta, o app volta à Fonte, entrega ao Capitão, aceita a oferta de mais XP por minuto e viaja para a zona
+// Com a tarefa pronta, o app volta à Fonte, entrega ao Capitão, aceita a oferta que mais rende no seu ritmo e viaja para a zona
 // dela, pelos botões do próprio jogo (liberado pelo Brunox em 27/10/2026). Aqui só o botão, o Parar e o andamento.
 function cartaoEntregar(e, ctx) {
   if (typeof ctx?.iniciarAcao !== 'function') return null;
@@ -470,7 +470,7 @@ function cartaoEntregar(e, ctx) {
     : null;
   return h('section', { class: 'cartao entregar', 'aria-label': 'Entregar e seguir' },
     h('div', { class: 'linha-topo' },
-      h('span', { class: 'entregar-titulo' }, h('b', null, 'Entregar e seguir'), h('span', { class: 'fraco entregar-sub' }, 'Entrega, pega a de mais XP por minuto e vai caçar.')),
+      h('span', { class: 'entregar-titulo' }, h('b', null, 'Entregar e seguir'), h('span', { class: 'fraco entregar-sub' }, 'Entrega, pega a que mais rende no seu ritmo e vai caçar.')),
       rodando ? h('button', { type: 'button', class: 'botao', onclick: () => ctx.iniciarAcao('parar', e.nome) }, 'Parar')
         : h('button', { type: 'button', class: 'botao principal', disabled: !pode, onclick: () => ctx.iniciarAcao('tarefa', e.nome) }, 'Entregar e seguir')),
     msg);

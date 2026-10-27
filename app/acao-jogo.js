@@ -103,7 +103,7 @@
 
   // ---------- Entregar e seguir ----------
   // Fonte (o botão Voltar ou a tecla B, 4 s) → rastreio da tarefa (o personagem anda até o Capitão) → "entregar" → "tarefa"
-  // → a oferta de mais XP por minuto → mapa (o botão ou a tecla M) → a zona da tarefa → "Ir" (3 s). Cada passo confere a
+  // → a oferta que mais rende no seu ritmo → mapa (o botão ou a tecla M) → a zona da tarefa → "Ir" (3 s). Cada passo confere a
   // tela antes do seguinte.
   async function entregarESeguir(quem) {
     let atual = '';
@@ -151,14 +151,19 @@
       b?.querySelectorAll('.selo-tarefa').forEach((s) => s.remove());
       return { ...OFERTA.lerOferta(txt(b), txt($('.info small', l))), botao: $('[data-tarefa]', l), titulo: txt(b), tipo: txt($('.selo-tarefa', l)) };
     });
-    const k = OFERTA.escolher(ofertas);
+    // o seu ritmo em cada zona, pelas caçadas que a Lupa mediu: a escolha é pelo XP por hora caçando com a tarefa
+    // (sem o armazém, fica sem ritmo e a escolha cai no prêmio por minuto do jogo)
+    const ritmos = OFERTA.ritmosDe((await chrome.storage.local.get('cacada:' + quem).catch(() => ({})))['cacada:' + quem]?.sessoes);
+    const k = OFERTA.escolher(ofertas, ritmos);
     if (k < 0) throw new Error('Não consegui ler as ofertas do Capitão (o jogo mudou o texto?). Escolha uma e vá caçar.');
-    const o = ofertas[k];
+    const o = ofertas[k], seu = OFERTA.noSeuRitmo(o, ofertas, ritmos);
     await pausa(300);
     // aceita: o jogo fecha a conversa em 0,6 s (dizer('tchau')) e o rastreio volta com a tarefa nova ("0/120 · <zona>")
     const aceitou = () => { const r = $('#rastreio-tarefa'); return $('#janela-npc')?.hidden || (r && !r.hidden && !r.classList.contains('pronta') && mesma(txt($('small', r)).split(' · ').at(-1), o.zona)); };
     if (!(await clicarAte(o.botao, aceitou, 4e3))) throw new Error('O Capitão não aceitou a tarefa.');
-    const nova = `${o.titulo}${o.tipo ? ` (${o.tipo})` : ''}, ~${Math.round(o.min)} min, ${curto(o.xp / o.min)} de XP por minuto`;
+    const nova = `${o.titulo}${o.tipo ? ` (${o.tipo})` : ''}, ` + (seu
+      ? `~${Math.max(1, Math.round(seu.min))} min no seu ritmo, ${curto(seu.xpHora)} de XP/h com o prêmio`
+      : `~${Math.round(o.min)} min pelo jogo (a Lupa ainda não mediu você nessas zonas)`);
     // a conversa fecha 0,6 s depois do aceite: o mapa não pode abrir por baixo dela
     if (!(await esperar(() => $('#janela-npc')?.hidden, 2e3))) throw new Error(`Tarefa nova: ${nova}. A conversa com o Capitão não fechou: a viagem fica com você.`);
 
