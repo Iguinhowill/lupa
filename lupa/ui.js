@@ -299,11 +299,17 @@ function itensHoje(e) {
 }
 
 function cartaoHoje(e) {
-  const itens = itensHoje(e), ms = msAteViradaDia(), virada = ms == null ? '' : `vira o dia em ${textoVirada(ms)}`;
+  const ms = msAteViradaDia(), virada = ms == null ? '' : `vira o dia em ${textoVirada(ms)}`;
+  // o que o jogo mostrava na última leitura: de antes da meia-noite já não vale para hoje, e velha diz de quando é
+  const lidoEm = e.ts || 0, inicioHoje = ms == null ? 0 : Date.now() + ms - 24 * 3600e3;
+  if (lidoEm && lidoEm < inicioHoje) return h('section', { class: 'cartao hoje vazio-hoje', 'aria-label': 'Hoje ainda falta' },
+    icone('info', 16), h('span', null, 'Sem leitura hoje', h('span', { class: 'fraco' }, ` · a última foi em ${new Date(lidoEm).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}`)));
+  const velha = lidoEm && Date.now() - lidoEm > 10 * 60e3 ? `leitura das ${hora(lidoEm)}` : '';
+  const itens = itensHoje(e), detalhe = [velha, virada].filter(Boolean).join(' · ');
   if (!itens.length) return h('section', { class: 'cartao hoje vazio-hoje', 'aria-label': 'Hoje ainda falta' },
-    icone('ok', 16), h('span', null, 'Nada pendente hoje', virada ? h('span', { class: 'fraco' }, ` · ${virada}`) : null));
+    icone('ok', 16), h('span', null, 'Nada pendente hoje', detalhe ? h('span', { class: 'fraco' }, ` · ${detalhe}`) : null));
   return h('section', { class: 'cartao hoje', 'aria-label': 'Hoje ainda falta' },
-    h('div', { class: 'linha-topo' }, h('h2', { class: 'rotulo' }, 'Hoje ainda falta'), virada ? h('span', { class: 'fraco hoje-virada' }, virada) : null),
+    h('div', { class: 'linha-topo' }, h('h2', { class: 'rotulo' }, 'Hoje ainda falta'), detalhe ? h('span', { class: 'fraco hoje-virada' }, detalhe) : null),
     h('ul', { class: 'plano-lista' }, itens.map((i) => h('li', { class: 'plano-linha hoje-' + (i.tom || 'neutro') },
       h('span', { class: 'plano-ico' }, icone(i.ic, 16)),
       h('span', null, i.texto, i.sub ? h('span', { class: 'hoje-sub' }, i.sub) : null)))));

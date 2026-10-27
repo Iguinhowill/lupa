@@ -98,8 +98,15 @@ function graficoXp(series, ini, agora, passo, larg) {
 
   // "Hoje" de um personagem: desde a meia-noite de Brasília, pelos baldes de 5 min das caçadas
   function hoje(p, ini, agora) {
-    const baldes = (d.cac[p]?.sessoes || []).flatMap((x) => x.baldes).filter((b) => b.t >= ini);
-    const xp = baldes.reduce((s0, b) => s0 + (b.xp || 0), 0);
+    const sessoes = d.cac[p]?.sessoes || [];
+    const baldes = sessoes.flatMap((x) => x.baldes).filter((b) => b.t >= ini);
+    // até a Lupa 0.6 a sessão guardava só os últimos 72 baldes (6 h): o XP de antes do 1º balde entra rateado pelo tempo
+    const semBalde = sessoes.reduce((s0, x) => {
+      const t0 = x.baldes[0]?.t ?? x.fim, falta = x.xp - x.baldes.reduce((t, b) => t + (b.xp || 0), 0);
+      if (!(falta > 0) || t0 <= x.ini) return s0;
+      return s0 + (falta * Math.max(0, Math.min(t0, agora) - Math.max(x.ini, ini))) / (t0 - x.ini);
+    }, 0);
+    const xp = baldes.reduce((s0, b) => s0 + (b.xp || 0), 0) + semBalde;
     const niveis = d.evs.filter((e) => e.tipo === 'nivel' && e.personagem === p && e.ts >= ini).map((e) => parseInt((e.texto || '').replace(/\D+/g, ''), 10) || null);
     const xph = baldes.filter((b) => b.t >= agora - HORA).reduce((s0, b) => s0 + (b.xp || 0), 0);      // XP da última hora
     const x = d.estados[p]?.xpNivel, nivel = parseInt(d.estados[p]?.nivel, 10);

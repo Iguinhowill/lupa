@@ -380,7 +380,7 @@
     } else if ((m = corpo.match(/^(.+) foi avaliado: qualidade (C|B|A|S|SS)\.?$/))) avaliado(m[1].replace(/\s\+\d+$/, '').trim(), m[2]);
     else if ((m = corpo.match(/^Sua mochila está cheia! (.+?) ficou no chão\.?$/))) {
       registrar('chao', 'Item ficou no chão', corpo, { item: m[1].replace(RE_QUAL, '').replace(/\s\+\d+$/, '').trim() });
-      if (config.avisos.chao) avisar('chao', 'Mochila cheia', corpo, (n) => `${n} itens ficaram no chão`);
+      if (config.avisos.chao) avisar('chao', 'Mochila cheia', corpo, (n) => `Mais ${n} ${n > 1 ? 'itens ficaram' : 'item ficou'} no chão`);
     } else if (/(^|\s)chefe(\s|$)/.test(tipo) && /foi derrotado!$/.test(corpo)) registrar('chefe', 'Chefe derrotado', corpo);
     else if (/(^|\s)raro(\s|$)/.test(tipo) && /^(Lendário|Mítico)/i.test(corpo)) registrar('lendario', 'Lendário!', corpo);
   }
@@ -402,7 +402,7 @@
     if (!prontos.length) return;
     const extras = prontos.filter((ev) => ev.tipo === 'drop' && /^(lendario|mitico)$/.test(ev.raridade))
       .map((ev) => ({ ts: ev.ts, tipo: 'lendario', titulo: ev.raridade === 'mitico' ? 'Mítico!' : 'Lendário!', texto: ev.item, item: ev.item, raridade: ev.raridade, qual: ev.qual }));
-    if (config.avisos.lendario) for (const x of extras) avisar('lendario', x.titulo, `${x.item}${x.qual && x.qual !== '?' ? ' (qualidade ' + x.qual + ')' : ''}`, (n) => `${n} lendários ou míticos caíram`);
+    if (config.avisos.lendario) for (const x of extras) avisar('lendario', x.titulo, `${x.item}${x.qual && x.qual !== '?' ? ' (qualidade ' + x.qual + ')' : ''}`, (n) => `Mais ${n} ${n > 1 ? 'lendários ou míticos caíram' : 'lendário ou mítico caiu'}`);
     for (const ev of prontos) { if (!ev.raridade) delete ev.raridade; delete ev.servidor; }
     const todos = [...prontos, ...extras].sort((a, b) => a.ts - b.ts), chave = 'eventos:' + nome;
     evCadeia = evCadeia.then(async () => {
@@ -451,7 +451,7 @@
       somar(s.zonas[zona] ||= { seg: 0, abates: 0, xp: 0, xpBase: 0, ouro: 0 }, seg, pend);
       const t = Math.floor(agora / BALDE) * BALDE;
       let b = s.baldes.at(-1);
-      if (!b || b.t !== t) { b = { t, xp: 0, xpBase: 0, abates: 0, zona }; s.baldes.push(b); if (s.baldes.length > 72) s.baldes.shift(); }
+      if (!b || b.t !== t) { b = { t, xp: 0, xpBase: 0, abates: 0, zona }; s.baldes.push(b); if (s.baldes.length > 288) s.baldes.shift(); }      // 288 baldes de 5 min = 24 h
       b.xp += pend.xp; b.xpBase += pend.xpBase; b.abates += pend.abates; b.zona = zona;
       for (const [d, q] of Object.entries(pend.drops)) s.drops[d] = (s.drops[d] || 0) + q;
       pend = novoPend();
@@ -497,7 +497,8 @@
     janelas.delete(id);
     if (j.n < 2) return;
     janelas.set(id, { ini: Date.now(), n: 1, t: 0 });      // o aviso do grupo abre uma janela nova
-    enviarAviso(id, j.titulo, j.plural ? j.plural(j.n) : `${j.texto} (${j.n} avisos no último minuto)`);
+    const mais = j.n - 1;      // o 1º da janela já saiu na hora: o resumo fala só dos retidos depois dele
+    enviarAviso(id, j.titulo, j.plural ? j.plural(mais) : `${j.texto} (e mais ${mais} no último minuto)`);
   }
   function avisar(id, titulo, texto, plural) {
     const agora = Date.now(), j = janelas.get(id);
@@ -544,7 +545,7 @@
   function conferirRastreio(e, p) {
     const a = config.avisos, r = e.rastreio, q = p.rastreio;
     if (!r || !q) return;
-    const dia = new Date().toDateString();
+    const dia = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });      // o dia do jogo vira à meia-noite de Brasília
     if (a.premio && r.login && !q.login && diaPremio !== dia) { diaPremio = dia; avisar('premio', 'Prêmio diário', 'O prêmio diário de login está esperando você.'); }
     const prontas = (x) => (x.diarias || []).filter((d) => d.pronta).length;
     if (a.diaria && prontas(e) > prontas(p)) avisar('diaria', 'Diária pronta', 'Uma missão diária ficou pronta: dá para receber o prêmio.');

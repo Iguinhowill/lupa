@@ -51,10 +51,10 @@ const LIMITE_LEITURA = 4 * 60e3;
 async function lerSelos() {
   const [est, pul] = await Promise.all([
     SB.from('estados').select('personagem,lido_em').order('personagem'),
-    SB.from('pulsos').select('personagem,em,cacando').order('em', { ascending: false }).limit(12)
+    SB.from('pulsos').select('personagem,em,cacando').gte('em', new Date(Date.now() - 3600e3).toISOString()).order('em', { ascending: false }).limit(200)
   ]);
   if (est.error) throw est.error;
-  const ultimo = {};
+  const ultimo = {};      // o último pulso da última hora de cada personagem (uns 60 por personagem)
   for (const p of pul.data || []) ultimo[p.personagem] ||= p;
   const agora = Date.now();
   return est.data.map((e) => {
@@ -111,8 +111,8 @@ async function vigiarAvisos() {
     gravarPref('aviso-id', String(ultimo));
   };
   if (!ultimo) { const { data } = await SB.from('avisos').select('id').order('id', { ascending: false }).limit(1); ultimo = data?.[0]?.id || -1; gravarPref('aviso-id', String(ultimo)); }
-  setInterval(() => { if (!document.hidden) conferir().catch(() => {}); }, 30e3);
-  document.addEventListener('visibilitychange', marcarVistos);
+  setInterval(() => conferir().catch(() => {}), 30e3);      // também em segundo plano: é para isso que o aviso existe
+  document.addEventListener('visibilitychange', () => { marcarVistos(); if (!document.hidden) conferir().catch(() => {}); });
 }
 
 // ---------- peças das páginas ----------
@@ -177,11 +177,11 @@ async function todas(montar, tam = 1000) {
     if (data.length < tam) return out;
   }
 }
-const COLS_CACADA = 'personagem,inicio,fim,segundos,abates,xp,xp_base,ouro,mortes,nivel_fim,zonas,baldes,drops,ultimo_abate';
-const sessaoDe =(r) => ({
+const COLS_CACADA = 'personagem,inicio,fim,segundos,abates,xp,xp_base,ouro,mortes,nivel_ini,nivel_fim,zonas,baldes,drops,ultimo_abate';
+const sessaoDe = (r) => ({
   personagem: r.personagem, ini: Date.parse(r.inicio), fim: Date.parse(r.fim), ultimoAbate: r.ultimo_abate ? Date.parse(r.ultimo_abate) : 0,
   seg: Number(r.segundos) || 0, abates: r.abates, xp: Number(r.xp), xpBase: Number(r.xp_base), ouro: Number(r.ouro), mortes: r.mortes,
-  nivel: r.nivel_fim, zonas: r.zonas || {}, baldes: r.baldes || [], drops: r.drops || {}
+  nivel: r.nivel_fim, nivelIni: r.nivel_ini ?? null, zonas: r.zonas || {}, baldes: r.baldes || [], drops: r.drops || {}
 });
 
 const Nuvem = {
