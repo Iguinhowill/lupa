@@ -8,16 +8,21 @@
 const fs = require('node:fs');
 const { EventEmitter } = require('node:events');
 
-const lerJson = (arq) => { try { return JSON.parse(fs.readFileSync(arq, 'utf8')) || null; } catch { return null; } };
+// só um objeto conta como dados válidos (um JSON solto como 123 ou [] também é "estragado")
+const lerJson = (arq) => {
+  try { const v = JSON.parse(fs.readFileSync(arq, 'utf8')); return v && typeof v === 'object' && !Array.isArray(v) ? v : null; } catch { return null; }
+};
 
 class Armazem extends EventEmitter {
-  constructor(arquivo, { espera = 1500, esperaMax = 10e3 } = {}) {
+  constructor(arquivo, { espera = 1500, esperaMax = 10e3, retentar = 5000 } = {}) {
     super();
     this.arquivo = arquivo;
-    this.tempos = { espera, esperaMax };
+    this.tempos = { espera, esperaMax, retentar };
     this.espera = null;
     this.desde = 0;      // quando ficou a primeira mudança ainda não gravada
-    this.dados = lerJson(arquivo) || lerJson(arquivo + '.bak') || {};
+    const principal = lerJson(arquivo);
+    this.principalBom = !!principal;      // estragado, ele não vira .bak (o .bak bom fica até a 1ª gravação dar certo)
+    this.dados = principal || lerJson(arquivo + '.bak') || {};
   }
 
   // como o chrome.storage.local.get: null (tudo), uma chave, uma lista ou { chave: padrão }
@@ -58,18 +63,22 @@ class Armazem extends EventEmitter {
     this.espera = setTimeout(() => this.gravar(), Math.max(0, Math.min(this.tempos.espera, this.desde + this.tempos.esperaMax - agora)));
   }
 
-  // um erro de disco (antivírus segurando o arquivo, disco cheio) não derruba o app: tenta de novo na próxima mudança
+  // o principal (sempre trocado inteiro, então bom) vira o .bak, e o novo entra no lugar dele. Um erro de disco
+  // (antivírus segurando o arquivo, disco cheio) não derruba o app: tenta de novo em alguns segundos
   gravar() {
     clearTimeout(this.espera);
     this.espera = null;
-    this.desde = 0;
     const tmp = this.arquivo + '.tmp';
     try {
       fs.writeFileSync(tmp, JSON.stringify(this.dados));
-      try { fs.copyFileSync(this.arquivo, this.arquivo + '.bak'); } catch {}
+      if (this.principalBom) try { fs.renameSync(this.arquivo, this.arquivo + '.bak'); } catch {}
       fs.renameSync(tmp, this.arquivo);
+      this.principalBom = true;
+      this.desde = 0;
     } catch (e) {
       console.error('[Lupa] não gravou os dados:', e?.message || e);
+      this.espera = setTimeout(() => this.gravar(), this.tempos.retentar);
+      this.espera.unref?.();      // a nova tentativa não segura o processo aberto sozinha
     }
   }
 }
