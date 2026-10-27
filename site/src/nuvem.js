@@ -6,7 +6,7 @@
 var LUPA_PLANOS = {};        // o mesmo formato do planos.js, lido da tabela planos
 var LUPA_NOTAS = {};         // notas do guia por personagem
 const SB = supabase.createClient(LUPA_CONFIG.url, LUPA_CONFIG.chave);
-const PAGINAS = [['agora.html', 'Agora'], ['relatorio.html', 'Relatório'], ['guia.html', 'Guia'], ['farm.html', 'Farm'], ['loja.html', 'Loja'], ['roteiros/', 'Roteiros']];
+const PAGINAS = [['agora.html', 'Agora'], ['relatorio.html', 'Relatório'], ['guia.html', 'Guia'], ['farm.html', 'Farm'], ['loja.html', 'Loja'], ['calcular.html', 'Calcular'], ['roteiros/', 'Roteiros']];
 const $id = (id) => document.getElementById(id);
 const iso = (ts) => new Date(ts).toISOString();
 const HORA = 3600e3, DIA = 24 * HORA;
@@ -234,9 +234,10 @@ const Nuvem = {
   },
   // preço mínimo de uma versão ao longo do tempo, direto da view mercado_precos (uma linha por leitura)
   async historicoPreco(chave, dias = 30) {
-    const { data, error } = await SB.from('mercado_precos').select('lido_em,ouro,gemas,n').eq('chave', chave).gte('lido_em', iso(Date.now() - dias * DIA)).order('lido_em').limit(500);
+    // as 500 mais recentes (com mais leituras que isso, o corte cai nas antigas), devolvidas em ordem de tempo
+    const { data, error } = await SB.from('mercado_precos').select('lido_em,ouro,gemas,n').eq('chave', chave).gte('lido_em', iso(Date.now() - dias * DIA)).order('lido_em', { ascending: false }).limit(500);
     if (error) throw error;
-    return data.map((r) => ({ ts: Date.parse(r.lido_em), ouro: r.ouro, gemas: r.gemas, n: r.n }));
+    return data.reverse().map((r) => ({ ts: Date.parse(r.lido_em), ouro: r.ouro, gemas: r.gemas, n: r.n }));
   },
   async mercado(limite = 40) {
     const { data, error } = await SB.from('mercado_leituras').select('lido_em,completa,filtros,grupos,personagem').order('lido_em', { ascending: false }).limit(limite);
