@@ -1,5 +1,5 @@
-// Lupa Online · Calcular: três calculadoras com as tabelas PÚBLICAS do jogo (dados-jogo.js): tempo até o nível, forja do Ornn
-// e valor de venda. Tudo aqui é ESTIMATIVA: o site só calcula, não interage com o jogo.
+// Lupa Online · Calcular: quatro calculadoras com as tabelas PÚBLICAS do jogo (dados-jogo.js): tempo até o nível, forja do Ornn,
+// valor de venda e comparar builds. Tudo aqui é ESTIMATIVA: o site só calcula, não interage com o jogo.
 'use strict';
 
 // as contas (Monte Carlo da forja, XP/h medido, horas até o nível) ficam em calculos.js, que o node --test confere
@@ -18,6 +18,43 @@ const nivelTxt = (n) => `nível ${n}`;
 const xpTxt = (v) => (v >= 1e9 ? (v / 1e9).toFixed(2).replace('.', ',') + ' bi' : curto(v));
 const tickCurva = (v) => (v >= 1e6 ? `${+(v / 1e6).toFixed(1)}`.replace('.', ',') + ' M' : v >= 1e3 ? `${+(v / 1e3).toFixed(1)}`.replace('.', ',') + ' k' : String(v));
 const camposNum = (props) => h('input', { type: 'text', inputmode: 'decimal', autocomplete: 'off', ...props });
+
+// ---------- comparar builds: leitura da ficha e formatação das diferenças ----------
+const CARTA_NOME = { ataque: 'Ataque', poder: 'Poder de Habilidade', vida: 'Vida', armadura: 'Armadura', rm: 'Resistência Mágica', velocidade: 'Velocidade de Ataque', critico: 'Crítico', roubo: 'Roubo de Vida', vampirismo: 'Vampirismo Universal', recarga: 'Redução de Recarga' };
+const CARTA_RARIDADE = { 1: 'Básica', 2: 'Rara', 3: 'Lendária' };
+const ATRIBUTOS = [['forca', 'Força'], ['vitalidade', 'Vitalidade'], ['resistencia', 'Resistência'], ['agilidade', 'Agilidade'], ['foco', 'Foco']];
+const semAcento = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+// número como a ficha do jogo escreve: "724", "2,98", "2.98", "83%", "1.234", "1,2 k"
+function numeroDoTexto(t) {
+  let x = String(t == null ? '' : t).replace(/\s/g, '').replace(/[×x%]/gi, '');
+  if (!x) return null;
+  let mult = 1;
+  const suf = /([kKmM])$/.exec(x);
+  if (suf) { mult = suf[1].toLowerCase() === 'k' ? 1e3 : 1e6; x = x.slice(0, -1); }
+  if (/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(x)) x = x.replace(/\./g, '').replace(',', '.');      // 1.234 ou 1.234,5
+  else x = x.replace(',', '.');
+  const n = Number(x);
+  return Number.isFinite(n) ? n * mult : null;
+}
+const pctTexto = (t) => { const n = numeroDoTexto(t); return n == null ? null : /%/.test(String(t)) ? n / 100 : n; };
+// "3031!+4#ataque2~B" -> { id: "3031!", refino: 4, qual: "B", carta: "ataque2" }
+function itemDaChave(x) {
+  const m = RE_CHAVE.exec(String(x || ''));
+  return m ? { id: m[1] + m[2], refino: +(m[3] || 0), qual: m[5], carta: m[4] || '' } : null;
+}
+const baseDe = (id) => String(id || '').replace(/!$/, '');
+const nBR = (v, casas = 1) => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
+const sinal = (p, casas = 1) => { const t = nBR(Math.abs(p), casas); return Math.abs(p) < 0.5 * 10 ** -casas ? t : (p > 0 ? '+' : '−') + t; };
+// diferença B contra A: tipo "rel" (em %), "pp" (pontos percentuais). melhor: +1 se maior é melhor, -1 se menor é melhor. O sinal vai no texto; a cor só diz bom ou ruim.
+function difTexto(a, b, tipo = 'rel', melhor = 1) {
+  let p, txt;
+  if (tipo === 'pp') { p = (b - a) * 100; txt = sinal(p) + ' pp'; }
+  else if (!a) { p = b ? Infinity * Math.sign(b) : 0; txt = b ? 'novo' : '—'; }
+  else { p = (b / a - 1) * 100; txt = sinal(p) + '%'; }
+  const bom = Math.abs(p) < 0.05 ? '' : p * melhor > 0 ? 'dif-bom' : 'dif-ruim';
+  return { p, txt, classe: bom };
+}
+const difSpan = (d) => h('span', { class: 'dif ' + d.classe }, d.txt);
 
 // ---------- gráfico: XP para passar de cada nível, do 1 ao 100 ----------
 function graficoCurva(larg, nivel, alvo) {
@@ -220,8 +257,207 @@ function graficoCurva(larg, nivel, alvo) {
     return h('section', { class: 'cartao' }, h('h2', { class: 'rotulo' }, 'Valor de venda'), corpo);
   }
 
+  // ================= 4) comparar builds =================
+  // A = a ficha que a Lupa leu; B = uma cópia editável (guardada no navegador, por personagem). Tudo é estimativa: as contas dos stats batem com
+  // o motor do jogo (gerar-tabelas.mjs confere); o farm vem de um modelo calibrado contra a simulação do motor, com o erro medido à mostra.
+  const CB = { zona: lerPref('calc-cb-zona', '') };
+  const campeaoDe = (n) => {
+    const nome = semAcento(LUPA_PLANOS[n]?.campeao || lerPref('comp-camp:' + n, ''));
+    return Object.keys(JOGO.CAMPEOES).find((id) => id === nome || semAcento(JOGO.CAMPEOES[id].nome) === nome) || '';
+  };
+  // a ficha lida pela Lupa vira uma build: itens, atributos, ranks e barra
+  function lerBuildA(n) {
+    const e = estados[n], f = e?.ficha, nivel = parseInt(e?.nivel, 10) || 0;
+    if (!f || !nivel || !(f.equip || []).length) return null;
+    const itens = f.equip.map((i) => itemDaChave(i.id)).filter(Boolean);
+    if (!itens.length) return null;
+    const atrib = {};
+    for (const [chave, nome] of ATRIBUTOS) { const x = (f.atributos || []).find((at) => semAcento(at.nome) === semAcento(nome)); atrib[chave] = Math.max(0, Math.floor(numeroDoTexto(x?.valor) || 0)); }
+    const ranks = {};
+    for (const hb of f.habs || []) { const m = /^(\d+)/.exec(String(hb.rank || '')); if (m) ranks[hb.t] = +m[1]; }
+    const barra = (f.barra || []).map((b) => b?.t || '');
+    return { nivel, itens, atrib, ranks, barra, habs: f.habs || [], stats: f.stats || {}, mochila: (f.mochila || []).map((i) => ({ ...i, obj: itemDaChave(i.id) })).filter((i) => i.obj), equip: f.equip };
+  }
+  const copiaBuild = (a) => ({ itens: a.itens.map((i) => ({ ...i })), atrib: { ...a.atrib }, barra: a.barra.slice() });
+  function lerB(n, a) {
+    try {
+      const b = JSON.parse(lerPref('comp-b:' + n, 'null'));
+      if (b && Array.isArray(b.itens) && b.atrib && Array.isArray(b.barra)) {
+        const itens = b.itens.slice(0, 6).map((i) => ({ id: String(i.id || ''), refino: Math.min(7, Math.max(0, Math.floor(+i.refino || 0))), qual: JOGO.ORDEM_QUAL.includes(i.qual) ? i.qual : 'B', carta: Object.hasOwn(JOGO.CARTA_VALOR, i.carta) ? i.carta : '' }));
+        const atrib = Object.fromEntries(ATRIBUTOS.map(([k]) => [k, Math.max(0, Math.floor(+b.atrib[k] || 0))]));
+        return { itens, atrib, barra: b.barra.slice(0, 4).map((t) => String(t || '')) };
+      }
+    } catch {}
+    return copiaBuild(a);
+  }
+  const nomeCarta = (c) => `${CARTA_NOME[c.replace(/[1-3]$/, '')] || c} ${CARTA_RARIDADE[c.slice(-1)] || ''}`.trim();
+  const rotuloItem = (o) => `${JOGO.item(o.id)?.nome || o.id} +${o.refino} ${o.qual}${o.carta ? ' · ' + nomeCarta(o.carta) : ''}`;
+  const fichaDe = (camp, nivel, b, ranks, bonus) => JOGO.fichaDaBuild({ campeao: camp, nivel, atrib: b.atrib, itens: b.itens.filter((i) => i.id && JOGO.item(i.id)).map((i) => JOGO.chaveItem(i)), ranks, bonus });
+  // o que o jogo MOSTRA contra o que a conta dá. tol: diferença aceita (em unidades do próprio valor; a ficha arredonda o que mostra)
+  function conferirComOJogo(f, st) {
+    const lin = [], p = (rot, jogo, calc, tol, fmt) => { if (jogo != null && Number.isFinite(jogo)) lin.push({ rot, jogo, calc, fmt, dif: calc - jogo, ok: Math.abs(calc - jogo) <= tol }); };
+    const dano = numeroDoTexto(st.dano), arm = numeroDoTexto(st.armadura), rm = numeroDoTexto(st.resMagica);
+    p('Dano', dano, f.ad, Math.max(1, 0.004 * (dano || 0)), (v) => inteiro(v));
+    p('Velocidade de ataque', numeroDoTexto(st.velAtaque), f.velAtaque, 0.011, (v) => nBR(v, 2));
+    p('Crítico', pctTexto(st.critico), f.critico, 0.0101, (v) => nBR(v * 100, 0) + '%');
+    p('Dano crítico', pctTexto(st.danoCritico), f.danoCritico, 0.0101, (v) => nBR(v * 100, 0) + '%');
+    p('Armadura', arm, f.armadura, Math.max(1, 0.004 * (arm || 0)), (v) => inteiro(v));
+    p('Resistência mágica', rm, f.rm, Math.max(1, 0.004 * (rm || 0)), (v) => inteiro(v));
+    p('Redução de recarga', pctTexto(st.recarga), f.reducaoRecarga, 0.0101, (v) => nBR(v * 100, 0) + '%');
+    p('Esquiva', pctTexto(st.esquiva), f.esquiva, 0.0101, (v) => nBR(v * 100, 0) + '%');
+    return lin;
+  }
+  function abaComparar() {
+    const caixa = h('div', { class: 'calc-corpo' });
+    const cartaoBase = () => h('section', { class: 'cartao' }, h('h2', { class: 'rotulo' }, 'Comparar builds'), caixa);
+    const a = lerBuildA(quem);
+    if (!a) { caixa.replaceChildren(vazio('Ainda não tenho a ficha deste personagem (itens equipados e nível): a Lupa precisa ler o jogo e enviar.')); return cartaoBase(); }
+    const camp = campeaoDe(quem);
+    if (!camp) {
+      const sel = h('select', { id: 'cb-camp', onchange: () => { gravarPref('comp-camp:' + quem, sel.value); desenhar(); } }, h('option', { value: '' }, 'Escolha o campeão'), Object.entries(JOGO.CAMPEOES).map(([id, c]) => h('option', { value: id }, c.nome)));
+      caixa.replaceChildren(vazio('Não sei qual é o campeão deste personagem. Escolha para comparar:'), campo('Campeão', sel));
+      return cartaoBase();
+    }
+    const C = JOGO.CAMPEOES[camp], nivel = a.nivel;
+    const B = lerB(quem, a);
+    while (B.itens.length < Math.max(5, a.itens.length)) B.itens.push({ id: '', refino: 0, qual: 'B', carta: '' });
+    // zona: a escolhida, senão a do personagem, senão a ideal para o nível
+    const zonaAtual = JOGO.ZONAS.find((z) => z.nome === estados[quem]?.zona) || JOGO.zonaIdeal(nivel);
+    const zona = JOGO.ZONA[CB.zona] || zonaAtual;
+    const calibrado = JOGO.FARM.kHab?.[camp] != null, liberado = calibrado && JOGO.FARM.liberado?.[camp] !== false, erro = JOGO.meta.erroComparador;
+    const eCamp = erro?.porCampeao?.[camp] || null;
+    // A pelo que o jogo mostra: se a ficha difere da conta por um bônus que ela não mostra (conquistas, mascote), vira bônus nas duas builds
+    const bonus = {};
+    let fA = fichaDe(camp, nivel, a, a.ranks, bonus), conf = conferirComOJogo(fA, a.stats);
+    let inferido = false;
+    for (const [k, rot] of [['ad', 'Dano'], ['armadura', 'Armadura'], ['rm', 'Resistência mágica']]) {
+      const x = conf.find((l) => l.rot === rot), r = x && x.calc > 0 ? x.jogo / x.calc : 1;
+      if (!x.ok && r > 1.004 && r < 1.2) { bonus[k] = +(r - 1).toFixed(4); inferido = true; }
+    }
+    if (inferido) { fA = fichaDe(camp, nivel, a, a.ranks, bonus); conf = conferirComOJogo(fA, a.stats); }
+    const salvar = () => gravarPref('comp-b:' + quem, JSON.stringify(B));
+    const fB = fichaDe(camp, nivel, B, a.ranks, bonus);
+    const barraB = B.barra.filter(Boolean), barraA = a.barra.filter(Boolean);
+    const farmA = liberado ? CALC.estimarFarm(fA, camp, zona, nivel, { build: { ranks: a.ranks, barra: barraA } }) : null;
+    const farmB = liberado ? CALC.estimarFarm(fB, camp, zona, nivel, { build: { ranks: a.ranks, barra: barraB } }) : null;
+
+    // ---------- o editor da build B ----------
+    const seus = [...a.equip.map((i) => ({ obj: itemDaChave(i.id) })), ...a.mochila].filter((i) => i.obj && JOGO.item(i.obj.id)).filter((i, k, l) => l.findIndex((o) => JOGO.chaveItem(o.obj) === JOGO.chaveItem(i.obj)) === k);
+    const mudou = () => { salvar(); desenhar(); };
+    const slot = (k) => {
+      const it = B.itens[k];
+      const selItem = h('select', { id: 'cb-item-' + k, 'aria-label': `Espaço ${k + 1}: item`, onchange: () => {
+        const v = selItem.value;
+        if (v.startsWith('m:')) { const o = itemDaChave(v.slice(2)); if (o) B.itens[k] = o; } else if (v.startsWith('t:')) it.id = v.slice(2); else it.id = '';
+        mudou();
+      } },
+      h('option', { value: '' }, '(vazio)'),
+      seus.length ? h('optgroup', { label: 'Seus itens (equipados e mochila)' }, seus.map((s) => h('option', { value: 'm:' + JOGO.chaveItem(s.obj) }, rotuloItem(s.obj)))) : null,
+      ['lendario', 'mitico', 'epico', 'basico'].map((r) => (itens.some((i) => i.raridade === r) ? h('optgroup', { label: NOME_RAR[r] }, itens.filter((i) => i.raridade === r).map((i) => h('option', { value: 't:' + i.id }, i.nome))) : null)));
+      selItem.value = it.id && JOGO.item(it.id) ? 't:' + baseDe(it.id) : '';
+      const selRef = h('select', { id: 'cb-ref-' + k, 'aria-label': `Espaço ${k + 1}: refino`, onchange: () => { it.refino = +selRef.value; mudou(); } }, [0, 1, 2, 3, 4, 5, 6, 7].map((r) => h('option', { value: r }, `+${r}`)));
+      selRef.value = it.refino;
+      const selQual = h('select', { id: 'cb-qual-' + k, 'aria-label': `Espaço ${k + 1}: qualidade`, onchange: () => { it.qual = selQual.value; mudou(); } }, JOGO.ORDEM_QUAL.map((q) => h('option', { value: q }, q)));
+      selQual.value = it.qual;
+      const selCarta = h('select', { id: 'cb-carta-' + k, 'aria-label': `Espaço ${k + 1}: carta`, onchange: () => { it.carta = selCarta.value; mudou(); } }, h('option', { value: '' }, 'Sem carta'),
+        JOGO.CARTA_TIPOS.map((t) => h('optgroup', { label: CARTA_NOME[t] || t }, [1, 2, 3].map((n) => h('option', { value: t + n }, `${CARTA_NOME[t] || t} ${CARTA_RARIDADE[n]}`)))));
+      selCarta.value = it.carta;
+      const dif = JOGO.chaveItem(it) !== JOGO.chaveItem(a.itens[k] || { id: '' });
+      return h('div', { class: 'comp-slot' + (dif ? ' mudou' : '') }, campo(`Espaço ${k + 1}`, selItem), campo('Refino', selRef), campo('Qualidade', selQual), campo('Carta', selCarta));
+    };
+    const totalA = Object.values(a.atrib).reduce((s, v) => s + v, 0), totalB = Object.values(B.atrib).reduce((s, v) => s + v, 0);
+    const inputsAtrib = ATRIBUTOS.map(([k, nome]) => {
+      const inp = camposNum({ id: 'cb-at-' + k, value: String(B.atrib[k]), 'aria-label': nome });
+      inp.addEventListener('change', () => { B.atrib[k] = Math.max(0, Math.floor(numeroDoTexto(inp.value) || 0)); mudou(); });
+      return campo(`${nome} (A: ${a.atrib[k]})`, inp);
+    });
+    const aprendidas = a.habs.filter((x) => !x.passiva && /^[1-9]/.test(String(x.rank || '')));
+    const selBarra = (k) => {
+      const sel = h('select', { id: 'cb-barra-' + k, 'aria-label': `Habilidade ${k + 1} da barra`, onchange: () => { B.barra[k] = sel.value; mudou(); } }, h('option', { value: '' }, '(vazio)'),
+        aprendidas.map((x) => h('option', { value: x.t }, `${x.t} · ${x.nome} ${String(x.rank).split('/')[0]}`)));
+      sel.value = B.barra[k] || '';
+      return campo(`Espaço ${k + 1}`, sel);
+    };
+    while (B.barra.length < 4) B.barra.push('');
+    const selZona = h('select', { id: 'cb-zona', 'aria-label': 'Zona de caça', onchange: () => { CB.zona = selZona.value; gravarPref('calc-cb-zona', CB.zona); desenhar(); } }, JOGO.ZONAS.map((z) => h('option', { value: z.id }, `${z.nome} (monstros ${z.nm[0]} a ${z.nm[1]})`)));
+    selZona.value = zona.id;
+    const btnVoltar = h('button', { type: 'button', id: 'cb-voltar', class: 'botao', onclick: () => { gravarPref('comp-b:' + quem, ''); desenhar(); } }, 'Voltar para a build atual');
+
+    // ---------- a conferência com o jogo ----------
+    const ruins = conf.filter((l) => !l.ok);
+    const NOME_BONUS = { ad: 'dano', armadura: 'armadura', rm: 'resistência mágica' };
+    const confere = !conf.length ? nota('A ficha lida não trouxe os stats do jogo, então não dá para conferir a conta.')
+      : ruins.length ? h('div', { class: 'comp-confere diverge' }, h('p', null, h('b', null, 'Difere do jogo. '), ruins.map((l) => `${l.rot}: o jogo mostra ${l.fmt(l.jogo)} e a conta dá ${l.fmt(l.calc)}.`).join(' ')),
+        nota('Pode ser um bônus passageiro (Fúria, buff de guilda), um item ou carta lidos pela metade ou uma regra nova do jogo (rode gerar-tabelas.mjs). A comparação segue com a conta, que é a mesma nas duas builds.'))
+        : h('p', { class: 'comp-confere ok' }, h('b', null, 'Confere com o jogo. '), `A conta da build A bate com os ${conf.length} stats que o jogo mostra${inferido ? `, depois de um bônus de ${Object.entries(bonus).map(([k, v]) => `${sinal(v * 100, 1)}% de ${NOME_BONUS[k]}`).join(' e ')} que a ficha não mostra (conquistas ou mascote)` : ''}.`);
+
+    // ---------- o resultado ----------
+    const L = [
+      ['Dano de ataque', 'ad', (v) => inteiro(v)],
+      ['Poder de habilidade', 'ap', (v) => inteiro(v)],
+      ['Velocidade de ataque (ficha)', 'velAtaque', (v) => nBR(v, 2)],
+      ['Ataques por segundo (relógio do jogo)', 'velEfetiva', (v) => nBR(v, 2)],
+      ['Crítico', 'critico', (v) => nBR(v * 100, 0) + '%', 'pp'],
+      ['Dano crítico', 'danoCritico', (v) => '×' + nBR(v, 2)],
+      ['Vida', 'vida', (v) => inteiro(v)],
+      ['Armadura', 'armadura', (v) => inteiro(v)],
+      ['Resistência mágica', 'rm', (v) => inteiro(v)],
+      ['Roubo de vida', 'rouboVida', (v) => nBR(v * 100, 1) + '%', 'pp'],
+      ['Vampirismo universal', 'vampirismo', (v) => nBR(v * 100, 1) + '%', 'pp'],
+      ['Redução de recarga', 'reducaoRecarga', (v) => nBR(v * 100, 0) + '%', 'pp'],
+      ['Esquiva', 'esquiva', (v) => nBR(v * 100, 0) + '%', 'pp'],
+      ['Regeneração de vida por segundo', 'regen', (v) => nBR(v, 1)],
+    ].filter(([, k]) => fA[k] || fB[k]);
+    const linhas = L.map(([rot, k, fmt, tipo]) => ({ celulas: [rot, fmt(fA[k]), fmt(fB[k]), difSpan(difTexto(fA[k], fB[k], tipo || 'rel'))] }));
+    const tabelaStats = tabela([{ t: 'Stat' }, { t: 'A (atual)', num: true }, { t: 'B (editada)', num: true }, { t: 'B contra A', num: true }], linhas, 'Stats das builds A e B');
+    // avisos que explicam o que a conta fez (degrau do DT, teto do crítico)
+    const avisos = [];
+    if (Math.abs(fB.velAtaque - fA.velAtaque) > 0.004 && fB.periodoAtaque === fA.periodoAtaque) avisos.push(`A velocidade de ataque da ficha mudou (${nBR(fA.velAtaque, 2)} para ${nBR(fB.velAtaque, 2)}), mas o jogo anda em passos de 0,05 s e o ataque continua saindo a cada ${nBR(fA.periodoAtaque, 2)} s: nessa troca a velocidade não rende nada.`);
+    else if (fB.periodoAtaque !== fA.periodoAtaque) avisos.push(`O ataque passa de um a cada ${nBR(fA.periodoAtaque, 2)} s para um a cada ${nBR(fB.periodoAtaque, 2)} s (o relógio do jogo anda em passos de 0,05 s, por isso a velocidade rende em degraus).`);
+    if (fB.criticoBruto > 1.0001 && fB.critico >= 1 && Math.abs(fB.criticoBruto - fA.criticoBruto) > 1e-9) avisos.push(`O crítico da build B soma ${nBR(fB.criticoBruto * 100, 0)}%, mas o teto é 100%: o que passa disso não rende.`);
+    const barraMudou = barraA.slice().sort().join() !== barraB.slice().sort().join();
+
+    let resultado, frase = '', erroTxt = '';
+    if (farmA && farmB) {
+      const dAb = difTexto(farmA.abatesH, farmB.abatesH);
+      const tl = (tit, vA, vB, fmt, melhor = 1) => h('div', { class: 'stat grande' }, h('span', { class: 'rot' }, tit), h('span', { class: 'val' }, fmt(vB)), h('span', { class: 'st-sub' }, `A: ${fmt(vA)} · `, difSpan(difTexto(vA, vB, 'rel', melhor))));
+      const arred = Math.abs(dAb.p) >= 2 ? sinal(Math.round(dAb.p), 0) + '%' : dAb.txt;
+      frase = Math.abs(dAb.p) < 0.5 ? `A build B rende praticamente o mesmo de abates/h que a A na zona ${zona.nome}.` : `A build B rende cerca de ${arred} de abates/h na zona ${zona.nome}.`;
+      erroTxt = eCamp ? ` Estimativa: o comparador erra até ±${nBR(Math.max(1, Math.ceil(eCamp.p90)), 0)} pontos contra a simulação do jogo na maioria das trocas (mediana ±${nBR(eCamp.mediana, 1)}; no pior caso medido, ±${nBR(Math.ceil(eCamp.max), 0)}).` : ' Estimativa.';
+      resultado = h('div', { class: 'calc-corpo' },
+        h('div', { class: 'grade-tiles' },
+          tl('Dano por segundo', farmA.dps, farmB.dps, curto),
+          tl('Tempo por abate', farmA.tAbate, farmB.tAbate, (v) => nBR(v, 2) + ' s', -1),
+          tl('Abates por hora', farmA.abatesH, farmB.abatesH, (v) => inteiro(v)),
+          tl('XP por hora', farmA.xpH, farmB.xpH, curto),
+          tl('Ouro por hora', farmA.ouroH, farmB.ouroH, curto)),
+        barraMudou ? nota(`A barra de habilidades mudou: o modelo conta o dano e a velocidade das habilidades de forma aproximada${eCamp?.barra ? `; nesse tipo de troca ele errou até ±${nBR(eCamp.barra.max, 0)} pontos na medição` : ''}.`) : null);
+    } else {
+      resultado = h('div', { class: 'calc-corpo' }, nota(!calibrado ? `Ainda não calibrei o modelo de farm para ${C.nome}: aqui só os stats.` : `O modelo de farm de ${C.nome} errou ${nBR(eCamp?.mediana ?? 0, 1)} pontos de mediana contra a simulação do jogo (mais do que aceito), então mostro só os stats e não prometo abates por hora.`));
+    }
+
+    caixa.replaceChildren(
+      confere,
+      h('div', { class: 'filtros-drops' }, campo('Zona de caça', selZona), h('div', { class: 'filtro' }, h('span', null, 'Build B'), btnVoltar)),
+      frase ? h('p', { class: 'estimativa-resumo comp-resposta' }, h('b', null, 'Resposta. '), frase, h('span', { class: 'fraco' }, erroTxt)) : null,
+      h('div', { class: 'comp-grade' },
+        h('div', { class: 'calc-corpo comp-edit' },
+          h('h3', { class: 'sub-cab' }, 'Edite a build B'),
+          h('div', { class: 'comp-slots' }, B.itens.map((_, k) => slot(k))),
+          h('div', { class: 'comp-atrib' }, inputsAtrib),
+          nota(totalB === totalA ? `Pontos de atributo: ${totalB}, o mesmo total da build A.` : totalB > totalA ? `Pontos de atributo: ${totalB} de ${totalA}. A build B gastou ${totalB - totalA} a mais do que existem: tire de algum atributo.` : `Pontos de atributo: ${totalB} de ${totalA}. Sobram ${totalA - totalB} pontos livres na build B.`),
+          liberado ? h('div', { class: 'calc-corpo' }, h('h3', { class: 'sub-cab' }, 'Habilidades da barra (B)'), h('div', { class: 'filtros-drops' }, [0, 1, 2, 3].map(selBarra))) : null),
+        h('div', { class: 'calc-corpo comp-res' },
+          h('h3', { class: 'sub-cab' }, 'Resultado'),
+          resultado,
+          tabelaStats,
+          ...avisos.map((t) => nota(t)))),
+      nota(`Estimativa. Os stats são as contas do próprio jogo, feitas com as tabelas públicas; a conferência acima mostra se bateram com a sua ficha. O farm é um modelo: conta o auto-ataque no relógio do jogo, o crítico contra monstros, a vida e a armadura dos monstros de ${zona.nome}, os itens que batem em área e as habilidades da barra de forma aproximada. Não conta mortes, poções, chefes, noite, monstro furioso nem mascote. XP e ouro são os da tabela, sem bônus de evento, live ou VIP.`));
+    return cartaoBase();
+  }
+
   // ================= página =================
-  const ABAS = [['nivel', 'Tempo até o nível'], ['forja', 'Forja do Ornn'], ['venda', 'Valor de venda']];
+  const ABAS = [['nivel', 'Tempo até o nível'], ['forja', 'Forja do Ornn'], ['venda', 'Valor de venda'], ['comparar', 'Comparar builds']];
   // quem estava com o foco: o id, ou o botão de um grupo de chips pelo texto (os chips não têm id)
   const chaveFoco = (el) => !el || el === document.body ? null : el.id ? { id: el.id } : el.closest('[role=group]') ? { grupo: el.closest('[role=group]').getAttribute('aria-label'), texto: el.textContent } : null;
   function devolverFoco(k) {
@@ -239,7 +475,7 @@ function graficoCurva(larg, nivel, alvo) {
       h('h1', null, 'Calculadoras', h('small', null, 'Estimativas com as tabelas públicas do jogo. O site só calcula: não mexe no jogo.')),
       chips('Calculadora', ABAS, aba, (v) => { aba = v; gravarPref('calc-aba', v); desenhar(); }),
       nomes.length > 1 ? chips('Personagem', nomes.map((n) => [n, nomeCurto(n)]), quem, (v) => { quem = v; gravarPref('calc-quem', v); desenhar(); }) : null);
-    raiz.replaceChildren(cab, aba === 'forja' ? abaForja() : aba === 'venda' ? abaVenda() : abaNivel(), rodape());
+    raiz.replaceChildren(cab, aba === 'forja' ? abaForja() : aba === 'venda' ? abaVenda() : aba === 'comparar' ? abaComparar() : abaNivel(), rodape());
     raiz.removeAttribute('aria-busy');
     devolverFoco(ativo);
   }

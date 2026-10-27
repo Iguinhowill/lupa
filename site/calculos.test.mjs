@@ -67,3 +67,67 @@ test('a mesma conta da forja vem do cache (mesmo objeto)', () => {
   const o = { id: '3031', de: 0, ate: 2, vip: true };
   assert.equal(C.simularForja(o), C.simularForja({ ...o }));
 });
+
+// ---------- modelo de farm: estimarFarm ----------
+const FARM_TESTE = { kHab: { yasuo: 0.9, aphelios: 0.7 }, aoe: { yasuo: 0.2, aphelios: 0.25 }, vaHab: {} };      // parâmetros fixos: o teste não depende da calibração do dia
+const bYasuo = (extra = {}) => ({ campeao: 'yasuo', nivel: 30, atrib: { forca: 40 }, itens: ['3031+3~B', '3172+2~B', '3153+3~B', '3074+3~B'], ...extra });
+const farm = (b, zona = 'dragao', opts = {}) => C.estimarFarm(J.fichaDaBuild(b), b.campeao, zona, b.nivel, { farm: FARM_TESTE, build: { ranks: { Q: 5, E: 5, R: 3, G: 5, D: 5 }, barra: ['Q', 'E', 'R', 'G'] }, ...opts });
+
+test('estimarFarm monotônico: mais dano nunca dá mais tempo por abate (e a faixa inteira dá menos)', () => {
+  let ant = Infinity, primeiro = null;
+  for (let forca = 0; forca <= 200; forca += 10) {
+    const r = farm(bYasuo({ atrib: { forca } }));
+    assert.ok(r.tAbate <= ant + 1e-9, `Força ${forca}: ${r.tAbate} > ${ant}`);
+    assert.ok(r.abatesH > 0 && Number.isFinite(r.xpH) && Number.isFinite(r.ouroH));
+    ant = r.tAbate; primeiro ??= r.tAbate;
+  }
+  assert.ok(ant < primeiro * 0.85, 'com muito mais dano o abate fica bem mais rápido');
+  // o mesmo com o refino (mais dano pela ficha) e com a qualidade
+  let t = Infinity;
+  for (let ref = 0; ref <= 7; ref++) { const r = farm(bYasuo({ itens: [`3031+${ref}~B`, '3172+2~B', '3153+3~B', '3074+3~B'] })); assert.ok(r.tAbate <= t + 1e-9); t = r.tAbate; }
+  assert.ok(farm(bYasuo({ itens: ['3031+3~SS', '3172+2~B', '3153+3~B', '3074+3~B'] })).tAbate < farm(bYasuo({ itens: ['3031+3~C', '3172+2~B', '3153+3~B', '3074+3~B'] })).tAbate);
+});
+test('estimarFarm: o degrau da velocidade de ataque (DT de 0,05 s) vale no farm: carta que não passa o degrau não muda nada', () => {
+  const itens = ['3031+2~B', '3172+2~B', '3153+2~B', '3074+2~B'], com = (n) => bYasuo({ atrib: { forca: 60, agilidade: 20 }, itens: itens.map((x, i) => (i < n ? x.replace('~', '#velocidade1~') : x)) });
+  const r = [0, 1, 2, 3].map((n) => farm(com(n), 'dragao', { build: { ranks: {}, barra: [] } }));      // sem habilidades: só o auto-ataque (os bônus de velocidade das habilidades misturam degraus)
+  assert.equal(r[1].tAbate, r[0].tAbate);
+  assert.equal(r[2].tAbate, r[0].tAbate);
+  assert.ok(r[3].tAbate < r[0].tAbate, 'a 3ª carta passa o degrau e o abate acelera');
+  assert.ok(r[3].periodoAtaque < r[0].periodoAtaque);
+});
+test('estimarFarm: o crítico acima do teto de 100% não rende, abaixo dele rende', () => {
+  const b = bYasuo({ itens: ['3031+5~A', '3036+5~A', '3085+5~A', '3172+2~B'] }), mais = bYasuo({ itens: ['3031+5#critico3~A', '3036+5~A', '3085+5~A', '3172+2~B'] });
+  assert.equal(J.fichaDaBuild(b).critico, 1);
+  assert.ok(J.fichaDaBuild(mais).criticoBruto > J.fichaDaBuild(b).criticoBruto);
+  assert.equal(farm(mais).abatesH, farm(b).abatesH);
+  // sem estar no teto, mais crítico dá mais abates
+  const baixo = bYasuo({ itens: ['3172+2~B', '3153+3~B'], atrib: { forca: 60 } }), baixoMais = bYasuo({ itens: ['3172+2~B', '3153+3#critico2~B'], atrib: { forca: 60 } });
+  assert.ok(J.fichaDaBuild(baixo).critico < 1 && farm(baixoMais).abatesH > farm(baixo).abatesH);
+});
+test('estimarFarm: monstros mais fortes (zona mais alta) demoram mais; o modelo devolve XP e ouro por hora coerentes', () => {
+  const b = bYasuo(), baixa = farm(b, 'rota-inf'), alta = farm(b, 'dragao');
+  assert.ok(alta.tLuta > baixa.tLuta && alta.vidaMonstro > baixa.vidaMonstro);
+  assert.ok(Math.abs(alta.xpH - alta.abatesH * alta.xpAbate) < 1e-6 && Math.abs(alta.ouroH - alta.abatesH * alta.ouroAbate) < 1e-6);
+  assert.ok(Math.abs(alta.abatesH - 3600 / alta.tAbate) < 1e-6, 'abates por hora = 3600 / tempo por abate');
+  assert.equal(C.estimarFarm(J.fichaDaBuild(b), 'nao-existe', 'dragao', 30), null);
+});
+test('estimarFarm: item de área (Hidra Raivosa) encurta o grupo, e a barra de habilidades soma dano', () => {
+  const f = J.fichaDaBuild(bYasuo({ itens: ['3031+3~B', '3172+2~B'] })), comHidra = { ...f, tem: (id) => id === '3074' || f.tem(id) };
+  const r0 = C.estimarFarm(f, 'yasuo', 'dragao', 30, { farm: FARM_TESTE }), r1 = C.estimarFarm(comHidra, 'yasuo', 'dragao', 30, { farm: FARM_TESTE });
+  assert.ok(r1.tLuta < r0.tLuta);
+  const ranks = { Q: 8, E: 8, R: 4, G: 5 }, h2 = C.habilidades(f, 'yasuo', { ranks, barra: ['Q', 'E'] }), h4 = C.habilidades(f, 'yasuo', { ranks, barra: ['Q', 'E', 'R', 'G'] });
+  assert.ok(h4.dano > h2.dano && h4.casts > h2.casts);
+  assert.ok(h4.buffs.some((x) => x.t === 'G' && x.va > 0 && x.U > 0), 'a Respiração do Vento entra como bônus de velocidade por parte do tempo');
+  assert.equal(C.habilidades(f, 'yasuo', { ranks, barra: ['W'] }).dano, 0, 'a Parede de Vento não causa dano');
+  assert.equal(C.habilidades(f, 'taric', { ranks, barra: ['Q'] }).dano, 0, 'campeão sem tabela de habilidades: sem habilidades no modelo');
+});
+test('estimarFarm com a calibração gravada: Yasuo e Aphelios calibrados; o erro medido está nas tabelas', () => {
+  for (const campeao of ['yasuo', 'aphelios']) {
+    const b = { ...bYasuo(), campeao }, r = C.estimarFarm(J.fichaDaBuild(b), campeao, 'dragao', 30, { build: { ranks: { Q: 5, W: 5, E: 5, G: 5, D: 5 }, barra: ['Q', 'W', 'E', 'G'] } });
+    assert.equal(r.calibrado, true, campeao);
+    assert.ok(r.abatesH > 100 && r.abatesH < 20000, `${campeao}: ${r.abatesH} abates/h`);
+    const e = J.meta.erroComparador.porCampeao[campeao];
+    assert.ok(e.n >= 30 && e.mediana >= 0 && e.p90 >= e.mediana && e.max >= e.p90, campeao);
+  }
+  assert.equal(C.estimarFarm(J.fichaDaBuild({ ...bYasuo(), campeao: 'taric' }), 'taric', 'dragao', 30, {}).calibrado, false);
+});
