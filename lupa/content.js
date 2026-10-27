@@ -32,104 +32,21 @@
   const bonusLive = () => porcento($('#buff-kick-t')) + porcento($('#buff-twitch-t'));
 
   // ---------- configuração (escrita pelo painel) ----------
-  const PADRAO = { esconderLoot: false, tema: true, semBonusLateral: false, semRedes: false, novaSessao: 0, novaSessaoPor: {}, manterAcordado: false, lateralFechada: false, recolhidos: {},
+  const PADRAO = { esconderLoot: false, tema: true, semBonusLateral: false, semRedes: false, novaSessao: 0, novaSessaoPor: {}, manterAcordado: false,
     avisos: { kick: true, twitch: true, voto: true, tarefa: true, evento: true, convites: false, mochila: true, chao: true, morte: true, pontos: true, nivel: true,
       premio: true, diaria: true, guerra: true, vilemaw: true, covil: true, reinicio: true, lendario: true } };
   let config = structuredClone(PADRAO);
   function aplicarConfig(c) {
-    config = { ...PADRAO, ...c, avisos: { ...PADRAO.avisos, ...(c?.avisos || {}) }, recolhidos: { ...(c?.recolhidos || {}) } };
+    config = { ...PADRAO, ...c, avisos: { ...PADRAO.avisos, ...(c?.avisos || {}) } };
     const html = document.documentElement.classList;
     html.toggle('lupa-sem-loot', !!config.esconderLoot);
     html.toggle('lupa-tema', !!config.tema);
     html.toggle('lupa-sem-bonus', !!config.semBonusLateral);
     html.toggle('lupa-sem-redes', !!config.semRedes);
-    tenta(() => controles(ultEstado));
   }
 
-  // ---------- lateral recolhível (só classes, controles próprios e CSS; nunca clica no jogo) ----------
-  let ultEstado = null, ultFechada = null;
-  const CARDS = {
-    status: { host: '#painel-status > header', raiz: '#painel-status', nome: 'Cartão do jogador' },
-    local: { host: '#painel-local > header', raiz: '#painel-local', nome: 'Local' },
-    abas: { host: '#direita > nav.abas', raiz: '#direita', nome: 'Abas' }
-  };
-  const ICONE_LADO = '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  const ICONE_CARD = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-  const salvarConfig = (mud) => tenta(() => chrome.storage.local.set({ config: { ...config, ...mud } }));
-  const alternarLateral = () => salvarConfig({ lateralFechada: !config.lateralFechada });
-  const alternarCard = (k) => salvarConfig({ recolhidos: { ...config.recolhidos, [k]: !config.recolhidos[k] } });
-  const escreve = (el, t) => { if (el.textContent !== t) el.textContent = t; };      // só escreve se mudou (evita laço com o observador)
-  const alertas = (e) => !e ? 0 : (e.tarefa?.pronta ? 1 : 0) + (e.tarefa?.cacandoFora ? 1 : 0)
-    + (e.mochila?.total > 0 && e.mochila.usados / e.mochila.total >= 0.9 ? 1 : 0) + ((e.pontos?.habilidade || 0) + (e.pontos?.atributo || 0) > 0 ? 1 : 0);
-
-  function criarControles() {
-    if (!$('#lateral') || !document.body) return;
-    let aba = $('#lupa-aba-lateral');
-    if (!aba) {
-      aba = document.createElement('button');
-      aba.id = 'lupa-aba-lateral'; aba.type = 'button';
-      aba.innerHTML = ICONE_LADO + '<span class="lupa-aba-txt">LUPA</span><span class="lupa-selo" hidden></span>';
-      aba.addEventListener('click', (ev) => { ev.stopPropagation(); alternarLateral(); });
-      document.body.append(aba);
-    }
-    for (const [k, c] of Object.entries(CARDS)) {
-      const host = $(c.host);
-      if (!host || $(':scope > .lupa-recolher', host)) continue;
-      const b = document.createElement('button');
-      b.type = 'button'; b.className = 'lupa-recolher'; b.dataset.lupaCard = k;
-      b.setAttribute('aria-label', 'Recolher ou abrir: ' + c.nome); b.title = 'Recolher ou abrir: ' + c.nome;
-      b.innerHTML = ICONE_CARD;
-      b.addEventListener('click', (ev) => { ev.stopPropagation(); ev.preventDefault(); alternarCard(k); });
-      if (k !== 'abas') { const r = document.createElement('span'); r.className = 'lupa-resumo'; host.append(r); }
-      host.append(b);
-    }
-  }
-
-  function posicionarAba() {
-    const aba = $('#lupa-aba-lateral'), lat = $('#lateral');
-    if (!aba) return;
-    // fechada, desce para o meio da altura: no topo ficava em cima do "Nível ideal" e do minimapa do jogo
-    let dir = 0, topo = Math.round(window.innerHeight * 0.42);
-    if (!config.lateralFechada && lat) {
-      const r = lat.getBoundingClientRect();
-      if (r.width) { dir = Math.max(0, window.innerWidth - r.left); topo = Math.max(0, r.top) + 16; }
-    }
-    aba.style.right = dir + 'px'; aba.style.top = topo + 'px';
-  }
-
-  // classes, aria, resumos, selo e posição; chamado ao mudar a config e a cada leitura
-  function controles(e) {
-    if (e !== undefined) ultEstado = e;
-    const html = document.documentElement.classList, fechada = !!config.lateralFechada;
-    html.toggle('lupa-lateral-fechada', fechada);
-    criarControles();
-    for (const [k, c] of Object.entries(CARDS)) {
-      const rec = !!config.recolhidos[k], raiz = $(c.raiz), host = $(c.host);
-      raiz?.classList.toggle('lupa-recolhido', rec);
-      const b = host && $(':scope > .lupa-recolher', host);
-      if (b) b.setAttribute('aria-expanded', String(!rec));
-      const r = host && $(':scope > .lupa-resumo', host);
-      if (r) escreve(r, !rec ? '' : k === 'status' ? `${txt($('#st-ouro'))} de ouro · Poder ${txt($('#st-poder'))}` : txt($('#local-nome')));
-    }
-    const aba = $('#lupa-aba-lateral');
-    if (aba) {
-      const rot = (fechada ? 'Abrir' : 'Fechar') + ' a lateral (Alt+L)', n = alertas(ultEstado);
-      if (aba.title !== rot) { aba.title = rot; aba.setAttribute('aria-label', rot); }
-      aba.setAttribute('aria-expanded', String(!fechada));
-      const selo = $('.lupa-selo', aba);
-      escreve(selo, n ? String(n) : ''); selo.hidden = !n;
-    }
-    posicionarAba();
-    if (ultFechada === null ? fechada : ultFechada !== fechada) setTimeout(() => window.dispatchEvent(new Event('resize')), 60);
-    ultFechada = fechada;
-  }
-  window.addEventListener('resize', () => tenta(posicionarAba));
-  window.addEventListener('keydown', (ev) => {
-    if (!ev.altKey || ev.ctrlKey || ev.metaKey || ev.code !== 'KeyL') return;
-    const a = ev.target instanceof Element ? ev.target : document.activeElement;
-    if (a && (a.closest('input, textarea, select, [contenteditable=""], [contenteditable="true"]') || a.isContentEditable)) return;
-    ev.preventDefault(); alternarLateral();
-  });
+  // A lateral recolhível da Lupa (aba LUPA, chevrons e Alt+L) saiu: em 27/10/2026 o jogo passou a recolher a coluna e os
+  // blocos sozinho (sugestão do Iguinhowill). No app, o Alt+L aperta a setinha do próprio jogo (app/acao-jogo.js).
   const estilo = document.createElement('style');
   estilo.textContent = 'html.lupa-sem-loot #log > p[data-lupa-loot]{display:none!important}';
   document.head.append(estilo);
@@ -690,7 +607,6 @@
     if (!vivo()) { clearInterval(relogioLeitura); clearInterval(relogioCacada); clearInterval(relogioOla); observador?.disconnect(); obsLateral?.disconnect(); return; }
     observarLog(); observarLateral();
     const e = ler();
-    tenta(() => controles(e));
     if (!e) return;
     if (e.nome !== nome) {
       nome = e.nome; cacada = null;
