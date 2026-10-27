@@ -20,8 +20,13 @@
     <label>Senha <input type="password" name="senha" autocomplete="current-password" required minlength="8"></label>
     <div class="botoes">
       <button class="botao principal" type="submit">Entrar</button>
-      <button class="botao" type="button" id="criar">Criar a conta (só na primeira vez)</button>
     </div>
+    <details class="convite">
+      <summary>Tenho um convite: criar a minha conta</summary>
+      <p class="nota">Preencha o e-mail e a senha acima (8 caracteres ou mais) e o código que você recebeu. Cada código cria uma conta só, com os seus próprios dados.</p>
+      <label>Código do convite <input type="text" name="convite" autocomplete="off" spellcheck="false" autocapitalize="characters"></label>
+      <button class="botao" type="button" id="criar">Criar a conta</button>
+    </details>
     <p id="msg" class="nuvem-erro" role="alert"></p>
     <p class="nota"><a href="/roteiros/">Roteiros dos campeões</a>: abertos, sem login.</p>
   </form>

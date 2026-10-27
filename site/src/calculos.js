@@ -75,6 +75,98 @@ const CALC = (() => {
     }
     return h;
   }
-  return { simularForja, xpHoraSessoes, xpHoraBaldes, horasAte };
+  // ---------- farm: modelo analítico (ESTIMATIVA) ----------
+  // Um grupo de monstros (2 a 4, em média 3) leva: 1,5 s para nascer + a espera da chegada (corpo a corpo) + a luta, que é simulada ataque a
+  // ataque com o dano ESPERADO de cada golpe: armadura, papel do campeão, crítico (x critMonstro), queda do dano contra monstro acima do seu nível
+  // e os efeitos dos itens que batem em área, no período do relógio do ataque (degrau do DT, sem a sobra). As habilidades da barra entram como
+  // dano por segundo (dano base + escala x dano, pela recarga) e como bônus de velocidade, multiplicados por fatores que o gerador calibra contra a
+  // simulação do motor (FARM). Não conta: morte, poção, chefes, noite, monstro furioso e mascote.
+  const RESPAWN = 1.5, CHEGADA = 1.2;
+  // monstros nascem no nível do jogador de -2 a +1, presos na faixa da zona: médias de vida, armadura, XP e ouro
+  function monstrosDaZona(z, nivel) {
+    const niveis = [-2, -1, 0, 1].map((d) => Math.max(z.nm[0], Math.min(z.nm[1], nivel + d))), tot = z.monstros.reduce((s, [, p]) => s + p, 0);
+    const m = { hp: 0, ar: 0, fdj: 0, nivel: 0, xp: 0, ouro: 0 };
+    for (const [nome, p] of z.monstros) for (const L of niveis) {
+      const w = p / tot / niveis.length, mo = J.MONSTROS[nome], f = J.fatorXp(nivel, L);
+      m.hp += w * J.CURVA.hp(L) * mo.hp; m.ar += w * J.ARMADURA_MONSTRO(L) * mo.ar; m.fdj += w * J.fatorDanoJogador(nivel, L); m.nivel += w * L;
+      m.xp += w * J.CURVA.xp(L) * mo.xp * f; m.ouro += w * J.CURVA.ouro(L) * mo.ouro * 0.75 * f;      // o ouro de cada abate é de 50% a 100% da tabela
+    }
+    return m;
+  }
+  // o que a barra de habilidades rende, com os ranks: dano bruto por segundo, lançamentos por segundo, bônus de velocidade de ataque e se há avanço
+  // (a Espada Ágil e o Disparo trazem o monstro na hora). build = { ranks: { Q: 5, ... }, barra: ["Q", "E", ...] }
+  function habilidades(ficha, campeao, build) {
+    const H = J.HABS[campeao], C = J.CAMPEOES[campeao];
+    if (!H || !build) return { dano: 0, casts: 0, buffs: [], dash: false };
+    const ranks = build.ranks || {}, barra = (build.barra || []).filter(Boolean).map((t) => (typeof t === 'string' ? t : t.t)), rcd = ficha.reducaoRecarga;
+    const r = { dano: 0, casts: 0, buffs: [], dash: false };
+    for (const t of barra) {
+      const h = H[t], rk = Math.floor(Number(ranks[t]) || 0);
+      if (!h || rk < 1 || !h.recarga) continue;
+      let cd = h.recarga[Math.min(rk, h.recarga.length) - 1] * (1 - rcd);
+      if (campeao === 'yasuo' && t === 'Q') cd = Math.max(h.minima, h.recarga[rk - 1] / Math.max(1, ficha.velAtaque / C.stats.attackspeed));      // a Tempestade de Aço volta mais rápido com velocidade de ataque
+      cd = Math.max(0.2, cd);
+      if (h.base && h.ratio) r.dano += ((h.base[rk - 1] + h.ratio[rk - 1] * ficha.ad) * (h.golpes || 1) * (h.alvos || 1)) / cd;
+      r.casts += 1 / cd;
+      if (h.va) r.buffs.push({ t, va: h.va[rk - 1], U: Math.min(1, (h.duracao || h.dura || 0) / cd) });      // bônus de velocidade de ataque, durante U do tempo
+      if (campeao === 'yasuo' && t === 'E') r.dash = true;
+    }
+    const rD = Math.floor(Number(ranks.D) || 0);
+    if (campeao === 'yasuo' && rD && H.D?.inquieta) r.buffs.push({ t: 'D', va: H.D.acumMax * H.D.inquieta[rD - 1], U: Math.min(1, ficha.critico * 4) });      // Lâmina Inquieta: cada crítico dá velocidade, até 5 acúmulos
+    return r;
+  }
+  const LAMINA = { 3078: 2, 3057: 1 };      // depois de uma habilidade, o próximo ataque causa +N x o dano de ataque base (Trindade 2, Fulgor 1)
+  function estimarFarm(ficha, campeao, zona, nivel, opts = {}) {
+    const C = J.CAMPEOES[campeao], z = typeof zona === 'string' ? J.ZONA[zona] : zona;
+    if (!C || !z || !ficha) return null;
+    const P = opts.farm || J.FARM, calibrado = P.kHab?.[campeao] != null, k = P.kHab?.[campeao] || 0;
+    const hb = opts.hab || habilidades(ficha, campeao, opts.build);
+    // o bônus de velocidade dura só uma parte do tempo (Respiração do Vento, Fase, Lâmina Inquieta): como o relógio anda em degraus, não dá para
+    // somar a média; faz-se a média dos ataques por segundo de cada combinação de bônus ligados e desligados
+    const buffs = hb.buffs.map((b) => ({ va: b.va, U: Math.min(1, b.U * (P.upt?.[campeao]?.[b.t] ?? 1)) }));
+    let taxa = 0;
+    for (let mask = 0; mask < 1 << buffs.length; mask++) {
+      let p = 1, va = 0;
+      buffs.forEach((b, i) => { if (mask >> i & 1) { p *= b.U; va += b.va; } else p *= 1 - b.U; });
+      if (p > 0) taxa += p / J.periodoAtaque(ficha.velAtaque, ficha.aceleracao + va);
+    }
+    const per = 1 / taxa;
+    const m = monstrosDaZona(z, nivel), tem = ficha.tem, longe = C.distancia, papel = C.papel.dano, kAuto = P.auto?.[campeao] ?? 1, aoe = P.aoe?.[campeao] ?? 0;
+    const fcrit = 1 + Math.min(1, ficha.critico) * (ficha.danoCritico * C.critMonstro - 1), cap = J.TETO_VIDA_ITEM * J.CURVA.hp(m.nivel);
+    const reduz = 1 - ficha.penArmadura, hab = k * hb.dano * fcrit * papel * m.fdj;      // dano de habilidade por segundo, num alvo sem armadura
+    const lamina = Math.max(...Object.keys(LAMINA).map((id) => (tem(id) ? LAMINA[id] : 0))) * ficha.baseAd * Math.min(1, hb.casts * (P.castEf?.[campeao] ?? 1) * per);      // Lâmina Encantada
+    // a luta de um grupo de n monstros iguais ao médio: quantos ataques até todos caírem
+    const t3153 = tem('3153'), t3742 = tem('3742'), t6610 = tem('6610'), t3071 = tem('3071'), t3085 = tem('3085');
+    const area = (tem('3074') ? 0.4 * ficha.ad : 0) + (tem('3748') ? 0.015 * ficha.vida : 0) + (tem('6631') ? 0.8 * ficha.ad * Math.min(1, per / 5) : 0);      // Hidra Raivosa, Hidra Titânica, Quebrapassos
+    const golpeBase = ficha.ad + lamina + (t3742 ? 40 * Math.min(1, per / 4) : 0), dm = papel * m.fdj, critPrimeiro = ficha.danoCritico * C.critMonstro;
+    const mit0 = 100 / (100 + m.ar * reduz), outroArea = (area * papel * m.fdj + hab * aoe * per) * mit0, runaan = t3085 ? (longe ? 0.15 : 0.55) * ficha.ad * (longe ? 1 : fcrit) * dm * mit0 : 0;
+    const luta = (n) => {
+      const hp = new Array(n).fill(m.hp), red = new Array(n).fill(0), tocado = new Array(n).fill(false);
+      let ataques = 0, i = 0;
+      while (ataques < 20000) {
+        while (i < n && hp[i] <= 0) i++;
+        if (i >= n) break;
+        ataques++;
+        let bruto = golpeBase;
+        if (t3153) bruto += 0.05 * Math.min(hp[i], cap);      // Rei Destruído: 5% da vida atual
+        const fc = t6610 && !tocado[i] ? critPrimeiro : fcrit;      // Céu Dividido: o 1º golpe em cada inimigo é crítico
+        tocado[i] = true;
+        hp[i] -= (bruto * fc * kAuto * dm + hab * per) * (t3071 ? 100 / (100 + m.ar * (1 - red[i]) * reduz) : mit0);
+        if (t3071) red[i] = Math.min(0.3, red[i] + 0.06);      // Cutelo Negro: -6% de armadura por golpe, até 30%
+        let outros = 0;
+        for (let j = 0; j < n; j++) if (j !== i && hp[j] > 0) {
+          hp[j] -= t3071 ? (area * dm + hab * aoe * per) * 100 / (100 + m.ar * (1 - red[j]) * reduz) : outroArea;
+          if (t3085 && outros++ < 2) hp[j] -= runaan;      // Furacão de Runaan: 2 alvos
+        }
+      }
+      return ataques;
+    };
+    const nMedio = 3, tLuta = [2, 3, 4].reduce((s, n) => s + (luta(n) - 1) * per, 0) / 3;
+    const espera = longe ? 0 : hb.dash ? (P.dash?.[campeao] ?? 0.2) : CHEGADA;
+    const kite = longe && C.kite ? (P.kiteGrupo?.[campeao] ?? 1.75) * C.kite.pausa : 0,      // quem ataca de longe recua ~1,75 vezes por grupo e perde a pausa do recuo
+       tGrupo = RESPAWN + espera + kite + tLuta, abatesH = (3600 * nMedio) / tGrupo;
+    return { calibrado, tAbate: tGrupo / nMedio, tLuta, periodoAtaque: per, velEfetiva: 1 / per, abatesH, xpH: abatesH * m.xp, ouroH: abatesH * m.ouro, dps: (nMedio * m.hp) / tLuta, vidaMonstro: m.hp, nivelMonstro: m.nivel, xpAbate: m.xp, ouroAbate: m.ouro, hab: hb };
+  }
+  return { simularForja, xpHoraSessoes, xpHoraBaldes, horasAte, estimarFarm, habilidades };
 })();
 if (typeof module !== 'undefined') module.exports = CALC;

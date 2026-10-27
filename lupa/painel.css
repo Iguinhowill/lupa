@@ -68,6 +68,8 @@ button { font: inherit; color: inherit; }
 .item-texto { display: flex; flex-direction: column; min-width: 0; }
 .item-nome { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .item-sub { font-size: 13px; color: var(--fraco); }
+.item-valor { font-size: 12.5px; overflow-wrap: anywhere; }      /* quebra em 2 linhas em vez de cortar o "há 10 min" */
+.item-valor .num { font-size: 12px; }
 
 .grade-4, .grade-3, .grade-2 { display: grid; gap: 8px; }
 .grade-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }

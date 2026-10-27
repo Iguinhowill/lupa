@@ -7,6 +7,7 @@
 //     cacadas,                // { [nome]: { sessoes: [...] } }  (chave "cacada:<nome>")
 //     eventos,                // { [nome]: [{ ts, tipo, titulo, texto, item?, raridade?, qual? }] }  (chave "eventos:<nome>")
 //     icones,                 // { chave: dataURL }  (chave "icones")
+//     menores,                // { [chave]: { ouro, gemas, n, em } }  (chave "mercado:menores": menor preço visto no Mercado por versão)
 //     salvarConfig(mud),      // grava uma mudança parcial em config (avisos é mesclado)
 //     alternarAviso(k),       // liga/desliga config.avisos[k]
 //     semBonus,               // boolean: Caçada sem bônus de live
@@ -104,13 +105,49 @@ function imagem(chaveIcone, ctx, { tam = 32, raridade, selo, alt } = {}) {
 }
 
 // ---------- Ficha ----------
+// Quanto vale o item: a Loja do jogo (JOGO.valorVenda, tabelas públicas) e o menor preço que a Lupa viu no Mercado para a MESMA
+// versão (item, qualidade e refino, sem carta: com carta é outro grupo). Só mostra números, não vende nada.
+const RE_CHAVE_ITEM = /^(\d+)(!?)(?:\+(\d+))?(?:#([a-z]+\d))?~([A-Z]+)$/;
+const VALIDADE_MENOR = 7 * 24 * 3600e3;
+function milhar(n) {
+  if (n == null) return '—';
+  if (n >= 999.5e3) return (n / 1e6).toFixed(2).replace(/\.?0+$/, '').replace('.', ',') + ' mi';      // 999.999 já é "1 mi", não "1000 mil"
+  if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e5 ? 0 : 1).replace(/\.0$/, '').replace('.', ',') + ' mil';
+  return inteiro(n);
+}
+function haQuanto(ms) {
+  const m = Math.floor(ms / 60e3);
+  return m < 1 ? 'agora' : m < 60 ? `há ${m} min` : m < 48 * 60 ? `há ${Math.floor(m / 60)} h` : `há ${Math.floor(m / 1440)} d`;
+}
+// Linha cinza sob o nome: "Loja 12,5 mil · Mercado 850 mil · há 2 h" ("—" se a Lupa nunca viu a versão; sem JOGO, só o Mercado)
+function textoValor(it, ctx) {
+  const m = String(it.id || '').match(RE_CHAVE_ITEM);
+  if (!m) return null;
+  const refino = +(m[3] || 0), base = `${m[1]}${m[2]}${refino ? '+' + refino : ''}~${m[5]}`;
+  let loja = null;
+  try { loja = typeof JOGO !== 'undefined' ? JOGO.valorVenda(m[1], refino, m[5]) : null; } catch { loja = null; }
+  const agora = Date.now(), v = ctx?.menores?.[base];
+  const visto = v && agora - v.em < VALIDADE_MENOR && (v.ouro != null || v.gemas != null) ? v : null;
+  const partes = [];
+  if (loja != null) partes.push(['Loja ', milhar(loja)]);
+  // sem leitura local do Mercado (o site, que não tem mercado:menores) a parte do Mercado nem aparece
+  if (ctx?.menores) {
+    const preco = !visto ? '—' : visto.ouro != null ? milhar(visto.ouro) : `${inteiro(visto.gemas)} gemas`;
+    // item com carta: o preço é o da mesma versão SEM carta, e o texto diz isso
+    partes.push(['Mercado ', preco + (visto && m[4] ? ' sem carta' : '') + (visto ? ' · ' + haQuanto(agora - visto.em) : '')]);
+  }
+  if (!partes.length) return null;
+  return h('span', { class: 'item-valor fraco' }, partes.map(([r, n], k) => [k ? ' · ' : '', r, h('span', { class: 'num' }, n)]));
+}
+
 function linhaItem(it, ctx, tam = 40) {
   const selo = [it.refino || '+0', it.qual || '?'].join(' ');
   return h('div', { class: 'item' },
     imagem(it.nome, ctx, { tam, raridade: it.raridade, selo: tam >= 40 ? selo : null }),
     h('span', { class: 'item-texto' },
       h('span', { class: 'item-nome' }, it.nome || 'Item sem dica (passe o mouse nele no jogo)'),
-      h('span', { class: 'item-sub' }, tam >= 40 ? (it.carta || 'sem carta') : `${selo} · ${it.carta || 'sem carta'}`)),
+      h('span', { class: 'item-sub' }, tam >= 40 ? (it.carta || 'sem carta') : `${selo} · ${it.carta || 'sem carta'}`),
+      textoValor(it, ctx)),
     null);
 }
 

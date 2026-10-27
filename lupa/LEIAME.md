@@ -67,6 +67,10 @@ link a quem quiser. Um guia novo entra com `node importar-roteiro.mjs <página.h
 30 s. Use a aba Comprar, sem filtro, para uma leitura completa. A Lupa só lê as fichas que a tela mostra; não pede nada
 ao servidor. Com a janela aberta, a leitura sobe para o banco no máximo a cada 10 min (o banco guarda 30 dias).
 
+**Valor dos itens na Ficha:** cada item do equipamento e da mochila mostra a Loja do jogo (`dados-jogo.js`, copiado do `site/src`) e o
+menor preço visto no Mercado para a mesma versão (item, qualidade e refino, sem carta), com há quanto tempo. O acumulado fica em
+`mercado:menores` (`{ chave: { ouro, gemas, n, em } }`, 7 dias, até 400 chaves). A Lupa só mostra: não vende nada.
+
 **Alertas de preço** (liberados pelo Brunox em 26/10/2026: só avisar, nunca comprar): a lista "Quero comprar" fica na
 Loja do site (item, qualidade e refino mínimos, só sem carta, preço máximo em ouro ou 💠). Deixe o Mercado aberto em
 casa na aba Comprar, sem filtro: a cada atualização do jogo a Lupa confere a lista e grava um aviso quando a oferta

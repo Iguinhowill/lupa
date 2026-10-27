@@ -643,7 +643,24 @@
       busca: $('#mercado-busca')?.value.trim() || '', categoria: $('[data-cat].ativa', jan)?.dataset.cat || '',
       classe: $('#mercado-classe')?.value || '', moeda: $('#mercado-moeda')?.value || '', qual: $('#mercado-qual')?.value || ''
     };
-    chrome.storage.local.set({ 'mercado:ultimo': { lidoEm: Date.now(), personagem: nome, filtros, completa: !Object.values(filtros).some(Boolean), grupos: cards.map(lerCardMercado) } });
+    const grupos = cards.map(lerCardMercado), agora = Date.now();
+    chrome.storage.local.set({ 'mercado:ultimo': { lidoEm: agora, personagem: nome, filtros, completa: !Object.values(filtros).some(Boolean), grupos } });
+    tenta(() => acumularMenores(grupos, agora));
+  }
+  // Acumulado do menor preço visto por versão: { [chave]: { ouro, gemas, n, em } }. O card do Mercado já é o menor anúncio do grupo;
+  // vale o da leitura mais recente. Some o que passou de 7 dias e guarda no máximo 400 chaves (as mais recentes). Só lê e guarda.
+  const VALIDADE_MENORES = 7 * 24 * 3600e3, MAX_MENORES = 400;
+  async function acumularMenores(grupos, agora) {
+    const { 'mercado:menores': antigo } = await chrome.storage.local.get('mercado:menores');
+    const mapa = {};
+    for (const [k, v] of Object.entries(antigo || {})) if (v && agora - v.em < VALIDADE_MENORES) mapa[k] = v;
+    for (const g of grupos) {
+      // só a versão sem carta: é a que a Ficha consulta, e as com carta ocupariam o limite à toa
+      if (!g.chave || g.carta || (g.ouro == null && g.gemas == null)) continue;
+      mapa[g.chave] = { ouro: g.ouro ?? null, gemas: g.gemas ?? null, n: g.n ?? null, em: agora };
+    }
+    const manter = Object.entries(mapa).sort((a, b) => b[1].em - a[1].em).slice(0, MAX_MENORES);
+    chrome.storage.local.set({ 'mercado:menores': Object.fromEntries(manter) });
   }
 
   let ultimoJson = '', ultimaEscrita = 0;

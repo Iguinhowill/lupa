@@ -11,7 +11,7 @@
   const DOC = document;
 
   // ---------- estado ----------
-  let config = mesclarConfig(), estados = {}, cacadas = {}, eventos = {}, icones = {}, escolhido = null, semBonus = false;
+  let config = mesclarConfig(), estados = {}, cacadas = {}, eventos = {}, icones = {}, menores = {}, escolhido = null, semBonus = false;
   let filtro = 'tudo';
   let modo = null;         // 'todos' (lado a lado) | 'um' | null = automático (lado a lado com 2+ personagens lendo)
   let pip = null;          // janela de documentPictureInPicture, se aberta
@@ -20,6 +20,7 @@
   function guardar(k, v) {
     if (k === 'config') config = mesclarConfig(v);
     else if (k === 'icones') icones = v || {};
+    else if (k === 'mercado:menores') menores = v || {};
     else if (k.startsWith('estado:')) { if (v) estados[k.slice(7)] = v; else delete estados[k.slice(7)]; }
     else if (k.startsWith('cacada:')) { if (v) cacadas[k.slice(7)] = v; else delete cacadas[k.slice(7)]; }
     else if (k.startsWith('eventos:')) { if (v) eventos[k.slice(8)] = v; else delete eventos[k.slice(8)]; }
@@ -32,6 +33,7 @@
     get cacadas() { return cacadas; },
     get eventos() { return eventos; },
     get icones() { return icones; },
+    get menores() { return menores; },
     get semBonus() { return semBonus; },
     setSemBonus(v) { semBonus = !!v; desenhar(); },
     salvarConfig, alternarAviso,

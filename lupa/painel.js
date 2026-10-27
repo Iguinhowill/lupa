@@ -7,7 +7,7 @@ const NO_APP = !!globalThis.lupaApp;   // no app de PC a escolha de personagem e
 const ABAS = [['ficha', 'Ficha'], ['cacada', 'Caçada'], ['tarefa', 'Tarefa'], ['timers', 'Timers'], ['chat', 'Chat'], ['ajustes', 'Ajustes']];
 
 // ---------- estado ----------
-let config = mesclarConfig(), estados = {}, cacadas = {}, eventos = {}, icones = {}, escolhido = null, semBonus = false;
+let config = mesclarConfig(), estados = {}, cacadas = {}, eventos = {}, icones = {}, menores = {}, escolhido = null, semBonus = false;
 let nuvem = {};      // "nuvem:status" escrito pelo envio.js (a sessão com os tokens fica em outra chave e não vem para cá)
 let aba = (() => { try { return localStorage.getItem('lupa-aba') || 'ficha'; } catch { return 'ficha'; } })();
 if (!ABAS.some(([id]) => id === aba)) aba = 'ficha';
@@ -15,6 +15,7 @@ if (!ABAS.some(([id]) => id === aba)) aba = 'ficha';
 function guardar(k, v) {
   if (k === 'config') config = mesclarConfig(v);
   else if (k === 'icones') icones = v || {};
+  else if (k === 'mercado:menores') menores = v || {};
   else if (k === 'nuvem:status') nuvem = v || {};
   else if (k.startsWith('estado:')) { if (v) estados[k.slice(7)] = v; else delete estados[k.slice(7)]; }
   else if (k.startsWith('cacada:')) { if (v) cacadas[k.slice(7)] = v; else delete cacadas[k.slice(7)]; }
@@ -29,6 +30,7 @@ const ctx = {
   get cacadas() { return cacadas; },
   get eventos() { return eventos; },
   get icones() { return icones; },
+  get menores() { return menores; },
   get semBonus() { return semBonus; },
   setSemBonus(v) { semBonus = !!v; desenhar(true); },
   salvarConfig, alternarAviso,
@@ -57,7 +59,7 @@ function desenhar(forcar = false) {
   const minuto = Math.floor(Date.now() / 30e3);
   const fatia = aba === 'ajustes' ? [config, nuvem]
     : !e ? null
-    : aba === 'ficha' ? [e.ficha, e.mochila, e.pontos, e.zona, e.nivel, e.tarefa === null, planoAbertoChave(), Object.keys(icones).length]
+    : aba === 'ficha' ? [e.ficha, e.mochila, e.pontos, e.zona, e.nivel, e.tarefa === null, planoAbertoChave(), Object.keys(icones).length, menores]
     : aba === 'cacada' ? [cacadas[e.nome], semBonus, config.novaSessao, config.novaSessaoPor?.[e.nome], e.bonus, minuto]
     : aba === 'tarefa' ? [e.tarefa, e.diarias, e.rastreio, config.avisos.tarefa, minuto]
     : aba === 'timers' ? [e.timers, e.rastreio, config.avisos]
