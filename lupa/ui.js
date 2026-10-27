@@ -484,19 +484,20 @@ function cartaoEntregar(e, ctx) {
 // Mercado, item da mochila, reset de atributos) contra a build atual. Aqui só desenha "gastar:<nome>" (ctx.gastos). No app vem
 // o botão Calcular (ctx.calcularGasto); no site, o que o app mandou. Só informa: nunca compra, forja nem troca nada.
 const pctGanho = (f, casas = 1) => (f < 0 ? '−' : '+') + Math.abs(f * 100).toFixed(casas).replace('.', ',') + '%';
-// ouro como a ficha escreve ("11.4M", "950.2k", "9800")
+// ouro como a ficha escreve ("11.4M", "950.2k", "9800"): a mesma leitura do numero() de app/gastar.js (gastar.test.js confere as duas)
 function ouroDaFicha(t) {
   const m = /^([\d.,]+)([kKmM])?$/.exec(String(t ?? '').trim().replace(/\s/g, ''));
   if (!m) return null;
   const v = m[2] ? Number(m[1].replace(',', '.')) * (/m/i.test(m[2]) ? 1e6 : 1e3) : Number(m[1].replace(/[.,]/g, ''));
   return Number.isFinite(v) ? v : null;
 }
+const margem = (l) => `±${(l.erro * 100).toFixed(1).replace('.', ',')}%`;
 const horasCaca = (hs) => (hs == null ? null : hs < 1 ? 'menos de 1 h' : hs < 100 ? `${hs} h` : `${inteiro(hs)} h (${inteiro(hs / 24)} dias seguidos)`);
 function linhaGasto(l, ouro) {
   const falta = l.custo > 0 && ouro != null && l.custo > ouro ? l.custo - ouro : 0;
   return h('li', { class: 'gasto' },
     h('span', { class: 'gasto-titulo' }, h('b', null, l.titulo), falta ? h('span', { class: 'gasto-falta' }, `faltam ${milhar(falta)}`) : null),
-    h('span', { class: 'gasto-ganho' }, h('span', { class: 'num' }, pctGanho(l.ganho)), ` de XP e ouro por hora (±${(l.erro * 100).toFixed(1).replace('.', ',')})`,
+    h('span', { class: 'gasto-ganho' }, h('span', { class: 'num' }, pctGanho(l.ganho)), ` de XP e ouro por hora (${margem(l)})`,
       l.xpH > 0 ? [' · ', h('span', { class: 'num' }, `+${curto(l.xpH)}`), ' XP/h'] : null),
     h('span', { class: 'gasto-custo' }, l.custo === 0 ? 'De graça.' : [`Custa ${milhar(l.custo)}`, l.custoP90 ? ` (até ${milhar(l.custoP90)} em 90% das vezes)` : '',
       l.horas != null ? ` · se paga em ${horasCaca(l.horas)} de caça` : '']),
@@ -523,7 +524,7 @@ function cartaoGastar(e, ctx, opts = {}) {
       : h('p', { class: 'gasto-nada' }, 'Nada do que o ouro compra agora aumenta o seu farm de um jeito que dê para medir. Guardar também é uma opção.'));
     if (!opts.completo && g.opcoes.length > 3) partes.push(h('button', { type: 'button', class: 'botao plano-ver', 'aria-expanded': String(gastoAberto), onclick: () => { gastoAberto = !gastoAberto; ctx.redesenhar(); } }, gastoAberto ? 'Mostrar só as 3 melhores' : `Ver as ${g.opcoes.length}`));
     if (g.semGanho?.length) partes.push(h('details', { class: 'gasto-sem' }, h('summary', null, `Não mudam nada que dê para medir (${g.semGanho.length})`),
-      h('ul', { class: 'lista-simples' }, g.semGanho.map((l) => h('li', null, `${l.titulo}: ${pctGanho(l.ganho)} (±${(l.erro * 100).toFixed(1).replace('.', ',')})${l.custo ? ` · custa ${milhar(l.custo)}` : ''}`)))));
+      h('ul', { class: 'lista-simples' }, g.semGanho.map((l) => h('li', null, `${l.titulo}: ${pctGanho(l.ganho)} (${margem(l)})${l.custo ? ` · custa ${milhar(l.custo)}` : ''}`)))));
     const econ = g.base?.economia;
     if (!opts.completo) partes.push(nota(`Simulação do próprio jogo, contra a sua build nas mesmas condições. Testei ${g.testadas} opções; o "se paga" usa ${econ?.medido ? 'o ouro/h que a Lupa mediu' : 'o ouro/h de tabela'} na zona. Os detalhes estão no site, em Calcular.`));
     else partes.push(nota(`Simulação do próprio jogo: ${g.sim?.conferir?.cacadas || 8} caçadas de ${g.sim?.conferir?.minutos || 60} min por opção, contra a sua build nas mesmas condições (sem chefes nem monstros furiosos). `

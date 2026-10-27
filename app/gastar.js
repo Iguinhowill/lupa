@@ -16,6 +16,7 @@ const SIM = {
   conferir: { minutos: 60, sementes: [201, 202, 203, 204, 205, 206, 207, 208] },
 };
 const MAX_TRIAGEM = 300, MAX_CONFERIR = 20, MELHORES_TRIAGEM = 8;
+const ESPACOS_ITENS = 4;      // o equipamento: 1 bota + 4 outros (ESPACOS_ITENS do motor)
 // abaixo disto (ou dentro do erro da medida) o ganho não se separa do zero: a opção vai para "não muda nada"
 const SIGNIFICATIVO = 0.003;
 const ATRIBUTOS = [['forca', 'Força'], ['vitalidade', 'Vitalidade'], ['resistencia', 'Resistência'], ['agilidade', 'Agilidade'], ['foco', 'Foco']];
@@ -57,7 +58,8 @@ function zonaDe(nomeZona, sessoes, nivel) {
   return { id: z.id, nome: z.nome };
 }
 
-// a build que a ficha mostra; null sem ficha, nível ou item equipado
+// a build que a ficha mostra; null sem ficha, nível ou item equipado. faltam: itens equipados que a conta não reconhece (item mais
+// novo que as tabelas, ou qualidade ainda sendo avaliada, "~?"): com eles a build simulada não seria a sua
 function buildDoEstado(e, sessoes = []) {
   const f = e?.ficha, nivel = parseInt(e?.nivel, 10) || 0;
   if (!f || !nivel) return null;
@@ -78,20 +80,24 @@ function buildDoEstado(e, sessoes = []) {
   // ataque ou habilidade: pelos itens equipados (a ficha não diz o campeão; o simulador acha pelo nome das habilidades)
   const pontos = (lista) => equip.filter((o) => lista.some((s) => JOGO.item(o.base).e[s])).length;
   return { nome: e.nome, nivel, zona: zonaDe(e.zona, sessoes, nivel), atrib, ranks, habs, barra: (f.barra || []).map((b) => b?.t).filter(Boolean),
-    equip, mochila, cartas, ouro: numero(f.stats?.ouro), perfil: pontos(STATS_AP) > pontos(STATS_AD) ? 'ap' : 'ad' };
+    equip, faltam: (f.equip || []).length - equip.length, mochila, cartas, ouro: numero(f.stats?.ouro), perfil: pontos(STATS_AP) > pontos(STATS_AD) ? 'ap' : 'ad' };
 }
 // muda quando muda o que o simulador usa: aí o resultado guardado fica velho
 const assinatura = (b) => JSON.stringify([b.nivel, b.zona.id, b.equip.map(chaveDe), b.atrib, b.ranks, b.barra]);
 
-// cabe no lugar do equipado k? (uma bota, cada lendário uma vez, um mítico só do nível 50)
+// cabe no lugar do equipado k, ou num espaço vazio (k = -1)? (uma bota e 4 outros, cada lendário uma vez, um mítico só do nível 50)
 function cabe(b, k, o) {
-  if (ehBota(o) !== ehBota(b.equip[k])) return false;
+  const outros = b.equip.filter((_, j) => j !== k);
+  if (k < 0 ? (ehBota(o) ? b.equip.some(ehBota) : b.equip.filter((x) => !ehBota(x)).length >= ESPACOS_ITENS) : ehBota(o) !== ehBota(b.equip[k])) return false;
   const r = raridade(o);
-  if ((r === 'lendario' || r === 'mitico') && b.equip.some((x, j) => j !== k && x.base === o.base)) return false;
-  if (r === 'mitico' && (b.nivel < 50 || b.equip.some((x, j) => j !== k && raridade(x) === 'mitico'))) return false;
+  if ((r === 'lendario' || r === 'mitico') && outros.some((x) => x.base === o.base)) return false;
+  if (r === 'mitico' && (b.nivel < 50 || outros.some((x) => raridade(x) === 'mitico'))) return false;
   return true;
 }
-const comItem = (b, k, o) => b.equip.map((x, j) => (j === k ? o : x));
+const comItem = (b, k, o) => (k < 0 ? [...b.equip, o] : b.equip.map((x, j) => (j === k ? o : x)));
+// onde um item pode entrar: no lugar de cada equipado e, se sobrar espaço, num vazio (-1)
+const lugaresDe = (b) => [...b.equip.keys(), -1];
+const noLugar = (b, k) => (k < 0 ? 'num espaço vazio' : `no lugar de ${nomeItem(b.equip[k])}`);
 // o menor preço do Mercado ainda válido: { ouro, em } ou null
 function precoMercado(menores, chave, agora) {
   const v = menores?.[chave];
@@ -130,12 +136,13 @@ function candidatos(b, { menores = {}, agora = Date.now() } = {}) {
   // 3) itens da mochila com stat de dano do seu tipo no lugar de um equipado (de graça; levar a carta do que sai custa tirá-la). A versão
   // mais fraca de um item que já está equipado não entra
   const stats = b.perfil === 'ap' ? STATS_AP : STATS_AD, temStat = (o) => stats.some((s) => JOGO.item(o.base).e[s]);
-  for (const o of b.mochila.filter(temStat)) b.equip.forEach((velho, k) => {
-    if (!cabe(b, k, o) || (velho.base === o.base && forca(o) <= forca(velho))) return;
-    lista.push({ id: `mochila:${chaveDe(o)}@${k}`, grupo: 'mochila:' + chaveDe(o), tipo: 'mochila', titulo: `Equipar ${nomeItem(o)} da mochila no lugar de ${nomeItem(velho)}`, detalhe: o.carta ? `já tem ${nomeCarta(o.carta)}` : 'sem carta', custo: 0, equip: comItem(b, k, o) });
-    if (!o.carta && velho.carta) lista.push({ id: `mochila:${chaveDe(o)}@${k}+carta`, grupo: 'mochila:' + chaveDe(o), tipo: 'mochila', titulo: `Equipar ${nomeItem(o)} da mochila no lugar de ${nomeItem(velho)}, levando a carta`,
+  for (const o of b.mochila.filter(temStat)) for (const k of lugaresDe(b)) {
+    const velho = b.equip[k];
+    if (!cabe(b, k, o) || (velho && velho.base === o.base && forca(o) <= forca(velho))) continue;
+    lista.push({ id: `mochila:${chaveDe(o)}@${k}`, grupo: 'mochila:' + chaveDe(o), tipo: 'mochila', titulo: `Equipar ${nomeItem(o)} da mochila ${noLugar(b, k)}`, detalhe: o.carta ? `já tem ${nomeCarta(o.carta)}` : 'sem carta', custo: 0, equip: comItem(b, k, o) });
+    if (!o.carta && velho?.carta) lista.push({ id: `mochila:${chaveDe(o)}@${k}+carta`, grupo: 'mochila+carta:' + chaveDe(o), tipo: 'mochila', titulo: `Equipar ${nomeItem(o)} da mochila ${noLugar(b, k)}, levando a carta`,
       detalhe: `${tirarCarta(velho.carta).toLocaleString('pt-BR')} para tirar a ${nomeCarta(velho.carta)} e passar para o novo`, custo: tirarCarta(velho.carta), equip: comItem(b, k, { ...o, carta: velho.carta }) });
-  });
+  }
   // 4) itens do Mercado (lendários e míticos com stat de dano do seu tipo): de cada item, a versão mais forte que o seu ouro paga e a
   // mais barata; a carta do item que sai vai junto (o custo de tirá-la entra na conta)
   const porItem = new Map();
@@ -147,13 +154,14 @@ function candidatos(b, { menores = {}, agora = Date.now() } = {}) {
   for (const versoes of porItem.values()) {
     const cabeOuro = versoes.filter((v) => b.ouro == null || v.ouro <= b.ouro).sort((x, y) => forca(y.o) - forca(x.o) || x.ouro - y.ouro);
     const barata = [...versoes].sort((x, y) => x.ouro - y.ouro)[0];
-    for (const v of [...new Set([cabeOuro[0], barata].filter(Boolean))]) b.equip.forEach((velho, k) => {
-      if (!cabe(b, k, v.o) || (velho.base === v.o.base && forca(v.o) <= forca(velho))) return;
-      const novo = { ...v.o, carta: velho.carta }, tirar = tirarCarta(velho.carta);
-      lista.push({ id: `mercado:${chaveDe(v.o)}@${k}`, grupo: 'mercado:' + chaveDe(v.o), tipo: 'mercado', titulo: `Comprar ${nomeItem(v.o)} no Mercado para o lugar de ${nomeItem(velho)}`,
+    for (const v of [...new Set([cabeOuro[0], barata].filter(Boolean))]) for (const k of lugaresDe(b)) {
+      const velho = b.equip[k];
+      if (!cabe(b, k, v.o) || (velho && velho.base === v.o.base && forca(v.o) <= forca(velho))) continue;
+      const novo = { ...v.o, carta: velho?.carta || '' }, tirar = tirarCarta(velho?.carta);
+      lista.push({ id: `mercado:${chaveDe(v.o)}@${k}`, grupo: 'mercado:' + chaveDe(v.o), tipo: 'mercado', titulo: `Comprar ${nomeItem(v.o)} no Mercado e pôr ${noLugar(b, k)}`,
         detalhe: `menor anúncio visto: ${v.ouro.toLocaleString('pt-BR')}${tirar ? ` + ${tirar.toLocaleString('pt-BR')} para tirar a ${nomeCarta(velho.carta)} e passar para o novo` : ''}`,
         custo: v.ouro + tirar, precoEm: v.em, equip: comItem(b, k, novo) });
-    });
+    }
   }
   // 5) reset de atributos (Mestre da Legião): tudo no atributo de dano, ou parte dele em Agilidade (ataque) / Foco (habilidade)
   const total = Object.values(b.atrib).reduce((s, v) => s + v, 0), outro = b.perfil === 'ap' ? 'foco' : 'agilidade';
@@ -185,10 +193,16 @@ function ganhoPareado(base, opcao) {
   const dp = n > 1 ? Math.sqrt(d.reduce((s, v) => s + (v - media) ** 2, 0) / (n - 1)) : 0;
   return { ganho: media, erro: n > 1 ? (2 * dp) / Math.sqrt(n) : 1 };
 }
-// da triagem para a conferência: todas as forjas (a pergunta mais comum), as de graça que ganharam e as melhores por ouro gasto
+// da triagem para a conferência: todas as forjas (a pergunta mais comum), as de graça que ganharam e as melhores por ouro gasto. Do
+// mesmo item em lugares diferentes vai só o melhor lugar (senão um item só ocuparia todas as vagas)
 function escolherParaConferir(opcoes, triagem) {
   const base = triagem.base, nota = (c) => ({ c, g: ganhoPareado(base, triagem[c.id]).ganho });
-  const com = opcoes.filter((c) => triagem[c.id]).map(nota);
+  const porGrupo = new Map();
+  for (const x of opcoes.filter((c) => triagem[c.id]).map(nota)) {
+    const k = x.c.grupo || x.c.id, m = porGrupo.get(k);
+    if (!m || x.g > m.g) porGrupo.set(k, x);
+  }
+  const com = [...porGrupo.values()];
   const forjas = com.filter((x) => x.c.tipo === 'forja');
   const gratis = com.filter((x) => x.c.tipo !== 'forja' && x.c.custo === 0 && x.g > 0).sort((x, y) => y.g - x.g);
   const pagas = com.filter((x) => x.c.tipo !== 'forja' && x.c.custo > 0 && x.g > 0).sort((x, y) => y.g / y.c.custo - x.g / x.c.custo);
@@ -222,11 +236,14 @@ function resumir({ b, opcoes, conferir, sessoes, agora, motor, testadas }) {
       ganho: +g.ganho.toFixed(5), erro: +g.erro.toFixed(5), xpH: Math.round(g.ganho * econ.xpH), ouroH: Math.round(dOuro),
       horas: c.custo > 0 && dOuro > 0 ? Math.round(c.custo / dOuro) : c.custo === 0 ? 0 : null, mortesH: +media(r.mortes).toFixed(2) };
   });
-  // do mesmo item em lugares diferentes, só o lugar que rende mais
-  const melhor = new Map();
-  for (const l of todas) if (!melhor.has(l.grupo) || l.ganho > melhor.get(l.grupo).ganho) melhor.set(l.grupo, l);
-  const linhas = [...melhor.values()].map(({ grupo, ...l }) => l);
+  // do mesmo item em lugares diferentes, só o melhor lugar: o que passa no teste antes, depois o de mais ganho
   const rende = (l) => l.ganho > Math.max(SIGNIFICATIVO, l.erro);
+  const melhor = new Map();
+  for (const l of todas) {
+    const m = melhor.get(l.grupo);
+    if (!m || rende(l) > rende(m) || (rende(l) === rende(m) && l.ganho > m.ganho)) melhor.set(l.grupo, l);
+  }
+  const linhas = [...melhor.values()].map(({ grupo, ...l }) => l);
   const opcoesBoas = linhas.filter(rende).sort((x, y) => (x.custo > 0) - (y.custo > 0) || (x.custo === 0 ? y.ganho - x.ganho : x.horas - y.horas));
   const semGanho = linhas.filter((l) => !rende(l)).sort((x, y) => y.ganho - x.ganho);
   return { v: 1, estado: 'pronto', em: agora, assinatura: assinatura(b), nivel: b.nivel, zona: b.zona, campeao: base.campeao || null, ouro: b.ouro,
@@ -239,6 +256,7 @@ function resumir({ b, opcoes, conferir, sessoes, agora, motor, testadas }) {
 async function calcular({ estado, sessoes = [], menores = {}, agora = Date.now(), rodar, motor = null }) {
   const b = buildDoEstado(estado, sessoes);
   if (!b) throw new Error('A ficha ainda não tem itens equipados e nível: abra o personagem no jogo.');
+  if (b.faltam > 0) throw new Error('Um item equipado ainda está sendo avaliado ou é novo demais para as tabelas da Lupa: a conta espera a ficha ficar completa.');
   const opcoes = candidatos(b, { menores, agora }).slice(0, MAX_TRIAGEM);
   const triagem = await rodar(jobsDe(b, opcoes, SIM.triagem), 'triagem');
   const escolhidas = escolherParaConferir(opcoes, triagem);

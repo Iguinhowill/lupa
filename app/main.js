@@ -440,7 +440,8 @@ async function calcularGasto(nome, motivo) {
   if (gastoRodando) { filaGasto.push(nome); gravarGasto(nome, { estado: 'na-fila', motivo }); return; }
   gastoRodando = nome;
   clearTimeout(esperasGasto.get(nome)?.t); esperasGasto.delete(nome);
-  let ultimoAndar = 0;
+  let ultimoAndar = 0, sig = null;
+  try { const b0 = Gastar.buildDoEstado(estados.get(nome), lerChave('cacada:' + nome)?.sessoes || []); sig = b0 && Gastar.assinatura(b0); } catch {}
   // o andamento vai para o painel no máximo a cada 2 s (cada gravação no armazém vai para todas as páginas)
   const andar = (etapa, a) => { if (Date.now() - ultimoAndar < 2000) return; ultimoAndar = Date.now(); gravarGasto(nome, { etapa, feito: a?.feito || 0, total: a?.total || 0 }); };
   try {
@@ -453,7 +454,7 @@ async function calcularGasto(nome, motivo) {
     });
     armazem.set({ ['gastar:' + nome]: { ...r, motivo } });
   } catch (e) {
-    gravarGasto(nome, { estado: 'erro', erro: String(e?.message || e).slice(0, 300), erroEm: Date.now() });
+    gravarGasto(nome, { estado: 'erro', erro: String(e?.message || e).slice(0, 300), erroEm: Date.now(), erroAssinatura: sig });
   } finally {
     gastoRodando = null;
     const prox = filaGasto.shift();
@@ -469,10 +470,12 @@ function vigiarGasto(nome, e, agora = Date.now()) {
   if (visto && visto.chave === chave && agora - visto.em < 60e3) return;
   vistoGasto.set(nome, { chave, em: agora });
   const b = Gastar.buildDoEstado(e, lerChave('cacada:' + nome)?.sessoes || []);
-  if (!b) return;
+  if (!b || b.faltam > 0) return;      // item sendo avaliado ou desconhecido: espera a ficha ficar completa
   const sig = Gastar.assinatura(b), g = lerChave('gastar:' + nome), pend = esperasGasto.get(nome);
   const emDia = g?.assinatura === sig && agora - (g.em || 0) < GASTO.velho;
-  if (emDia || (g?.estado === 'erro' && agora - (g.erroEm || 0) < GASTO.depoisDoErro)) { if (pend) { clearTimeout(pend.t); esperasGasto.delete(nome); } return; }
+  // depois de um erro, a mesma build espera 30 min (sem internet, por exemplo); uma build nova tenta já
+  const esperaErro = g?.estado === 'erro' && g.erroAssinatura === sig && agora - (g.erroEm || 0) < GASTO.depoisDoErro;
+  if (emDia || esperaErro) { if (pend) { clearTimeout(pend.t); esperasGasto.delete(nome); } return; }
   if (pend?.sig === sig) return;
   clearTimeout(pend?.t);
   esperasGasto.set(nome, { sig, t: setTimeout(() => { esperasGasto.delete(nome); calcularGasto(nome, 'build nova'); }, GASTO.espera) });

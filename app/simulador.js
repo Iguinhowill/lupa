@@ -14,6 +14,8 @@ const crypto = require('node:crypto');
 const ESQUEMA = 'lupasim';
 const BASE_JOGO = 'https://lolidle.com/js/';
 const VALIDADE_MOTOR = 6 * 3600e3;      // baixa de novo depois disso (o jogo muda quase todo dia)
+const MAX_ARQUIVOS = 400, MAX_BYTES = 5e6;      // um motor fora disso não é o do jogo: recusa antes de baixar o resto
+const PRAZO = 10 * 60e3;                       // uma rodada que passa disto travou (o normal é menos de 1 min)
 // os nomes vêm dos imports de arquivos baixados: só caminhos simples dentro de js/, nunca subindo de pasta
 const NOME_OK = /^[\w-]+(\/[\w-]+)*\.js$/;
 const importsDe = (src) => [...src.matchAll(/(?:import|export)\s[^'"]*?from\s*['"](\.{1,2}\/[^'"]+)['"]|import\(\s*['"](\.{1,2}\/[^'"]+)['"]\s*\)|import\s*['"](\.{1,2}\/[^'"]+)['"]/g)]
@@ -35,23 +37,28 @@ async function baixarMotor(pasta, buscar = fetch) {
   const seguir = async (nome) => {
     if (!NOME_OK.test(nome)) throw new Error('import com caminho fora do padrão (recusado): ' + nome);
     if (feitos.has(nome)) return;
+    if (feitos.size >= MAX_ARQUIVOS) throw new Error('arquivos demais na cadeia do motor');
     const arq = path.resolve(nova, nome);
     if (!arq.startsWith(path.resolve(nova) + path.sep)) throw new Error('import fora da pasta (recusado): ' + nome);
     feitos.set(nome, '');
     const r = await buscar(BASE_JOGO + nome, { headers: { 'user-agent': 'Lupa (app, simulador de build)' } });
     if (!r.ok) throw new Error(`${nome}: HTTP ${r.status}`);
     const src = await r.text();
+    if (src.length > MAX_BYTES) throw new Error(`${nome}: grande demais`);
     feitos.set(nome, src);
     fs.mkdirSync(path.dirname(arq), { recursive: true });
     fs.writeFileSync(arq, src);
     for (const imp of importsDe(src)) await seguir(path.posix.normalize(path.posix.join(path.posix.dirname(nome), imp)));
   };
   await seguir('motor.js');
-  if (feitos.size > 400) throw new Error('arquivos demais na cadeia do motor');
   const meta = { sha: crypto.createHash('sha256').update(feitos.get('motor.js')).digest('hex'), em: Date.now(), arquivos: feitos.size };
   fs.writeFileSync(path.join(nova, '.lupa-motor.json'), JSON.stringify(meta));
-  fs.rmSync(atual, { recursive: true, force: true });
-  fs.renameSync(nova, atual);
+  // a cópia em uso sai de lado antes e só é apagada depois que a nova entrou (no Windows o antivírus às vezes segura a pasta)
+  const velha = path.join(pasta, 'velha');
+  fs.rmSync(velha, { recursive: true, force: true });
+  if (fs.existsSync(atual)) fs.renameSync(atual, velha);
+  try { fs.renameSync(nova, atual); } catch (e) { if (fs.existsSync(velha)) fs.renameSync(velha, atual); throw e; }
+  fs.rmSync(velha, { recursive: true, force: true });
   return meta;
 }
 const metaMotor = (pasta) => { try { return JSON.parse(fs.readFileSync(path.join(pasta, 'atual', '.lupa-motor.json'), 'utf8')); } catch { return null; } };
@@ -101,12 +108,18 @@ async function rodarCombates({ pastaSim, pastaJogo, jobs, aoAndar }) {
     const m = /^lupa-andamento:(.*)$/.exec(String(ev?.message ?? ''));
     if (m) try { const a = JSON.parse(m[1]); aoAndar?.({ feito: Number(a.feito) || 0, total: Number(a.total) || 0 }); } catch {}
   });
+  // com prazo e atento à queda da página: sem isso, um laço no motor ou a página caindo deixaria a conta "rodando" para sempre
+  let relogio = null;
+  const prazo = new Promise((_ok, falha) => { relogio = setTimeout(() => falha(new Error('a simulação passou de 10 min e foi interrompida')), PRAZO); });
+  const caiu = new Promise((_ok, falha) => jan.webContents.once('render-process-gone', (_e, d) => falha(new Error(`a página do simulador caiu (${d?.reason || '?'})`))));
+  prazo.catch(() => {}); caiu.catch(() => {});
   try {
-    await jan.loadURL(ESQUEMA + '://app/sim.html');
+    await Promise.race([jan.loadURL(ESQUEMA + '://app/sim.html'), prazo, caiu]);
     // o simulador come CPU: prioridade abaixo do normal, para o jogo não sentir
     try { os.setPriority(jan.webContents.getOSProcessId(), os.constants.priority.PRIORITY_BELOW_NORMAL); } catch {}
-    return await jan.webContents.executeJavaScript(`rodar(${JSON.stringify(jobs)}, ${quantosTrabalhadores()})`);
+    return await Promise.race([jan.webContents.executeJavaScript(`rodar(${JSON.stringify(jobs)}, ${quantosTrabalhadores()})`), prazo, caiu]);
   } finally {
+    clearTimeout(relogio);
     // fecha de verdade antes de devolver: com destroy() a próxima janela pegava o processo que estava morrendo e o lupasim://
     // falhava (ERR_FAILED) na segunda etapa
     await new Promise((ok) => {

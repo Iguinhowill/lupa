@@ -160,6 +160,16 @@ function linhaCacada(s, nome, x, nivel) {
   };
 }
 
+// a última conta pronta do Onde gastar o ouro, só com o que o cartão desenha (sem o texto de erro, que pode ter caminhos do PC)
+const CAMPOS_GASTO = ['v', 'em', 'nivel', 'zona', 'campeao', 'ouro', 'equip', 'sim', 'testadas', 'conferidas'];
+const CAMPOS_LINHA = ['tipo', 'titulo', 'detalhe', 'custo', 'custoP90', 'ganho', 'erro', 'xpH', 'ouroH', 'horas', 'mortesH'];
+const soCampos = (o, lista) => Object.fromEntries(lista.filter((k) => o?.[k] !== undefined).map((k) => [k, o[k]]));
+function gastoParaNuvem(g) {
+  if (!Array.isArray(g?.opcoes)) return null;
+  return { ...soCampos(g, CAMPOS_GASTO), estado: 'pronto', base: soCampos(g.base, ['abatesH', 'mortesH', 'economia']),
+    opcoes: g.opcoes.map((l) => soCampos(l, CAMPOS_LINHA)), semGanho: (g.semGanho || []).map((l) => soCampos(l, CAMPOS_LINHA)) };
+}
+
 async function enviarTudo() {
   const s = await nuvemSessao();
   if (!s) return;
@@ -170,7 +180,7 @@ async function enviarTudo() {
   try {
     // a última leitura de cada personagem, com a última conta do Onde gastar o ouro (só o app calcula: "gastar:<nome>") dentro
     m.gastar ||= {};
-    const gastoDe = (e) => { const g = tudo['gastar:' + e.nome]; return g?.opcoes ? { ...g, estado: 'pronto', etapa: undefined, feito: undefined, total: undefined } : null; };
+    const gastoDe = (e) => gastoParaNuvem(tudo['gastar:' + e.nome]);
     const novos = estados.filter((e) => e.ts > (m.estado[e.nome] || 0) || (gastoDe(e)?.em || 0) > (m.gastar[e.nome] || 0));
     await gravar(s, 'estados', novos.map((e) => ({ dono: s.uid, personagem: e.nome, lido_em: iso(e.ts), nivel: numeroDe(e.nivel), zona: e.zona || null, dados: { ...e, gastar: gastoDe(e) } })), 'dono,personagem', 'merge-duplicates');
     for (const e of novos) { m.estado[e.nome] = e.ts; m.gastar[e.nome] = gastoDe(e)?.em || 0; }

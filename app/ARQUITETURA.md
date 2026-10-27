@@ -179,8 +179,8 @@ ganhos que importam aqui).
   do tipo de dano do personagem (ataque, velocidade e crítico; ou poder e recarga), da bolsa (de graça) ou pelo menor
   preço do Mercado, trocando uma carta que já está num item (o preço de tirar ela entra); itens da mochila e do Mercado
   (lendários e míticos com stat de dano do tipo dele; de cada item, a versão mais forte que o ouro paga e a mais barata;
-  a carta do item que sai vai junto, com o preço de tirá-la) em cada lugar em que cabem (uma bota, cada lendário uma vez,
-  mítico só do 50); e o reset de atributos (25 mil × nível) para tudo em Força ou parte em Agilidade/Foco. Preço do
+  a carta do item que sai vai junto, com o preço de tirá-la) em cada lugar em que cabem, inclusive num espaço vazio (uma
+  bota e 4 outros, cada lendário uma vez, mítico só do 50); e o reset de atributos (25 mil × nível) para tudo em Força ou parte em Agilidade/Foco. Preço do
   Mercado: o menor anúncio visto nos últimos 7 dias (`mercado:menores`).
 - **Duas etapas no simulador**: a triagem roda tudo em 2 caçadas de 20 min; a conferência roda as forjas, as de graça
   que ganharam e as 8 melhores por ouro em 8 caçadas de 1 h. Cada opção usa as mesmas sementes da build atual, e o ganho
@@ -189,19 +189,26 @@ ganhos que importam aqui).
   caçadas dos últimos 7 dias; sem medição, o de tabela).
 - **Quando roda**: no botão Calcular (`lupa:gastar`) e sozinha quando a build (itens, atributos, ranks, barra, nível ou
   zona) fica 2 min parada diferente da última conta, ou quando a conta passa de 6 h. Um personagem por vez; depois de
-  um erro, a automática espera 30 min. Leva cerca de 1 min. O resultado vai para `gastar:<nome>` no armazém
+  um erro, a mesma build espera 30 min (uma build nova tenta já). Com um item equipado que a conta não reconhece (sendo
+  avaliado, "~?", ou mais novo que as tabelas) ela não roda: simular sem a peça daria ganhos errados. Leva cerca de 1 min;
+  cada rodada do simulador tem prazo de 10 min e para se a página cair. O resultado vai para `gastar:<nome>` no armazém
   (`{ estado: 'pronto' | 'rodando' | 'na-fila' | 'erro', em, assinatura, nivel, zona, campeao, ouro, equip, base, motor,
   sim, testadas, conferidas, opcoes: [linha], semGanho: [linha] }`, linha = `{ tipo, titulo, detalhe, custo, custoP90,
   ganho, erro, xpH, ouroH, horas, mortesH }`); enquanto recalcula, a conta anterior continua lá. O envio.js sobe a
-  última conta pronta dentro do `estados.dados.gastar` do Lupa Online.
+  última conta pronta dentro do `estados.dados.gastar` do Lupa Online, só com os campos que o cartão desenha (sem o
+  texto de erro).
 - **Isolamento** (`simulador.js`): o motor e o que ele importa são baixados de `https://lolidle.com/js/` (só caminhos
   simples dentro de `js/`) e servidos pelo `lupasim://app/jogo/`. A janela é escondida, sem preload, com sandbox, numa
   sessão em memória (`lupa-simulador`) que cancela qualquer pedido que não seja `lupasim:` e nega permissões; o CSP de
   toda resposta só deixa script e trabalhador do próprio `lupasim:`. O processo roda com prioridade abaixo do normal e
   usa um terço dos núcleos (1 a 4 trabalhadores). A janela fecha de verdade (`close` e o `closed`) antes da próxima:
-  com `destroy()`, a segunda etapa pegava o processo morrendo e o `lupasim://` falhava.
+  com `destroy()`, a segunda etapa pegava o processo morrendo e o `lupasim://` falhava. O download recusa mais de
+  400 arquivos ou um arquivo de mais de 5 MB, e a cópia nova só substitui a antiga depois de baixada inteira (a antiga
+  sai de lado e volta se a troca falhar).
 - **Teste**: `npm run teste:gastar` baixa o motor numa pasta temporária, confere que a página não acessa a internet nem
   sai da pasta do motor e roda a conta inteira com `teste-gastar/estado-yasuo.json` (resultado em `teste-gastar/saida/`).
+  `npm run teste:gastar-app` abre o app de verdade (abas numa página em branco local, dados numa pasta temporária) e
+  confere a conta automática e o botão Calcular do painel. Fora do pacote, `LUPA_GASTO_ESPERA` (ms) encurta a espera.
 
 ## IPC (canais)
 

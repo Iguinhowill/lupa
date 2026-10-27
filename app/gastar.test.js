@@ -168,3 +168,40 @@ test('a conta inteira com o simulador falso', async () => {
   assert.equal(g.assinatura, G.assinatura(G.buildDoEstado(ESTADO)));
   await assert.rejects(G.calcular({ estado: { nome: 'x' }, rodar }), /ficha/);
 });
+
+test('item equipado que a conta não reconhece: recusa em vez de simular sem ele', async () => {
+  const e = copia(ESTADO); e.ficha.equip[2].id = '3153+5#ataque2~?';      // qualidade ainda sendo avaliada
+  const b = G.buildDoEstado(e);
+  assert.equal(b.faltam, 1);
+  assert.equal(b.equip.length, 4);
+  await assert.rejects(G.calcular({ estado: e, rodar: async () => ({}) }), /avaliado/);
+  const novo = copia(ESTADO); novo.ficha.equip[2].id = '999999+5~B';      // item mais novo que as tabelas
+  assert.equal(G.buildDoEstado(novo).faltam, 1);
+});
+
+test('espaço vazio no equipamento também recebe sugestão', () => {
+  const e = copia(ESTADO); e.ficha.equip = e.ficha.equip.filter((i) => !i.id.startsWith('3085'));      // sem a Runaan: 1 bota + 3
+  const b = G.buildDoEstado(e);
+  const agora = Date.now();
+  const c = G.candidatos(b, { menores: { '3074+5~A': { ouro: 3e6, em: agora }, '3172+3~B': { ouro: 1e6, em: agora } }, agora });
+  const vazio = c.filter((x) => /espaço vazio/.test(x.titulo));
+  assert.ok(vazio.some((x) => /Hidra Raivosa/.test(x.titulo) && x.equip.length === 5), 'a Hidra entra no espaço vazio');
+  assert.ok(!vazio.some((x) => /Grevas/.test(x.titulo)), 'bota não entra no vazio: já tem uma');
+  assert.ok(vazio.every((x) => x.custo === 3e6 || x.tipo === 'mochila'), 'no vazio não há carta para tirar');
+  // com os 4 lugares ocupados, nada vai para o vazio
+  assert.ok(!G.candidatos(G.buildDoEstado(ESTADO), { menores: { '3074+5~A': { ouro: 3e6, em: agora } }, agora }).some((x) => /espaço vazio/.test(x.titulo)));
+});
+
+test('a triagem manda um lugar por item para a conferência', () => {
+  const opcoes = ['a@0', 'a@1', 'a@2', 'a@3'].map((id) => ({ id, grupo: 'mercado:a', tipo: 'mercado', custo: 1e6 })).concat([{ id: 'b@0', grupo: 'mercado:b', tipo: 'mercado', custo: 1e6 }]);
+  const r = (g) => ({ abatesH: [100 * (1 + g), 100 * (1 + g)] });
+  const tri = { base: r(0), 'a@0': r(0.01), 'a@1': r(0.04), 'a@2': r(0.02), 'a@3': r(0.03), 'b@0': r(0.005) };
+  assert.deepEqual(G.escolherParaConferir(opcoes, tri).map((x) => x.id), ['a@1', 'b@0']);
+});
+
+test('o ouro da ficha: o cartão (ui.js) lê igual à conta', () => {
+  const vm = require('node:vm'), fs = require('node:fs'), path = require('node:path');
+  const ctx = vm.createContext({ JOGO: require('./lupa/dados-jogo.js'), Intl, URL, Blob: class {} });
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'lupa', 'ui.js'), 'utf8') + ';globalThis.__o = ouroDaFicha;', ctx);
+  for (const t of ['11.4M', '950.2k', '9800', '1.234.567', '2,5M', '', '—', null]) assert.equal(ctx.__o(t), G.numero(t), String(t));
+});
