@@ -31,6 +31,12 @@ test('opções do Yasuo: ranks até o máximo do nível, atributos e as barras d
   assert.ok(!ids.includes('hab:R'), 'R já tem o que o nível 42 deixa');
   const f = hab.find((x) => x.id === 'hab:F');
   assert.equal(f.ranks.F, 9); assert.equal(f.nivel, 42);
+  // aprendida e fora da barra (E): os pontos só rendem com ela na barra, então entra no lugar de cada uma das 4
+  const e = hab.filter((x) => x.grupo === 'hab:E');
+  assert.equal(e.length, 4);
+  assert.ok(e.every((x) => x.barra.includes('E') && x.ranks.E === 10 && /rank 5 → 10 e pôr na barra no lugar de/.test(x.titulo)));
+  // na barra (F) ou passiva (D): só o rank
+  assert.ok(!f.barra && !hab.find((x) => x.id === 'hab:D').barra);
   // habilidade nova: aprende e entra na barra no lugar de cada uma das 4
   const nova = hab.filter((x) => x.grupo === 'hab:T');
   assert.equal(nova.length, 4);

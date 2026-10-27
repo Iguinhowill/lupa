@@ -43,12 +43,14 @@ function opcoesTreino(b, campeao, livres) {
     const r = b.ranks[t] || 0, mais = Math.min(alvo.habilidade, JOGO.rankMaximo(campeao, t, nivelHab) - r);
     if (mais <= 0) continue;
     const ranks = { ...b.ranks, [t]: r + mais };
-    if (r === 0 && !h.passiva) {
-      // aprender uma habilidade nova só rende com ela na barra: no espaço vazio ou no lugar de cada uma
+    if (!h.passiva && !b.barra.includes(t)) {
+      // fora da barra o jogo não usa a habilidade: os pontos nela só rendem com ela na barra (no espaço vazio ou no lugar de cada
+      // uma; fica o melhor lugar). Vale para a nova (rank 0) e para a aprendida que está fora
       const lugares = b.barra.length < JOGO.BARRA ? [-1] : b.barra.map((_, k) => k);
+      const acao = r === 0 ? `Aprender ${nome(t)}${mais > 1 ? ` até o rank ${mais}` : ''}` : `${nome(t)}: rank ${r} → ${r + mais}`;
       for (const k of lugares) lista.push({ id: `hab:${t}@${k}`, grupo: 'hab:' + t, parte: 'habilidade', nivel: nivelHab, ranks,
         barra: k < 0 ? [...b.barra, t] : b.barra.map((x, j) => (j === k ? t : x)),
-        titulo: (k < 0 ? `Aprender ${nome(t)} e pôr na barra` : `Aprender ${nome(t)} e pôr na barra no lugar de ${nome(b.barra[k])}`) + (mais > 1 ? ` (rank ${mais})` : '') });
+        titulo: k < 0 ? `${acao} e pôr na barra` : `${acao} e pôr na barra no lugar de ${nome(b.barra[k])}` });
     } else lista.push({ id: 'hab:' + t, grupo: 'hab:' + t, parte: 'habilidade', nivel: nivelHab, ranks, titulo: `${nome(t)}: rank ${r} → ${r + mais}` });
   }
   // 2) os pontos de atributo, todos num atributo só

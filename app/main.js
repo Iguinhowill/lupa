@@ -493,9 +493,11 @@ function vigiarGasto(nome, e, agora = Date.now()) {
   }
   if (g?.esperandoFicha) gravarGasto(nome, { esperandoFicha: false });
   const sig = Gastar.assinatura(b);
-  const emDia = g?.assinatura === sig && agora - (g.em || 0) < GASTO.velho;
-  // depois de um erro, a mesma build espera 30 min (sem internet, por exemplo); uma build nova tenta já
-  const esperaErro = g?.estado === 'erro' && g.erroAssinatura === sig && agora - (g.erroEm || 0) < GASTO.depoisDoErro;
+  // em dia: as duas contas prontas para esta build e com menos de 6 h. Depois de um erro (em qualquer uma), a mesma build espera
+  // 30 min (sem internet, por exemplo); uma build nova tenta já
+  const contas = CONTAS.map((c) => lerChave(c + ':' + nome));
+  const emDia = contas.every((x) => x?.estado === 'pronto' && x.assinatura === sig && agora - (x.em || 0) < GASTO.velho);
+  const esperaErro = contas.some((x) => x?.estado === 'erro' && x.erroAssinatura === sig && agora - (x.erroEm || 0) < GASTO.depoisDoErro);
   if (emDia || esperaErro) { if (pend) { clearTimeout(pend.t); esperasGasto.delete(nome); } return; }
   if (pend?.sig === sig) return;
   clearTimeout(pend?.t);
