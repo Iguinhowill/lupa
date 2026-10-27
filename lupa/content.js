@@ -32,8 +32,9 @@
   const bonusLive = () => porcento($('#buff-kick-t')) + porcento($('#buff-twitch-t'));
 
   // ---------- configuração (escrita pelo painel) ----------
-  const PADRAO = { esconderLoot: false, tema: true, semBonusLateral: false, semRedes: false, novaSessao: 0, manterAcordado: false, lateralFechada: false, recolhidos: {},
-    avisos: { kick: true, twitch: true, voto: true, tarefa: true, evento: true, convites: false, mochila: true, chao: true, morte: true, pontos: true, nivel: true } };
+  const PADRAO = { esconderLoot: false, tema: true, semBonusLateral: false, semRedes: false, novaSessao: 0, novaSessaoPor: {}, manterAcordado: false, lateralFechada: false, recolhidos: {},
+    avisos: { kick: true, twitch: true, voto: true, tarefa: true, evento: true, convites: false, mochila: true, chao: true, morte: true, pontos: true, nivel: true,
+      premio: true, diaria: true, guerra: true, vilemaw: true, covil: true, reinicio: true, lendario: true } };
   let config = structuredClone(PADRAO);
   function aplicarConfig(c) {
     config = { ...PADRAO, ...c, avisos: { ...PADRAO.avisos, ...(c?.avisos || {}) }, recolhidos: { ...(c?.recolhidos || {}) } };
@@ -199,9 +200,45 @@
         texto: txt($('em', voto)), bonus: oculto($('#buff-voto')) ? '' : txt($('#buff-voto-t'))
       },
       guilda: oculto($('#buff-guilda')) ? '' : txt($('#buff-guilda-t')),
+      barao: oculto($('#buff-barao')) ? '' : txt($('#buff-barao-t')),
+      guerra: oculto($('#buff-guerra')) ? '' : txt($('#buff-guerra-t')),
+      lojaXp: oculto($('#buff-loja-xp')) ? '' : txt($('#buff-loja-xp-t')),
+      lojaOuro: oculto($('#buff-loja-ouro')) ? '' : txt($('#buff-loja-ouro-t')),
+      disciplina: oculto($('#buff-disciplina')) ? '' : txt($('#buff-disciplina-t')),
       vip: { texto: txt($('#abrir-vip span')), dica: dica($('#abrir-vip')) },
       evento: oculto($('#evento-xp')) ? '' : txt($('#evento-xp')),
       convites: conv ? { titulo: txt($('b', conv)), detalhe: txt($('small', conv)) } : null
+    };
+  }
+
+  // multiplicador somado dos buffs que mostram "+N%" (1 = sem bônus); o ouro só vem da Loja
+  function lerBonus() {
+    const xp = porcento($('#buff-kick-t')) + porcento($('#buff-twitch-t')) + porcento($('#buff-voto-t')) + porcento($('#buff-guilda-t')) + porcento($('#buff-loja-xp'));
+    return { xp: Math.round((1 + xp) * 1000) / 1000, ouro: Math.round((1 + porcento($('#buff-loja-ouro'))) * 1000) / 1000 };
+  }
+
+  // quadro de missões (#rastreador) e aviso de reinício: cada bloco é null quando não existe ou está escondido
+  const bloco = (sel) => { const el = $(sel); return oculto(el) ? null : el; };
+  const sub = (el, s) => txt($(s, el));
+  const junta = (el) => [...el.children].map(txt).filter(Boolean).join(' · ') || txt(el);      // o <b> e o <small> grudados viram "título · detalhe"
+  function lerRastreio() {
+    const login = bloco('#rastreio-login'), guerra = bloco('#rastreio-guerra'), vm = bloco('#rastreio-vilemaw'), covil = bloco('#rastreio-covil');
+    const sorteio = bloco('#rastreio-sorteio'), caveira = bloco('#rastreio-caveira'), reinicio = bloco('#aviso-reinicio'), chaves = bloco('#rastreio-chaves');
+    const gt = guerra ? sub(guerra, 'b') : '', gs = guerra ? sub(guerra, 'small') : '';      // pt ou en, como o jogo escreve
+    return {
+      login: login && { dia: +(sub(login, 'b').match(/(\d+)\s*$/) || [])[1] || null, texto: junta(login) },
+      guerra: guerra && {
+        fase: /acontecendo|in progress/i.test(gt) ? 'acontecendo' : /aberta|is open/i.test(gt) ? 'aberta' : 'agendada',
+        texto: junta(guerra), pronto: /você está pronto|you are ready/i.test(gs) ? true : /dar pronto|get ready/i.test(gs) ? false : null
+      },
+      vilemaw: vm && { ativa: vm.classList.contains('ativa'), texto: junta(vm) },
+      covil: covil && { livre: covil.classList.contains('livre'), texto: junta(covil) },
+      chaves: chaves ? $$('.rastreio-chave', chaves).map((el) => ({
+        nome: ($('span', el)?.firstChild?.textContent || '').trim(), resta: sub(el, 'b'), acabando: el.classList.contains('acabando')
+      })) : [],
+      sorteio: sorteio && { participando: sorteio.classList.contains('participando'), texto: junta(sorteio) },
+      caveira: caveira && { texto: junta(caveira), vermelha: caveira.classList.contains('vermelha') },
+      reinicio: reinicio && { texto: junta(reinicio), urgente: reinicio.classList.contains('urgente') }
     };
   }
 
@@ -343,7 +380,7 @@
     } else if ((m = corpo.match(/^(.+) foi avaliado: qualidade (C|B|A|S|SS)\.?$/))) avaliado(m[1].replace(/\s\+\d+$/, '').trim(), m[2]);
     else if ((m = corpo.match(/^Sua mochila está cheia! (.+?) ficou no chão\.?$/))) {
       registrar('chao', 'Item ficou no chão', corpo, { item: m[1].replace(RE_QUAL, '').replace(/\s\+\d+$/, '').trim() });
-      if (config.avisos.chao) avisar('chao', 'Mochila cheia', corpo);
+      if (config.avisos.chao) avisar('chao', 'Mochila cheia', corpo, (n) => `${n} itens ficaram no chão`);
     } else if (/(^|\s)chefe(\s|$)/.test(tipo) && /foi derrotado!$/.test(corpo)) registrar('chefe', 'Chefe derrotado', corpo);
     else if (/(^|\s)raro(\s|$)/.test(tipo) && /^(Lendário|Mítico)/i.test(corpo)) registrar('lendario', 'Lendário!', corpo);
   }
@@ -365,6 +402,7 @@
     if (!prontos.length) return;
     const extras = prontos.filter((ev) => ev.tipo === 'drop' && /^(lendario|mitico)$/.test(ev.raridade))
       .map((ev) => ({ ts: ev.ts, tipo: 'lendario', titulo: ev.raridade === 'mitico' ? 'Mítico!' : 'Lendário!', texto: ev.item, item: ev.item, raridade: ev.raridade, qual: ev.qual }));
+    if (config.avisos.lendario) for (const x of extras) avisar('lendario', x.titulo, `${x.item}${x.qual && x.qual !== '?' ? ' (qualidade ' + x.qual + ')' : ''}`, (n) => `${n} lendários ou míticos caíram`);
     for (const ev of prontos) { if (!ev.raridade) delete ev.raridade; delete ev.servidor; }
     const todos = [...prontos, ...extras].sort((a, b) => a.ts - b.ts), chave = 'eventos:' + nome;
     evCadeia = evCadeia.then(async () => {
@@ -382,7 +420,7 @@
     observador.observe(log, { childList: true });
   }
 
-  const novaSessao = (agora) => ({ ini: agora, fim: agora, ultimoAbate: 0, seg: 0, abates: 0, xp: 0, xpBase: 0, ouro: 0, mortes: 0, zonas: {}, baldes: [], drops: {} });
+  const novaSessao = (agora, nivelIni = null) => ({ ini: agora, fim: agora, nivelIni, ultimoAbate: 0, seg: 0, abates: 0, xp: 0, xpBase: 0, ouro: 0, mortes: 0, zonas: {}, baldes: [], drops: {} });
   const somar = (alvo, seg, p) => { alvo.seg += seg; alvo.abates += p.abates; alvo.xp += p.xp; alvo.xpBase += p.xpBase; alvo.ouro += p.ouro; };
 
   async function carregarCacada(n) {
@@ -402,8 +440,8 @@
     const seg = cacando && dt < 90e3 ? dt / 1000 : 0;      // aba dormindo (dt grande) não conta tempo
     let s = cacada.sessoes.at(-1);
     if (pend.abates || seg) {
-      if (!s || agora - (s.ultimoAbate || s.fim) > PAUSA || (config.novaSessao && config.novaSessao > s.ini)) {
-        s = novaSessao(agora); cacada.sessoes.push(s);
+      if (!s || agora - (s.ultimoAbate || s.fim) > PAUSA || Math.max(config.novaSessao || 0, config.novaSessaoPor?.[nome] || 0) > s.ini) {
+        s = novaSessao(agora, numero(txt($('#st-nivel')) || txt($('#hud-nivel'))) || null); cacada.sessoes.push(s);
         if (cacada.sessoes.length > 30) cacada.sessoes.splice(0, cacada.sessoes.length - 30);
       }
       const zona = zonaAtual() || '?';
@@ -449,7 +487,28 @@
 
   // ---------- avisos (notificações do navegador; não fazem nada no jogo) ----------
   let antes = null, avisouEta = '', avisouFora = false;
-  const avisar = (id, titulo, texto) => tenta(() => chrome.runtime.sendMessage({ tipo: 'aviso', id, titulo, texto }));
+  // no máximo 1 aviso por id a cada 60 s: os que chegam dentro da janela se juntam num só, enviado quando ela fecha
+  // ("plural(n)" escreve o texto do grupo; sem ele vai o último texto com a conta)
+  const JANELA_AVISO = 60e3, janelas = new Map();
+  const enviarAviso = (id, titulo, texto) => tenta(() => chrome.runtime.sendMessage({ tipo: 'aviso', id, titulo, texto }));
+  function fecharJanela(id) {
+    const j = janelas.get(id);
+    if (!j) return;
+    janelas.delete(id);
+    if (j.n < 2) return;
+    janelas.set(id, { ini: Date.now(), n: 1, t: 0 });      // o aviso do grupo abre uma janela nova
+    enviarAviso(id, j.titulo, j.plural ? j.plural(j.n) : `${j.texto} (${j.n} avisos no último minuto)`);
+  }
+  function avisar(id, titulo, texto, plural) {
+    const agora = Date.now(), j = janelas.get(id);
+    if (j && agora - j.ini < JANELA_AVISO) {
+      j.n++; j.titulo = titulo; j.texto = texto; j.plural = plural;
+      if (!j.t) j.t = setTimeout(() => fecharJanela(id), j.ini + JANELA_AVISO - agora);
+      return;
+    }
+    janelas.set(id, { ini: agora, n: 1, t: 0 });
+    enviarAviso(id, titulo, texto);
+  }
   const nConvites = (e) => numero((e.timers.convites?.titulo || '').match(/^\d+/)?.[0]);
   // eventos e avisos que dependem de comparar dois ciclos (p vem vazio no primeiro: só registra a linha de base)
   let avisouMochila = false;
@@ -480,11 +539,31 @@
     if (p.timers?.twitch.ativo && !e.timers?.twitch.ativo) registrar('bonus', 'Bônus da Twitch acabou', '');
   }
 
+  // o quadro de missões e o aviso de reinício: avisa na virada de "não" para "sim"
+  let diaPremio = '';
+  function conferirRastreio(e, p) {
+    const a = config.avisos, r = e.rastreio, q = p.rastreio;
+    if (!r || !q) return;
+    const dia = new Date().toDateString();
+    if (a.premio && r.login && !q.login && diaPremio !== dia) { diaPremio = dia; avisar('premio', 'Prêmio diário', 'O prêmio diário de login está esperando você.'); }
+    const prontas = (x) => (x.diarias || []).filter((d) => d.pronta).length;
+    if (a.diaria && prontas(e) > prontas(p)) avisar('diaria', 'Diária pronta', 'Uma missão diária ficou pronta: dá para receber o prêmio.');
+    if (a.guerra && r.guerra) {
+      const g = r.guerra, fp = q.guerra?.fase;
+      if (g.fase === 'aberta' && (!q.guerra || fp === 'agendada')) avisar('guerra-abre', 'Guerra de Guildas aberta', g.pronto === false ? 'A sala abriu e falta você dar pronto.' : 'A sala da Guerra de Guildas abriu.');
+      else if (g.fase === 'acontecendo' && fp === 'aberta') avisar('guerra-comeca', 'Guerra de Guildas começou', 'A Guerra de Guildas está acontecendo agora.');
+    }
+    if (a.vilemaw && r.vilemaw?.ativa && q.vilemaw && !q.vilemaw.ativa) avisar('vilemaw', 'A Vilemaw acordou', 'A Vilemaw está acordada agora.');
+    if (a.covil && r.covil?.livre && q.covil && !q.covil.livre) avisar('covil', 'Covil liberado', 'A entrada do Covil do Rei do Rio está liberada.');
+    if (a.reinicio && r.reinicio && !q.reinicio) avisar('reinicio', 'Reinício do servidor', r.reinicio.texto);
+  }
+
   function conferirAvisos(e) {
     const p = antes, a = config.avisos;
     antes = e;
     tenta(() => conferirEstado(e, p));
     if (!p) return;
+    tenta(() => conferirRastreio(e, p));
     const ti = e.timers, tp = p.timers;
     if (a.kick && tp.kick.ativo && !ti.kick.ativo) avisar('kick', 'Bônus da Kick acabou', 'O bônus de XP da Kick terminou.');
     if (a.twitch && tp.twitch.ativo && !ti.twitch.ativo) avisar('twitch', 'Bônus da Twitch acabou', 'O bônus de XP da Twitch terminou.');
@@ -517,6 +596,8 @@
       tarefa: tenta(() => extraTarefa(lerTarefa(), zona)),
       diarias: tenta(lerDiarias, []),
       timers: tenta(lerTimers),
+      rastreio: tenta(lerRastreio),
+      bonus: tenta(lerBonus),
       chat: tenta(lerChat, []),
       recentes: resumoRecentes(),
       pontos: { habilidade: numero(txt($('#badge-hab'))), atributo: numero(txt($('#badge-atrib'))) },

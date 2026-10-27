@@ -122,6 +122,13 @@ function atende(a, g) {
   return !!x && x[1] === a.alvo && QUALS.indexOf(x[5]) >= QUALS.indexOf(a.qual_min || 'C') && +(x[3] || 0) >= a.refino_min && !(a.so_sem_carta && x[4]);
 }
 
+// "Gume do Infinito A+3 por 850k (alvo 900k)"
+const abrevia = (n) => (n >= 1e6 ? +(n / 1e6).toFixed(2) + 'M' : n >= 1e4 ? +(n / 1e3).toFixed(1) + 'k' : n.toLocaleString('pt-BR'));
+function textoAlerta(v) {
+  const x = String(v.chave).match(RE_CHAVE), versao = x ? ` ${x[5]}${x[3] ? '+' + x[3] : ''}` : '', un = v.moeda === 'orbs' ? ' orbs' : '';
+  return `${v.nome}${versao} por ${abrevia(v.preco)}${un} (alvo ${abrevia(v.preco_max)}${un})`;
+}
+
 async function conferirAlertas(s, merc, m, agora) {
   const alertas = await lerTabela(s, 'alertas?ativo=eq.true&select=id,alvo,preco_max,moeda,qual_min,refino_min,so_sem_carta,menor,visto_em');
   const avisos = [], abaixo = {};
@@ -139,6 +146,9 @@ async function conferirAlertas(s, merc, m, agora) {
     if (mudou || agora - Date.parse(a.visto_em || 0) > 5 * 60e3) await corrigir(s, 'alertas', 'id=eq.' + a.id, { menor, visto_em: iso(agora) });
   }
   await gravar(s, 'avisos', avisos);
+  for (const v of avisos) {      // o aviso nativo, só dos novos (o lupaAvisar vem do background ou do app)
+    try { if (typeof lupaAvisar === 'function') lupaAvisar('preco:' + v.alerta_id, 'Alerta de preço', textoAlerta(v)); } catch {}
+  }
   Object.assign(m.alertas, abaixo);      // só depois do aviso gravado: se falhar, avisa na próxima
 }
 
@@ -146,7 +156,7 @@ function linhaCacada(s, nome, x, nivel) {
   return {
     dono: s.uid, personagem: nome, inicio: iso(x.ini), fim: iso(x.fim), ultimo_abate: x.ultimoAbate ? iso(x.ultimoAbate) : null,
     segundos: Math.round(x.seg || 0), abates: inteiro(x.abates), xp: inteiro(x.xp), xp_base: inteiro(x.xpBase), ouro: inteiro(x.ouro),
-    mortes: inteiro(x.mortes), nivel_ini: null, nivel_fim: nivel, zonas: x.zonas || {}, baldes: x.baldes || [], drops: x.drops || {}
+    mortes: inteiro(x.mortes), nivel_ini: x.nivelIni ?? null, nivel_fim: nivel, zonas: x.zonas || {}, baldes: x.baldes || [], drops: x.drops || {}
   };
 }
 
