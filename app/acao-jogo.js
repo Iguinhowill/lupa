@@ -82,8 +82,8 @@
     if (el.isConnected && visivel(el)) await clicar(el);
     return esperar(cond, Math.max(0, total - cedo));
   }
-  // as teclas da entrega (B e M) respondem na hora; o M abre e fecha o mapa (e o botão Mapa é chamado com o mesmo prazo),
-  // então só repete depois de 2,5 s sem mudança
+  // as teclas da entrega (B e M) respondem na hora. Por padrão repetem depois de 2,5 s sem mudança, por causa do M, que abre
+  // e fecha o mapa (o botão Mapa é chamado com o mesmo prazo); a volta à Fonte (botão ou B) é chamada com 5 s
   async function teclaAte(k, cond, total, cedo = 2500) {
     await tecla(k);
     const v = await esperar(cond, cedo);

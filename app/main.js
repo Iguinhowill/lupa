@@ -179,7 +179,7 @@ function criarJogo(a) {
   wc.on('did-navigate', avisarRecarga);
   wc.on('did-fail-load', (_e, _cod, _desc, _url, principal) => { if (principal) avisarRecarga(); });
   wc.on('did-stop-loading', () => { recarregou = null; });
-  wc.on('render-process-gone', () => encerrarAcao(a, 'A página do jogo caiu no meio. Aperte de novo.'));
+  wc.on('render-process-gone', () => encerrarAcao(a, 'A página do jogo caiu no meio. Aperte de novo.', true));
   const tema = fs.readFileSync(path.join(LUPA, 'tema.css'), 'utf8');
   wc.on('dom-ready', () => { if (/^https?:\/\/((www\.)?lolidle\.com|127\.0\.0\.1|localhost)[:/]/.test(wc.getURL())) wc.insertCSS(tema).catch(() => {}); });
   wc.loadURL(JOGO);
@@ -461,13 +461,14 @@ async function tomarFoco(wc) {
   await new Promise((ok) => setTimeout(ok, 120));      // o foco não muda na hora
 }
 // a ação daquela aba acabou, foi parada ou a página dela foi embora: a autorização some e, se o foco ainda está no jogo da
-// ação (a pessoa não foi para outro lugar), volta para quem o tinha antes da última entrada. Com `motivo`, o painel deixa de
-// mostrar "rodando" e mostra o motivo. Devolve o tipo da ação encerrada (null se não havia uma daquela aba)
-function encerrarAcao(a, motivo) {
+// ação (a pessoa não foi para outro lugar), volta para quem o tinha antes da última entrada. Com a página caída (`caiu`), a
+// view perde o foco junto: aí ele volta se não ficou com ninguém. Com `motivo`, o painel deixa de mostrar "rodando" e mostra
+// o motivo. Devolve o tipo da ação encerrada (null se não havia uma daquela aba)
+function encerrarAcao(a, motivo, caiu = false) {
   if (!acaoAtual || acaoAtual.aba !== a.id) return null;
-  const { tipo, devolver } = acaoAtual, wc = a.view?.webContents;
+  const { tipo, devolver } = acaoAtual, wc = a.view?.webContents, atual = webContents.getFocusedWebContents();
   acaoAtual = null;
-  if (devolver && !devolver.isDestroyed() && wc && !wc.isDestroyed() && webContents.getFocusedWebContents() === wc) devolver.focus();
+  if (devolver && !devolver.isDestroyed() && (atual === wc || (caiu && !atual))) devolver.focus();
   if (motivo && tipo === 'tarefa') avisarFimDaAcao(pref.nomes[a.id], motivo);
   return tipo;
 }

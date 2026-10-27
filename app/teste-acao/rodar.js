@@ -111,7 +111,9 @@ app.whenReady().then(async () => {
     conferir(/\bok\b/.test(fim[0]) && fim[1] === r1.a?.texto, `1) o painel não mostrou o resultado: ${fim[1]}`);
     conferir(/em andamento/.test(out.pedidoDuplo?.erro || ''), '1) um segundo pedido no meio não foi recusado: ' + JSON.stringify(out.pedidoDuplo));
     conferir(out.colunaDepois1 === false, '1) o Alt+L no meio da entrega mexeu na coluna');
-    conferir(out.focoVoltouAoPainel, '1) no fim da entrega o foco não voltou para o painel');
+    // sem a janela do teste em foco no Windows, nenhuma view do Electron fica "focada": aí essa conferência é pulada
+    if (out.focada) conferir(out.focoVoltouAoPainel, '1) no fim da entrega o foco não voltou para o painel');
+    else pulados.push('1) a volta do foco ao painel: a janela do teste não ganhou o foco');
 
     // 2) apertar de novo logo depois, nos ~5 s em que a leitura da Lupa ainda diz "pronta" (o botão continua ligado): a ação
     // confere na tela e tem de recusar sem mexer no jogo. O pedido vai direto porque aqui a Lupa já releu e desligou o botão

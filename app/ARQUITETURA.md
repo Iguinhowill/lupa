@@ -135,7 +135,7 @@ Por isso cada clique ou tecla é uma entrada de verdade, `webContents.sendInputE
   abre o mapa (o botão ou a tecla M), clica na zona e no "Ir", e espera chegar. Cada passo espera a tela mudar (com prazo);
   se nada mudou no prazo e o botão continua ali, repete a entrada uma vez. Prazos: 1,5 s em "entregar", "tarefa", na
   oferta, na zona e no "Ir"; 2,5 s no mapa (botão ou M, que abrem e fecham); 3 s no rastreio (o personagem anda); 5 s na
-  volta à Fonte (B). Repetir é seguro: "entregar", "tarefa" e a oferta somem no instante em que o clique pega (só repetem
+  volta à Fonte (botão ou B). Repetir é seguro: "entregar", "tarefa" e a oferta somem no instante em que o clique pega (só repetem
   se ele se perdeu), voltar já voltando, falar de novo com o Capitão, escolher a zona de novo e a viagem repetida não mudam
   nada no jogo. A aba Missões (abre e fecha) não repete. O primeiro passo que falha para tudo e vira o erro no painel. O andamento vai para `acao:<nome>` no armazém
   (`{ tipo, estado: 'rodando' | 'ok' | 'erro' | 'parado', texto, em }`). O Parar (`lupa:acao` tipo `parar`) interrompe.
