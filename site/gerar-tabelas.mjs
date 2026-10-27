@@ -8,7 +8,7 @@
 // Uso: node gerar-tabelas.mjs        (rode de vez em quando; o site avisa quando as tabelas ficam velhas)
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve, sep, posix } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
@@ -34,14 +34,18 @@ try {
   if (!achou) throw new Error('o script de /jogar não importa ./motor.js: a estrutura do jogo mudou');
 
   const feitos = new Map();
+  // os nomes vêm dos imports de arquivos baixados: só caminhos simples dentro de js/, nunca subindo de pasta
+  const NOME_OK = /^[\w-]+(\/[\w-]+)*\.js$/;
   const seguir = async (nome) => {
+    if (!NOME_OK.test(nome)) throw new Error('import com caminho fora do padrão (recusado): ' + nome);
     if (feitos.has(nome)) return;
+    const arq = resolve(pasta, nome);
+    if (!arq.startsWith(resolve(pasta) + sep)) throw new Error('import fora da pasta temporária (recusado): ' + nome);
     const src = await baixar(`${BASE}/js/${nome}`);
     feitos.set(nome, src);
-    const arq = join(pasta, nome);
     mkdirSync(dirname(arq), { recursive: true });
     writeFileSync(arq, src);
-    for (const imp of importsDe(src)) await seguir(join(dirname(nome), imp).replaceAll('\\', '/'));
+    for (const imp of importsDe(src)) await seguir(posix.normalize(posix.join(posix.dirname(nome), imp)));
   };
   await seguir('motor.js');
   await seguir('novidades.js');
@@ -81,6 +85,8 @@ try {
 
   // 3) grava dados-jogo.js
   const j = (v) => JSON.stringify(v);
+  // número que entra solto no código gerado: tem de ser um número de verdade (o valor vem de um arquivo baixado)
+  const num = (v, nome) => { if (typeof v !== 'number' || !Number.isFinite(v)) throw new Error(`${nome} não é um número: ${j(v)}`); return j(v); };
   const linhas = (arr) => '[\n' + arr.map((x) => '  ' + j(x)).join(',\n') + '\n]';
   const meta = { geradoEm: new Date().toISOString(), versaoJogo, motorSha256: sha, dataDragon: T.dataDragon, fonte: BASE + '/js/motor.js' };
   const fonte = `// Lupa Online · tabelas PÚBLICAS do jogo (lolidle.com), em números. GERADO por gerar-tabelas.mjs: não edite à mão.
@@ -90,13 +96,13 @@ try {
 
 const JOGO = (() => {
   const meta = ${j(meta)};
-  const NIVEL_MAX = ${T.NIVEL_MAX};
-  const REFINO_MAX = ${T.REFINO_MAX}, BONUS_REFINO = ${T.BONUS_REFINO}, RITMO_REAL = ${T.RITMO_REAL};
+  const NIVEL_MAX = ${num(T.NIVEL_MAX, 'NIVEL_MAX')};
+  const REFINO_MAX = ${num(T.REFINO_MAX, 'REFINO_MAX')}, BONUS_REFINO = ${num(T.BONUS_REFINO, 'BONUS_REFINO')}, RITMO_REAL = ${num(T.RITMO_REAL, 'RITMO_REAL')};
   const CHANCE_REFINO = ${j(T.CHANCE_REFINO)};            // chance de subir do refino i para i+1, sem VIP
   const REGRESSAO_REFINO = ${j(T.REGRESSAO_REFINO)};      // chance de, ao falhar na tentativa de i para i+1, voltar para i-1
   const PERSISTENCIA = ${j(T.PERSISTENCIA_FORJA)};        // por alvo (+1..+7): a partir de "subir" falhas a chance cresce até 100% na tentativa "max"
-  const PERSISTENCIA_PASSO = ${T.PERSISTENCIA_PASSO}, PERSISTENCIA_TETO = ${T.PERSISTENCIA_TETO};
-  const PRECO_REFINO_ALTO = ${T.PRECO_REFINO_ALTO}, PRECO_REFINO_TOPO = ${j(T.PRECO_REFINO_TOPO)};
+  const PERSISTENCIA_PASSO = ${num(T.PERSISTENCIA_PASSO, 'PERSISTENCIA_PASSO')}, PERSISTENCIA_TETO = ${num(T.PERSISTENCIA_TETO, 'PERSISTENCIA_TETO')};
+  const PRECO_REFINO_ALTO = ${num(T.PRECO_REFINO_ALTO, 'PRECO_REFINO_ALTO')}, PRECO_REFINO_TOPO = ${j(T.PRECO_REFINO_TOPO)};
   const VIP = ${j(T.VIP)};
   const DROP_CHEFE = ${j(T.DROP_CHEFE)};
   const ABATES_MIN_ZONA = ${j(T.ABATES_MIN_ZONA)};         // abates por minuto medidos pelo dono do jogo, por zona

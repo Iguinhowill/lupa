@@ -4,7 +4,7 @@
 'use strict';
 
 const JOGO = (() => {
-  const meta = {"geradoEm":"2026-10-27T01:18:26.637Z","versaoJogo":"2026-10-26a","motorSha256":"339c9188eb75d9315f86b06a9de60ab26f3442181df1e897995043dcceba8ae7","dataDragon":"16.19.1","fonte":"https://lolidle.com/js/motor.js"};
+  const meta = {"geradoEm":"2026-10-27T01:31:11.695Z","versaoJogo":"2026-10-26a","motorSha256":"339c9188eb75d9315f86b06a9de60ab26f3442181df1e897995043dcceba8ae7","dataDragon":"16.19.1","fonte":"https://lolidle.com/js/motor.js"};
   const NIVEL_MAX = 100;
   const REFINO_MAX = 7, BONUS_REFINO = 0.12, RITMO_REAL = 1.5;
   const CHANCE_REFINO = [0.3,0.12,0.02,0.008,0.003,0.0005,0.00006];            // chance de subir do refino i para i+1, sem VIP
