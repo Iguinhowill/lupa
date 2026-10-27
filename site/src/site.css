@@ -278,3 +278,15 @@ body { font-variant-numeric: tabular-nums; }
 .perigo { color: var(--laranja); }
 .aviso-zona { display: block; font-size: 12.5px; font-weight: 400; max-width: 28ch; }
 .estimativa-resumo { margin: 0 0 8px; font-size: 15px; }
+
+/* Calcular: formulários em linha, marcas da curva em linha fina dourada */
+.calc-corpo { display: flex; flex-direction: column; gap: 14px; }
+.chips-linha { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.rot-chips { font-size: 13px; }
+.site-pagina .calc-corpo .filtros-drops { gap: 10px 16px; align-items: end; }
+.site-pagina .calc-corpo .filtro input, .site-pagina .calc-corpo .filtro select { min-width: 0; width: 100%; }
+.site-pagina .calc-corpo .filtro { flex: 1 1 150px; max-width: 280px; }
+.site-pagina .calc-corpo .filtro .chips { min-height: 36px; align-items: center; }
+.graf-marca { stroke: var(--ouro); stroke-width: 1; stroke-dasharray: 3 3; }
+.graf .graf-rotulo { fill: var(--ouro-claro); font-size: 12px; }
+@media (max-width: 640px) { .site-pagina .calc-corpo .filtro { flex: 1 1 100%; max-width: none; } }

@@ -6,7 +6,7 @@
 var LUPA_PLANOS = {};        // o mesmo formato do planos.js, lido da tabela planos
 var LUPA_NOTAS = {};         // notas do guia por personagem
 const SB = supabase.createClient(LUPA_CONFIG.url, LUPA_CONFIG.chave);
-const PAGINAS = [['agora.html', 'Agora'], ['relatorio.html', 'Relatório'], ['guia.html', 'Guia'], ['farm.html', 'Farm'], ['loja.html', 'Loja'], ['roteiros/', 'Roteiros']];
+const PAGINAS = [['agora.html', 'Agora'], ['relatorio.html', 'Relatório'], ['guia.html', 'Guia'], ['farm.html', 'Farm'], ['loja.html', 'Loja'], ['calcular.html', 'Calcular'], ['roteiros/', 'Roteiros']];
 const $id = (id) => document.getElementById(id);
 const iso = (ts) => new Date(ts).toISOString();
 const HORA = 3600e3, DIA = 24 * HORA;
