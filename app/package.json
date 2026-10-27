@@ -1,7 +1,7 @@
 {
   "name": "lupa",
   "productName": "Lupa",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "Lupa para LoL Idle: o jogo com as duas contas e o painel da Lupa numa janela só. Só lê a tela.",
   "main": "main.js",
   "private": true,

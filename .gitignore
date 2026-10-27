@@ -8,3 +8,4 @@ site/dist/
 .env*
 *.log
 Thumbs.db
+.claude/

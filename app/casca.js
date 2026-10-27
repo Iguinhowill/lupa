@@ -206,6 +206,7 @@
     desenharAtualizacao();
     // o estado diz que o menu fechou por fora (a janela perdeu o foco)
     if (menuAberto && estado.menuAberto === false) fecharMenu(false);
+    else if (!menuAberto && estado.menuAberto) window.lupaCasca.menu(false);      // a casca recarregou com o menu aberto no main: fecha lá também
     else if (menuAberto) desenharMenu();
   }
 
