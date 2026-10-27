@@ -11,7 +11,7 @@
     "preparar": "node copiar-lupa.mjs",
     "start": "node copiar-lupa.mjs && electron .",
     "dist": "node copiar-lupa.mjs && electron-builder --win --publish never",
-    "test": "node copiar-lupa.mjs && node --test regras.test.js armazem.test.js layout.test.js alertas.test.js acoes.test.js gastar.test.js",
+    "test": "node copiar-lupa.mjs && node --test regras.test.js armazem.test.js layout.test.js alertas.test.js acoes.test.js gastar.test.js treino.test.js",
     "teste:gastar": "node copiar-lupa.mjs && electron teste-gastar/rodar.js",
     "teste:gastar-app": "node copiar-lupa.mjs && electron teste-gastar/app.js",
     "teste:acao": "node copiar-lupa.mjs && electron teste-acao/rodar.js"
@@ -38,6 +38,7 @@
       "atalhos.js",
       "acoes.js",
       "gastar.js",
+      "treino.js",
       "simulador.js",
       "sim/**",
       "preload-*.js",

@@ -55,6 +55,14 @@ app.whenReady().then(async () => {
     for (const l of g.semGanho) console.log(`  nada   ${(l.ganho * 100).toFixed(2).padStart(6)}% ±${(l.erro * 100).toFixed(2)} custo ${String(l.custo).padStart(10)} · ${l.titulo}`);
     fs.mkdirSync(path.join(__dirname, 'saida'), { recursive: true });
     fs.writeFileSync(path.join(__dirname, 'saida', 'resultado.json'), JSON.stringify(g, null, 1));
+    // os Pontos e barra com a mesma ficha
+    const t2 = Date.now();
+    const tr = await require('../treino').calcular({ estado, agora, rodar: (jobs) => Simulador.rodarCombates({ pastaSim, pastaJogo, jobs }) });
+    conferir(tr.campeao === 'yasuo' && tr.barra.testadas === 34, `Pontos e barra em ${Math.round((Date.now() - t2) / 1000)} s: ${tr.habilidade.testadas} opções de habilidade, ${tr.barra.testadas} barras`);
+    const f = tr.habilidade.opcoes.find((l) => /Lâmina Fantasma/.test(l.titulo));
+    conferir(f && f.ganho > 0.01, `os próximos pontos na Lâmina Fantasma rendem: ${f ? (f.ganho * 100).toFixed(2) + '%' : 'não conferida'}`);
+    conferir(tr.barra.opcoes.every((l) => l.ganho < 0.01), 'nenhuma barra ganha da atual (Q R F G) por mais de 1%');
+    fs.writeFileSync(path.join(__dirname, 'saida', 'treino.json'), JSON.stringify(tr, null, 1));
   } catch (e) {
     conferir(false, 'erro: ' + (e?.stack || e));
   } finally {

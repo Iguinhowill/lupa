@@ -30,17 +30,20 @@ require(path.join(__dirname, '..', 'main.js'));
 
 const espera = (ms) => new Promise((ok) => setTimeout(ok, ms));
 const achar = (re) => webContents.getAllWebContents().find((w) => re.test(w.getURL()));
-const gastoDe = (painel) => painel.executeJavaScript(`chrome.storage.local.get('gastar:Teste').then((r) => r['gastar:Teste'] || null)`);
-async function esperarPronto(painel, desde, limite = 240e3) {
+const gastoDe = (painel, conta = 'gastar') => painel.executeJavaScript(`chrome.storage.local.get('${conta}:Teste').then((r) => r['${conta}:Teste'] || null)`);
+// espera as duas contas da rodada (o Onde gastar o ouro e, depois, os Pontos e barra); devolve a do ouro e a do treino
+async function esperarPronto(painel, desde, limite = 300e3) {
   const t = Date.now(), visto = new Set();
   let g = null;
   while (Date.now() - t < limite) {
     await espera(1000);
     g = await gastoDe(painel);
+    const tr = await gastoDe(painel, 'treino');
     if (g?.estado) visto.add(g.estado + (g.etapa ? ':' + g.etapa : ''));
-    if (g && ['pronto', 'erro'].includes(g.estado) && (g.em || g.erroEm || 0) > desde) break;
+    const fim = (x) => x && ['pronto', 'erro'].includes(x.estado) && (x.em || x.erroEm || 0) > desde;
+    if (fim(g) && fim(tr)) return { g, tr, visto: [...visto] };
   }
-  return { g, visto: [...visto] };
+  return { g, tr: await gastoDe(painel, 'treino'), visto: [...visto] };
 }
 
 app.whenReady().then(async () => {
@@ -58,6 +61,8 @@ app.whenReady().then(async () => {
     const r1 = await esperarPronto(painel, t1);
     conferir(r1.g?.estado === 'pronto' && r1.g.motivo === 'build nova', `conta automática: ${r1.g?.estado} (${r1.g?.motivo || r1.g?.erro}) em ${Math.round((Date.now() - t1) / 1000)} s; estados vistos: ${r1.visto.join(', ')}`);
     conferir(r1.g?.equip?.[3] === '3046+5#ataque2~B', 'a conta usou a build nova');
+    conferir(r1.tr?.estado === 'pronto' && r1.tr.campeao === 'yasuo' && r1.tr.habilidade?.opcoes?.length > 0 && r1.tr.barra?.testadas > 0,
+      `Pontos e barra na mesma rodada: ${r1.tr?.estado} (${r1.tr?.erro || `${r1.tr?.habilidade?.opcoes?.length} habilidades, ${r1.tr?.barra?.testadas} barras`})`);
     conferir(fs.existsSync(path.join(DADOS, 'motor-jogo', 'atual', 'motor.js')), 'o motor ficou na pasta do app (motor-jogo/atual)');
     // 2) o botão Calcular do painel (na aba Ficha)
     await painel.executeJavaScript(`(() => { const b = [...document.querySelectorAll('#abas button, nav button, button')].find((x) => x.textContent.trim() === 'Ficha'); b?.click(); desenhar(true); })()`);
@@ -71,6 +76,8 @@ app.whenReady().then(async () => {
     await painel.executeJavaScript('desenhar(true)');
     const texto = await painel.executeJavaScript(`document.querySelector('.gastar')?.innerText || ''`);
     conferir(/Onde gastar o ouro/.test(texto) && /Conta de/.test(texto) && /se paga em|Nada do que o ouro compra/.test(texto), 'o cartão mostra a conta');
+    const textoTreino = await painel.executeJavaScript(`document.querySelector('.treino')?.innerText || ''`);
+    conferir(/Pontos e barra/.test(textoTreino) && /Habilidade · os próximos/.test(textoTreino) && /Barra/.test(textoTreino), 'o cartão Pontos e barra mostra a conta');
     // 3) um item equipado ainda sendo avaliado ("~?"): a conta não roda e o cartão diz que espera
     const avaliando = JSON.parse(JSON.stringify(novo)); avaliando.ts = Date.now(); avaliando.ficha.equip[1].id = '3031+5#ataque2~?';
     await painel.executeJavaScript(`chrome.storage.local.set(${JSON.stringify({ 'estado:Teste': avaliando })})`);
