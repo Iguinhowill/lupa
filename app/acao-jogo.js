@@ -52,7 +52,10 @@
     const r = el.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
     const topo = document.elementFromPoint(x, y);
     if (!topo || !(topo === el || el.contains(topo))) throw new Error('Tem alguma janela por cima do botão do jogo. Feche e aperte de novo.');
-    if (!(await ipcRenderer.invoke('acao:clicar', { x, y }))) throw new Error('O app não deixou clicar (a aba saiu da tela ou o tempo da ação acabou).');
+    if (!(await ipcRenderer.invoke('acao:clicar', { x, y }))) {
+      if (parar) throw new Parou();      // o Parar apaga a autorização no main: o clique que estava a caminho volta recusado
+      throw new Error('O app não deixou clicar (a aba saiu da tela ou o tempo da ação acabou).');
+    }
   }
   // tecla de atalho do próprio jogo (B volta para a Fonte, M abre o mapa), para quando a coluna da direita está escondida.
   // A tecla depende da janela do app em foco no Windows: por isso o botão, quando está à vista, vem primeiro
@@ -61,12 +64,16 @@
     await aVista();
     const a = document.activeElement;
     if (a && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)) a.blur();      // no chat a tecla viraria texto
-    if (!(await ipcRenderer.invoke('acao:tecla', { tecla: k }))) throw new Error('O app não deixou apertar a tecla.');
+    if (!(await ipcRenderer.invoke('acao:tecla', { tecla: k }))) {
+      if (parar) throw new Parou();
+      throw new Error('O app não deixou apertar a tecla.');
+    }
   }
 
   // clica (ou aperta a tecla) e espera a tela mudar (cond) até `total` ms. Se em `cedo` ms nada mudou e o botão continua
-  // ali, a entrada pode ter se perdido: repete uma vez. Todos os botões da entrega aguentam um segundo clique no jogo
-  // (voltar já voltando não faz nada; falar de novo com o Capitão recomeça a mesma conversa; a zona é só escolhida de novo)
+  // ali, a entrada pode ter se perdido: repete uma vez. Só nos botões que aguentam um segundo clique no jogo (voltar já
+  // voltando não faz nada; falar de novo com o Capitão recomeça a mesma conversa; a zona é só escolhida de novo; a viagem
+  // repetida é ignorada); os que abrem e fecham (a aba Missões) não repetem
   async function clicarAte(el, cond, total, cedo = 1500) {
     await clicar(el);
     const v = await esperar(cond, cedo);
@@ -74,7 +81,8 @@
     if (el.isConnected && visivel(el)) await clicar(el);
     return esperar(cond, Math.max(0, total - cedo));
   }
-  async function teclaAte(k, cond, total, cedo = 1500) {
+  // as teclas da entrega (B e M) respondem na hora; o M abre E fecha o mapa, então só repete depois de 2,5 s sem mudança
+  async function teclaAte(k, cond, total, cedo = 2500) {
     await tecla(k);
     const v = await esperar(cond, cedo);
     if (v) return v;
@@ -117,7 +125,10 @@
 
     passo('Indo até o Capitão da Legião…');
     let rt = await esperar(rastreioTarefa, 4e3);
-    if (!rt && visivel($('#rastreio-topo'))) rt = await clicarAte($('#rastreio-topo'), rastreioTarefa, 3e3);      // o quadro de missões recolhido: abre pela aba Missões
+    if (!rt && visivel($('#rastreio-topo'))) {      // o quadro de missões recolhido: abre pela aba Missões (abre e fecha: sem repetir)
+      await clicar($('#rastreio-topo'));
+      rt = await esperar(rastreioTarefa, 3e3);
+    }
     if (!rt) throw new Error('Não achei a tarefa no quadro de missões do jogo.');
     // o personagem anda até o Capitão: o segundo clique, se precisar, só vem depois de 3 s
     const entregar = await clicarAte(rt, () => palavra('entregar'), 20e3, 3e3);
@@ -142,12 +153,14 @@
     if (k < 0) throw new Error('Não consegui ler as ofertas do Capitão (o jogo mudou o texto?). Escolha uma e vá caçar.');
     const o = ofertas[k];
     await pausa(300);
-    if (!(await clicarAte(o.botao, () => $('#janela-npc')?.hidden, 4e3))) throw new Error('O Capitão não aceitou a tarefa.');
+    // aceita: o jogo fecha a conversa em 0,6 s (dizer('tchau')) e o rastreio volta com a tarefa nova ("0/120 · <zona>")
+    const aceitou = () => { const r = $('#rastreio-tarefa'); return $('#janela-npc')?.hidden || (r && !r.hidden && !r.classList.contains('pronta') && mesma(txt($('small', r)).split(' · ').at(-1), o.zona)); };
+    if (!(await clicarAte(o.botao, aceitou, 4e3))) throw new Error('O Capitão não aceitou a tarefa.');
     const nova = `${o.titulo}${o.tipo ? ` (${o.tipo})` : ''}, ~${Math.round(o.min)} min, ${curto(o.xp / o.min)} de XP por minuto`;
 
     passo(`Indo para ${o.zona}…`);
     const mapaAberto = () => $('#janela-mapa') && !$('#janela-mapa').hidden;
-    if (!mapaAberto() && !(await botaoOuTecla('#abrir-mapa', 'm', mapaAberto, 3e3))) throw new Error(`Tarefa nova: ${nova}. O mapa não abriu: a viagem fica com você.`);
+    if (!mapaAberto() && !(await botaoOuTecla('#abrir-mapa', 'm', mapaAberto, 5e3))) throw new Error(`Tarefa nova: ${nova}. O mapa não abriu: a viagem fica com você.`);
     const mk = await esperar(() => { const m = $$('#marcadores .marcador').find((b) => mesma(b.getAttribute('aria-label'), o.zona)); return visivel(m) ? m : null; }, 3e3);
     if (!mk) throw new Error(`Tarefa nova: ${nova}. Não achei ${o.zona} no mapa do Rift: a viagem fica com você.`);
     const ir = await clicarAte(mk, () => { const b = $(`#mapa-info [data-ir="${mk.dataset.local}"]`); return b && !b.disabled && visivel(b) ? b : null; }, 3e3);

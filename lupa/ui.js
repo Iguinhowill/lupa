@@ -31,7 +31,9 @@ const PAUSA = 15 * 60e3, BALDE = 5 * 60e3;
 
 // Mescla o config salvo com os padrões (inclusive os objetos aninhados).
 function mesclarConfig(c) {
-  return { ...PADRAO, ...c, avisos: { ...PADRAO.avisos, ...(c?.avisos || {}) } };
+  // lateralFechada e recolhidos eram da lateral recolhível, que saiu quando o jogo passou a ter a dele: não voltam a ser gravados
+  const { lateralFechada, recolhidos, ...resto } = c || {};
+  return { ...PADRAO, ...resto, avisos: { ...PADRAO.avisos, ...(c?.avisos || {}) } };
 }
 
 // ---------- formatos ----------

@@ -31,7 +31,7 @@ de uma linha. Na extensão, tudo continua como descrito aqui.
   navegador. Abaixo, "No jogo agora": Guerra de Guildas, Vilemaw, Covil, chaves de fortaleza, sorteio e caveira/frags.
   O aviso de reinício do servidor aparece em destaque no topo.
 - **Chat:** resumo do loot dos últimos 15 minutos e as mensagens do servidor sem as linhas de loot.
-- **Ajustes:** tema da lateral do jogo, fechar a lateral, recolher cards, esconder a lista de bônus e as linhas de
+- **Ajustes:** tema da lateral do jogo, esconder a lista de bônus e as linhas de
   loot, manter o PC acordado e os avisos (mochila quase cheia, item no chão, morte, pontos livres, nível e, novos: lendário,
   prêmio diário não pego, diária pronta, Guerra de Guildas, Vilemaw acordada, Covil liberado e reinício do servidor).
 - No topo, a barra de XP com a previsão do próximo nível e o botão **Central**.

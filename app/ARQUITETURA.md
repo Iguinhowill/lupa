@@ -138,6 +138,11 @@ Por isso cada clique ou tecla é uma entrada de verdade, `webContents.sendInputE
   (`{ tipo, estado: 'rodando' | 'ok' | 'erro' | 'parado', texto, em }`). O Parar (`lupa:acao` tipo `parar`) interrompe.
 - **Alt+L**: autoriza a aba ativa por 5 s e 1 entrada; o `acao-jogo.js` clica no `#bt-esconder-coluna` do jogo.
 
+Uma ação por vez entre as contas (`acaoAtual` no main): no lado a lado, duas juntas disputariam o foco entre o apertar e o
+soltar do mouse. Um pedido com outra em andamento é recusado ("Já tem uma ação em andamento…"; o Alt+L é ignorado), sem
+trocar nem renovar a autorização da primeira. A autorização some no `acao:fim`, no Parar e se a página do jogo recarregar
+ou cair no meio (aí o `acao:<nome>` vira erro com o motivo, e o painel não fica parado em "rodando").
+
 O main só manda a entrada se a aba que pede está autorizada, ainda no prazo e com entradas, e à vista (janela aberta, não
 minimizada, a view no layout). O clique vem em px CSS e vira px da view pelo zoom do jogo; ponto fora da view é recusado.
 Antes de clicar ou apertar, o main dá `focus()` à view do jogo (com o foco no painel, onde fica o botão, o Chromium

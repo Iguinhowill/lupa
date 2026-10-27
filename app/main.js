@@ -170,6 +170,9 @@ function criarJogo(a) {
   ligarAtalhos(wc);
   wc.on('focus', () => { if (ultimoFoco !== a.id) { ultimoFoco = a.id; if (modo() === 'lado') { escolherNoPainel(); avisarCasca(); } } });
   wc.on('did-navigate', () => aplicarZoom());      // o Chromium pode devolver o zoom ao padrão na troca de página
+  // a página recarregou ou caiu no meio de uma ação: a autorização some e o painel não fica parado em "rodando"
+  wc.on('did-start-navigation', (d) => { if (d.isMainFrame && !d.isSameDocument) encerrarAcao(a, 'A página do jogo recarregou no meio. Aperte de novo.'); });
+  wc.on('render-process-gone', () => encerrarAcao(a, 'A página do jogo caiu no meio. Aperte de novo.'));
   const tema = fs.readFileSync(path.join(LUPA, 'tema.css'), 'utf8');
   wc.on('dom-ready', () => { if (/^https?:\/\/((www\.)?lolidle\.com|127\.0\.0\.1|localhost)[:/]/.test(wc.getURL())) wc.insertCSS(tema).catch(() => {}); });
   wc.loadURL(JOGO);
@@ -427,19 +430,30 @@ function atualizarSelo() {
 }
 
 // ---------- ações no jogo (só quando o jogador pede) ----------
-// O pedido (botão do painel ou Alt+L) autoriza UMA aba por pouco tempo (Acoes.REGRAS); o preload do jogo (acao-jogo.js) pede
+// O pedido (botão do painel ou Alt+L) autoriza UMA aba por pouco tempo (Acoes.REGRAS), e só uma ação por vez entre as contas:
+// no lado a lado, duas juntas disputariam o foco entre o apertar e o soltar do mouse. O preload do jogo (acao-jogo.js) pede
 // cada clique ou tecla e o main manda uma entrada de verdade (sendInputEvent), só na aba que está à vista.
-const autorizadas = new Map();      // aba.id → { tipo, ate, resta }
+let acaoAtual = null;      // { aba, tipo, ate, resta }: a ação em andamento
+const emAndamento = () => !!acaoAtual && Date.now() <= acaoAtual.ate;
+// recusa (false) se já tem uma ação em andamento: um segundo pedido não troca nem renova a autorização da primeira
 function pedirAcao(a, tipo) {
-  if (!a?.view || a.tipo !== 'jogo') return false;
-  autorizadas.set(a.id, Acoes.autorizacao(tipo));
+  if (!a?.view || a.tipo !== 'jogo' || emAndamento()) return false;
+  acaoAtual = { aba: a.id, ...Acoes.autorizacao(tipo) };
   a.view.webContents.send('acao:iniciar', { tipo });
   return true;
 }
-// a aba que mandou o pedido de entrada, se está autorizada e à vista (com a janela aberta); null se não pode
+// a ação daquela aba acabou, foi parada ou a página dela foi embora: a autorização some. Com `motivo` (página recarregou ou
+// caiu), o painel deixa de mostrar "rodando" e mostra o motivo
+function encerrarAcao(a, motivo) {
+  if (!acaoAtual || acaoAtual.aba !== a.id) return;
+  const tipo = acaoAtual.tipo, nome = pref.nomes[a.id];
+  acaoAtual = null;
+  if (motivo && tipo === 'tarefa' && nome) armazem.set({ ['acao:' + nome]: { tipo, estado: 'erro', texto: motivo, em: Date.now() } });
+}
+// a aba que mandou o pedido de entrada, se é a da ação e está à vista (com a janela aberta); null se não pode
 function abaAutorizada(wc) {
   const a = abaDe(wc);
-  if (!a || a.tipo !== 'jogo' || !janela || !janela.isVisible() || janela.isMinimized()) return null;
+  if (!a || a.tipo !== 'jogo' || acaoAtual?.aba !== a.id || !janela || !janela.isVisible() || janela.isMinimized()) return null;
   const r = layoutAtual().jogos[a.id];
   return r ? { a, r } : null;
 }
@@ -540,7 +554,8 @@ function ligarIpc() {
     if (!painel || e.sender !== painel.webContents || !['tarefa', 'parar'].includes(tipo)) return { erro: 'Pedido inválido.' };
     const a = abas.find((x) => x.tipo === 'jogo' && x.view && pref.nomes[x.id] === nome);
     if (!a) return { erro: 'Não achei a aba desse personagem.' };
-    if (tipo === 'parar') { a.view.webContents.send('acao:parar'); return { ok: true }; }
+    if (tipo === 'parar') { a.view.webContents.send('acao:parar'); encerrarAcao(a); return { ok: true }; }
+    if (emAndamento()) return { erro: acaoAtual.aba === a.id ? 'Já tem uma ação em andamento nesta conta.' : 'A outra conta está no meio de uma ação: espere ela terminar.' };
     if (modo() !== a.id && modo() !== 'lado') ativar(a.id);      // a ação acontece à vista
     return pedirAcao(a, 'tarefa') ? { ok: true } : { erro: 'A aba do jogo não está pronta.' };
   });
@@ -549,7 +564,7 @@ function ligarIpc() {
     const v = abaAutorizada(e.sender);
     if (!v) return false;
     const wc = v.a.view.webContents, pt = Acoes.pontoNaView(p, wc.getZoomFactor(), v.r);
-    if (!pt || !Acoes.gastar(autorizadas.get(v.a.id))) return false;
+    if (!pt || !Acoes.gastar(acaoAtual)) return false;
     // o foco vai para o jogo, como num clique de verdade: com o foco no painel (onde está o botão "Entregar e seguir"), o
     // Chromium descartava o apertar e o soltar e só o mover chegava. Mover, apertar e soltar com um intervalo, como a mão
     if (!wc.isFocused()) { wc.focus(); await new Promise((ok) => setTimeout(ok, 120)); }      // o foco não muda na hora
@@ -558,13 +573,13 @@ function ligarIpc() {
   });
   ipcMain.handle('acao:tecla', async (e, p) => {
     const v = abaAutorizada(e.sender), evs = Acoes.tecla(p?.tecla);
-    if (!v || !evs || !Acoes.gastar(autorizadas.get(v.a.id))) return false;
+    if (!v || !evs || !Acoes.gastar(acaoAtual)) return false;
     const wc = v.a.view.webContents;
     if (!wc.isFocused()) { wc.focus(); await new Promise((ok) => setTimeout(ok, 120)); }      // a tecla vai para a view em foco
     for (const ev of evs) { if (wc.isDestroyed()) return false; wc.sendInputEvent(ev); await new Promise((ok) => setTimeout(ok, Acoes.INTERVALO)); }
     return true;
   });
-  ipcMain.handle('acao:fim', (e) => { const a = abaDe(e.sender); if (a) autorizadas.delete(a.id); });
+  ipcMain.handle('acao:fim', (e) => { const a = abaDe(e.sender); if (a) encerrarAcao(a); });
   ipcMain.handle('casca:estado', () => estadoCasca());
   ipcMain.handle('casca:ativar', (_e, id) => ativar(id));
   ipcMain.handle('casca:painel', () => alternarPainel());
