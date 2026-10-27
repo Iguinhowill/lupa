@@ -35,8 +35,48 @@ function montarNav() {
       h('a', { class: 'site-marca', href: 'agora.html' }, marcaLupa(), h('span', null, 'Lupa ', h('b', null, 'Online'))),
       h('nav', { class: 'site-abas', 'aria-label': 'Abas do site' },
         PAGINAS.map(([href, nome]) => h('a', { href, 'aria-current': href.replace('.html', '') === aqui ? 'page' : null }, nome))),
+      h('div', { class: 'site-selos', id: 'site-selos', role: 'status', 'aria-label': 'Situação dos personagens' }),
       h('button', { type: 'button', class: 'botao', onclick: sair }, 'Sair'))));
+  // no celular as abas rolam de lado: deixa a ativa à vista
+  document.querySelector('.site-abas [aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  vigiarSelos();
   vigiarAvisos();
+}
+
+// ---------- selo de status por personagem ----------
+// "caçando": última leitura há menos de 4 min e o último pulso com cacando; "parado": leitura recente sem caçar;
+// "sem leitura": a Lupa de casa não envia há mais de 4 min. Consulta leve (só lido_em e os últimos pulsos), a cada 60 s,
+// e para quando a aba está escondida.
+const LIMITE_LEITURA = 4 * 60e3;
+async function lerSelos() {
+  const [est, pul] = await Promise.all([
+    SB.from('estados').select('personagem,lido_em').order('personagem'),
+    SB.from('pulsos').select('personagem,em,cacando').order('em', { ascending: false }).limit(12)
+  ]);
+  if (est.error) throw est.error;
+  const ultimo = {};
+  for (const p of pul.data || []) ultimo[p.personagem] ||= p;
+  const agora = Date.now();
+  return est.data.map((e) => {
+    const lido = Date.parse(e.lido_em), p = ultimo[e.personagem], pulsoEm = p ? Date.parse(p.em) : 0;
+    const fresco = agora - lido < LIMITE_LEITURA;
+    const estado = !fresco ? 'sem leitura' : p && p.cacando && agora - pulsoEm < 10 * 60e3 ? 'caçando' : 'parado';
+    return { nome: e.personagem, estado, lido };
+  });
+}
+function desenharSelos(lista) {
+  const el = $id('site-selos');
+  if (!el) return;
+  el.replaceChildren(...lista.map((x) => h('span', {
+    class: 'status site-selo ' + (x.estado === 'caçando' ? 'ok' : x.estado === 'sem leitura' ? 'velho' : ''),
+    title: `${x.nome}: último dado às ${dataHora(x.lido)} (${x.estado})`
+  }, h('span', { class: 'site-selo-nome' }, x.nome), h('b', null, x.estado))));
+}
+function vigiarSelos() {
+  const rodar = () => { if (!document.hidden) lerSelos().then(desenharSelos).catch(() => {}); };
+  rodar();
+  setInterval(rodar, 60e3);
+  document.addEventListener('visibilitychange', rodar);
 }
 
 // ---------- avisos de preço ----------
@@ -71,7 +111,7 @@ async function vigiarAvisos() {
     gravarPref('aviso-id', String(ultimo));
   };
   if (!ultimo) { const { data } = await SB.from('avisos').select('id').order('id', { ascending: false }).limit(1); ultimo = data?.[0]?.id || -1; gravarPref('aviso-id', String(ultimo)); }
-  setInterval(() => conferir().catch(() => {}), 30e3);
+  setInterval(() => { if (!document.hidden) conferir().catch(() => {}); }, 30e3);
   document.addEventListener('visibilitychange', marcarVistos);
 }
 
@@ -80,12 +120,39 @@ function chips(rotulo, opcoes, atual, escolher) {
   return h('div', { class: 'chips', role: 'group', 'aria-label': rotulo },
     opcoes.map(([v, nome]) => h('button', { type: 'button', class: 'chip', 'aria-pressed': String(v === atual), onclick: () => escolher(v) }, nome)));
 }
-// colunas: [{ t, num }]; linhas: [{ celulas: [...], classe }]
-function tabela(colunas, linhas, rotulo) {
+// colunas: [{ t, num, ordena }]; linhas: [{ celulas: [...], v: [valores para ordenar], classe }]. Coluna com `ordena` vira
+// botão no cabeçalho; a ordem vale por `ordem` ({ col, dir }), que quem chama pode guardar para sobreviver ao redesenho.
+// Sem `v`, ordena pelo texto da célula (número em pt-BR como texto não serve: passe `v` com o número). Vazio vai para o fim.
+function tabela(colunas, linhas, rotulo, ordem = { col: -1, dir: 1 }) {
+  const corpo = h('tbody'), ths = [];
+  const chave = (l, i) => { const x = l.v ? l.v[i] : l.celulas[i]; return x instanceof Node ? x.textContent : x; };
+  const vazioV = (x) => x == null || x === '' || x === '—' || (typeof x === 'number' && isNaN(x));
+  function pintar() {
+    let ls = linhas;
+    if (ordem.col >= 0) {
+      ls = linhas.slice().sort((a, b) => {
+        const x = chave(a, ordem.col), y = chave(b, ordem.col);
+        if (vazioV(x) || vazioV(y)) return vazioV(x) === vazioV(y) ? 0 : vazioV(x) ? 1 : -1;
+        const r = typeof x === 'number' && typeof y === 'number' ? x - y : String(x).localeCompare(String(y), 'pt-BR', { numeric: true });
+        return r * ordem.dir;
+      });
+    }
+    corpo.replaceChildren(...ls.map((l) => h('tr', { class: l.classe || null }, l.celulas.map((v, i) => h('td', { class: colunas[i]?.num ? 'num' : null }, v)))));
+    ths.forEach(([th, i]) => th.setAttribute('aria-sort', ordem.col === i ? (ordem.dir > 0 ? 'ascending' : 'descending') : 'none'));
+  }
+  const cab = colunas.map((c, i) => {
+    if (!c.ordena) return h('th', { scope: 'col', class: c.num ? 'num' : null }, c.t);
+    const th = h('th', { scope: 'col', class: c.num ? 'num' : null },
+      h('button', { type: 'button', class: 'ordenar', title: `Ordenar por ${c.t.toLowerCase()}`, onclick: () => {
+        if (ordem.col === i) { if (ordem.dir === (c.num ? 1 : -1)) ordem.col = -1; else ordem.dir = -ordem.dir; } else { ordem.col = i; ordem.dir = c.num ? -1 : 1; }
+        pintar();
+      } }, c.t, h('span', { class: 'seta', 'aria-hidden': 'true' })));
+    ths.push([th, i]);
+    return th;
+  });
+  pintar();
   return h('div', { class: 'st-box', role: 'region', 'aria-label': rotulo, tabindex: '0' },
-    h('table', { class: 'st-tabela' },
-      h('thead', null, h('tr', null, colunas.map((c) => h('th', { scope: 'col', class: c.num ? 'num' : null }, c.t)))),
-      h('tbody', null, linhas.map((l) => h('tr', { class: l.classe || null }, l.celulas.map((v, i) => h('td', { class: colunas[i]?.num ? 'num' : null }, v)))))));
+    h('table', { class: 'st-tabela' }, h('thead', null, h('tr', null, cab)), corpo));
 }
 const cartao = (titulo, ...filhos) => h('section', { class: 'cartao' }, h('h2', { class: 'rotulo' }, titulo), ...filhos);
 const tile = (rot, val, sub) => h('div', { class: 'stat grande' }, h('span', { class: 'rot' }, rot), h('span', { class: 'val' }, val), sub ? h('span', { class: 'st-sub' }, sub) : null);
@@ -110,7 +177,8 @@ async function todas(montar, tam = 1000) {
     if (data.length < tam) return out;
   }
 }
-const sessaoDe = (r) => ({
+const COLS_CACADA = 'personagem,inicio,fim,segundos,abates,xp,xp_base,ouro,mortes,nivel_fim,zonas,baldes,drops,ultimo_abate';
+const sessaoDe =(r) => ({
   personagem: r.personagem, ini: Date.parse(r.inicio), fim: Date.parse(r.fim), ultimoAbate: r.ultimo_abate ? Date.parse(r.ultimo_abate) : 0,
   seg: Number(r.segundos) || 0, abates: r.abates, xp: Number(r.xp), xpBase: Number(r.xp_base), ouro: Number(r.ouro), mortes: r.mortes,
   nivel: r.nivel_fim, zonas: r.zonas || {}, baldes: r.baldes || [], drops: r.drops || {}
@@ -134,7 +202,7 @@ const Nuvem = {
   },
   // { [personagem]: { sessoes: [...] } } no formato da Lupa
   async cacadas(desde) {
-    const d = await todas(() => SB.from('cacadas').select('*').gte('fim', iso(desde)).order('inicio'));
+    const d = await todas(() => SB.from('cacadas').select(COLS_CACADA).gte('fim', iso(desde)).order('inicio'));
     const por = {};
     for (const r of d) (por[r.personagem] ||= { sessoes: [] }).sessoes.push(sessaoDe(r));
     return por;
@@ -147,6 +215,15 @@ const Nuvem = {
     });
     return d.map((r) => ({ ...r, ts: Date.parse(r.em) }));
   },
+  // o feed da Central: tudo menos `chefe` (são ~400 por dia) e só os 8 chefes mais recentes
+  async eventosFeed(desde) {
+    const cols = 'personagem,em,tipo,titulo,texto,item,qual,raridade,zona';
+    const [d, ch] = await Promise.all([
+      todas(() => SB.from('eventos').select(cols).gte('em', iso(desde)).neq('tipo', 'chefe').order('em')),
+      SB.from('eventos').select(cols).eq('tipo', 'chefe').gte('em', iso(desde)).order('em', { ascending: false }).limit(8)
+    ]);
+    return [...d, ...(ch.data || [])].sort((a, b) => (a.em > b.em ? 1 : -1)).map((r) => ({ ...r, ts: Date.parse(r.em) }));
+  },
   async pulsos(desde) {
     const d = await todas(() => SB.from('pulsos').select('personagem,em,nivel,zona,cacando').gte('em', iso(desde)).order('em'));
     return d.map((r) => ({ ...r, ts: Date.parse(r.em) }));
@@ -154,6 +231,12 @@ const Nuvem = {
   async primeiroPulso() {
     const { data } = await SB.from('pulsos').select('em').order('em').limit(1);
     return data?.[0] ? Date.parse(data[0].em) : null;
+  },
+  // preço mínimo de uma versão ao longo do tempo, direto da view mercado_precos (uma linha por leitura)
+  async historicoPreco(chave, dias = 30) {
+    const { data, error } = await SB.from('mercado_precos').select('lido_em,ouro,gemas,n').eq('chave', chave).gte('lido_em', iso(Date.now() - dias * DIA)).order('lido_em').limit(500);
+    if (error) throw error;
+    return data.map((r) => ({ ts: Date.parse(r.lido_em), ouro: r.ouro, gemas: r.gemas, n: r.n }));
   },
   async mercado(limite = 40) {
     const { data, error } = await SB.from('mercado_leituras').select('lido_em,completa,filtros,grupos,personagem').order('lido_em', { ascending: false }).limit(limite);
@@ -180,7 +263,7 @@ function atendeAlerta(a, g) {
   const x = String(g.chave).match(RE_CHAVE);
   return !!x && x[1] === a.alvo && QUALS.indexOf(x[5]) >= QUALS.indexOf(a.qual_min || 'C') && +(x[3] || 0) >= a.refino_min && !(a.so_sem_carta && x[4]);
 }
-const precoMoeda = (v, moeda) => (moeda === 'orbs' ? `${inteiro(v)} 💠` : precoTxt(v));
+const precoMoeda = (v, moeda) => (moeda === 'orbs' ? `${inteiro(v)} gemas` : precoTxt(v));
 // "1,5 mi", "800 mil", "800k", "1.500.000" ou "1500000"
 function lerPreco(txt) {
   const m = String(txt).toLowerCase().replace(/\s+/g, '').replace(/ouro$/, '').match(/^([\d.,]+)(mi|m|mil|k)?$/);
@@ -205,11 +288,31 @@ function indicePrecos(leituras) {
     }
     if (l.completa && fechou == null) fechou = l.lidoEm;
   }
-  const historico = (chave) => leituras.map((l) => {
-    const g = (l.grupos || []).find((x) => x.chave === chave);
-    return g ? { lidoEm: l.lidoEm, ouro: g.ouro, n: g.n } : null;
-  }).filter(Boolean).reverse();
-  return { porChave, historico, ultima: leituras[0] || null, ultimaCompleta: leituras.find((l) => l.completa) || null };
+  return { porChave, ultima: leituras[0] || null, ultimaCompleta: leituras.find((l) => l.completa) || null };
 }
 const semZeros = (x) => x.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '').replace('.', ',');
 const precoTxt = (v) => (v == null ? '—' : v >= 1e6 ? semZeros((v / 1e6).toFixed(v >= 1e7 ? 1 : 2)) + ' mi' : v >= 1e3 ? semZeros((v / 1e3).toFixed(1)) + ' mil' : inteiro(v));
+
+// ---------- gráficos pequenos (SVG à mão: a CSP não deixa biblioteca de fora) ----------
+// início do dia em Brasília (o fuso vem do Intl); o jogo vira o dia lá
+function inicioDoDia(agora = Date.now()) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Sao_Paulo', hourCycle: 'h23', hour: 'numeric', minute: 'numeric', second: 'numeric' }).formatToParts(agora).map((x) => [x.type, x.value]));
+  return agora - ((+p.hour * 3600 + +p.minute * 60 + +p.second) * 1000 + (agora % 1000));
+}
+// pontos: [{ ts, v }]. Linha, área discreta, mínimo e máximo marcados, hover com o preço e a hora.
+function sparkline(pontos, { larg = 320, alt = 64, fmt = precoTxt, rotulo = 'Histórico de preço' } = {}) {
+  const pts = pontos.filter((p) => p.v != null);
+  if (pts.length < 2) return nota('Só uma leitura deste item no período: o histórico começa a aparecer na 2ª.');
+  const t0 = pts[0].ts, t1 = pts.at(-1).ts, vmin = Math.min(...pts.map((p) => p.v)), vmax = Math.max(...pts.map((p) => p.v));
+  const X = (ts) => 4 + ((ts - t0) / (t1 - t0 || 1)) * (larg - 8), Y = (v) => 6 + (vmax === vmin ? 0.5 : 1 - (v - vmin) / (vmax - vmin)) * (alt - 12);
+  const linha = pts.map((p) => `${X(p.ts).toFixed(1)},${Y(p.v).toFixed(1)}`).join(' ');
+  const pMin = pts.find((p) => p.v === vmin), pMax = pts.find((p) => p.v === vmax);
+  const ponto = (p, cor) => s('circle', { cx: X(p.ts).toFixed(1), cy: Y(p.v).toFixed(1), r: 3, fill: cor });
+  const svg = s('svg', { viewBox: `0 0 ${larg} ${alt}`, class: 'sparkline', role: 'img', 'aria-label': `${rotulo}: de ${fmt(vmin)} a ${fmt(vmax)}, ${pts.length} leituras` },
+    s('polygon', { points: `${X(t0)},${alt - 4} ${linha} ${X(t1)},${alt - 4}`, class: 'spark-area' }),
+    s('polyline', { points: linha, class: 'spark-linha', fill: 'none' }),
+    ponto(pMin, '#8fd9cc'), ponto(pMax, '#f5a66b'),
+    ...pts.map((p) => s('circle', { cx: X(p.ts).toFixed(1), cy: Y(p.v).toFixed(1), r: 6, fill: 'transparent' }, s('title', null, `${dataHora(p.ts)} · ${fmt(p.v)}`))));
+  return h('div', { class: 'spark' }, svg,
+    h('div', { class: 'spark-legenda num' }, h('span', null, dataHora(t0)), h('span', null, `mín ${fmt(vmin)} · máx ${fmt(vmax)}`), h('span', null, dataHora(t1))));
+}

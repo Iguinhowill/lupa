@@ -21,18 +21,28 @@ globalThis.LUPA_TEXTO_VAZIO = 'Nenhuma leitura ainda. No PC de casa, entre no Lu
     if (Object.keys(mud).length) for (const f of ouvintes) try { f(mud, 'local'); } catch {}
   }
 
-  async function ler() {
+  // Estados (leve) a cada 30 s; caçadas, eventos, planos e ícones (pesados) a cada 2 min. Os eventos `chefe` (centenas
+  // por dia) ficam de fora da consulta, salvo os mais recentes, para não soterrar os drops no feed.
+  let ultimoPesado = 0;
+  async function ler(pesado) {
     const agora = Date.now();
     const [estados, cacadas, eventos, icones] = await Promise.all([
-      Nuvem.estados(), Nuvem.cacadas(agora - 3 * DIA), Nuvem.eventos(agora - 2 * DIA), comIcones ? null : Nuvem.icones(), Nuvem.planos()
+      Nuvem.estados(),
+      pesado ? Nuvem.cacadas(agora - 3 * DIA) : null,
+      pesado ? Nuvem.eventosFeed(agora - 2 * DIA) : null,
+      pesado && !comIcones ? Nuvem.icones() : null,
+      pesado ? Nuvem.planos() : null
     ]);
     const novo = {};
     for (const [n, e] of Object.entries(estados)) novo['estado:' + n] = e;
-    for (const [n, c] of Object.entries(cacadas)) novo['cacada:' + n] = c;
-    const porNome = {};
-    for (const ev of eventos) (porNome[ev.personagem] ||= []).push({ ts: ev.ts, tipo: ev.tipo, titulo: ev.titulo, texto: ev.texto, item: ev.item, qual: ev.qual, raridade: ev.raridade });
-    for (const [n, l] of Object.entries(porNome)) novo['eventos:' + n] = l.slice(-80);
+    if (cacadas) for (const [n, c] of Object.entries(cacadas)) novo['cacada:' + n] = c;
+    if (eventos) {
+      const porNome = {};
+      for (const ev of eventos) (porNome[ev.personagem] ||= []).push({ ts: ev.ts, tipo: ev.tipo, titulo: ev.titulo, texto: ev.texto, item: ev.item, qual: ev.qual, raridade: ev.raridade });
+      for (const [n, l] of Object.entries(porNome)) novo['eventos:' + n] = l.slice(-80);
+    }
     if (icones) { novo.icones = icones; comIcones = true; }
+    if (pesado) ultimoPesado = agora;
     trocar(novo);
   }
 
@@ -50,9 +60,10 @@ globalThis.LUPA_TEXTO_VAZIO = 'Nenhuma leitura ainda. No PC de casa, entre no Lu
     runtime: { getURL: (p) => p }
   };
 
-  const pronto = exigirLogin().then(() => { montarNav(); return ler(); })
+  const pronto = exigirLogin().then(() => { montarNav(); return ler(true); })
     .catch((e) => { document.getElementById('quem').textContent = 'não deu para ler o banco: ' + (e?.message || e); });
-  const reler = () => { if (!document.hidden) ler().catch(() => {}); };
+  // aba escondida: nenhuma consulta; ao voltar, relê na hora (e o pesado só se já passaram 2 min)
+  const reler = () => { if (!document.hidden) ler(Date.now() - ultimoPesado >= 115e3).catch(() => {}); };
   setInterval(reler, 30e3);
   document.addEventListener('visibilitychange', reler);
   setInterval(() => { comIcones = false; }, 10 * 60e3);      // ícones novos entram a cada 10 min

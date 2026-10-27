@@ -4,6 +4,25 @@
 'use strict';
 
 const vivo = (g) => !!g && g.ouro != null && !g.sumiu;
+// histórico de preço: a view mercado_precos filtrada pela chave do item (não baixa as leituras inteiras); guarda 5 min
+const cacheHist = new Map();
+async function historicoDe(chave) {
+  const c = cacheHist.get(chave);
+  if (c && Date.now() - c.em < 5 * 60e3) return c.dados;
+  const dados = await Nuvem.historicoPreco(chave, 30);
+  cacheHist.set(chave, { em: Date.now(), dados });
+  return dados;
+}
+// painel com o sparkline; carrega sozinho
+function painelHistorico(chave, moeda, titulo) {
+  const orbs = moeda === 'orbs', fmt = orbs ? (v) => `${inteiro(v)} gemas` : precoTxt;
+  const caixa = h('div', { class: 'historico' }, h('span', { class: 'rotulo' }, `${titulo} · últimos 30 dias`), h('p', { class: 'nota' }, 'Lendo o histórico…'));
+  historicoDe(chave).then((d) => {
+    const pts = d.map((x) => ({ ts: x.ts, v: orbs ? x.gemas : x.ouro }));
+    caixa.replaceChildren(caixa.firstChild, pts.filter((p) => p.v != null).length ? sparkline(pts, { fmt }) : nota('Nenhuma leitura com preço desta versão nos últimos 30 dias.'));
+  }).catch((e) => caixa.replaceChildren(caixa.firstChild, nota('Não deu para ler o histórico: ' + (e?.message || e))));
+  return caixa;
+}
 const versaoTxt = (qual, ref) => `${qual} +${ref || 0}`;
 
 // casa um item equipado com o Mercado pelo código que a tela traz (3031+4#velocidade2~B)
@@ -41,7 +60,7 @@ function analisar(it, precos) {
   let quem = lerPref('loja-quem', '');
   let estados, precos, icones, alertas, avisos;
   try {
-    const [est, merc, ic, , al, av] = await Promise.all([Nuvem.estados(), Nuvem.mercado(60), Nuvem.icones(), Nuvem.planos(), Nuvem.alertas(), Nuvem.avisos()]);
+    const [est, merc, ic, , al, av] = await Promise.all([Nuvem.estados(), Nuvem.mercado(12), Nuvem.icones(), Nuvem.planos(), Nuvem.alertas(), Nuvem.avisos()]);
     estados = est; precos = indicePrecos(merc); icones = ic; alertas = al; avisos = av;
   } catch (e) { erroNaPagina(raiz, e); return; }
   const ctx = { icones };
@@ -91,6 +110,7 @@ function analisar(it, precos) {
     await atualizar();
   }
 
+  const histAbertos = new Set();
   function linhaAlerta(a) {
     const ag = agoraDe(a), abaixo = ag?.preco != null && ag.preco <= a.preco_max;
     const exige = a.alvo.startsWith('gema:') ? [] : [a.qual_min ? NOME_QUAL[a.qual_min] : null, a.refino_min ? `+${a.refino_min} ou mais` : null, a.so_sem_carta ? 'sem carta' : null].filter(Boolean);
@@ -105,8 +125,10 @@ function analisar(it, precos) {
               h('span', { class: 'fraco' }, ` · ${ag.g.n || '?'} à venda · ${ag.velho ? 'leitura de ' + dataHora(ag.em) : hora(ag.em)}`),
               abaixo ? h('span', { class: 'etiqueta abaixo' }, 'abaixo do alvo') : null)),
       h('div', { class: 'nuvem-bts' },
+        h('button', { type: 'button', class: 'botao', 'aria-expanded': String(histAbertos.has(a.id)), onclick: () => { if (histAbertos.has(a.id)) histAbertos.delete(a.id); else histAbertos.add(a.id); desenharQuero(); } }, 'Histórico'),
         h('button', { type: 'button', class: 'botao', onclick: () => mudarAlerta(a, { ativo: !a.ativo }) }, a.ativo ? 'Pausar' : 'Retomar'),
-        h('button', { type: 'button', class: 'botao', onclick: () => { if (confirm(`Excluir o alerta de ${a.nome}?`)) mudarAlerta(a, null); } }, 'Excluir')));
+        h('button', { type: 'button', class: 'botao', onclick: () => { if (confirm(`Excluir o alerta de ${a.nome}?`)) mudarAlerta(a, null); } }, 'Excluir')),
+      histAbertos.has(a.id) ? (ag?.g?.chave ? painelHistorico(ag.g.chave, a.moeda, `Menor preço de ${ag.g.nome || a.nome}`) : h('div', { class: 'historico' }, nota('Sem leitura do Mercado deste item ainda: o histórico começa na primeira.'))) : null);
   }
 
   const situacaoEl = h('div'), listaEl = h('div'), avisosEl = h('div'), notifEl = h('div'), msgForm = h('p', { class: 'nuvem-erro', role: 'status' });
@@ -119,7 +141,7 @@ function analisar(it, precos) {
     campo('Refino', h('select', { name: 'refino' }, opcoes([0, 1, 2, 3, 4, 5, 6, 7].map((n) => [n, n ? `+${n} ou mais` : 'Qualquer'])))),
     campo('Carta', h('select', { name: 'carta' }, opcoes([['', 'Com ou sem'], ['sem', 'Só sem carta']]))),
     campo('Pagar até', h('input', { name: 'preco', inputmode: 'decimal', placeholder: '1,5 mi', autocomplete: 'off', required: '' })),
-    campo('Moeda', h('select', { name: 'moeda' }, opcoes([['ouro', 'Ouro'], ['orbs', '💠']]))),
+    campo('Moeda', h('select', { name: 'moeda' }, opcoes([['ouro', 'Ouro'], ['orbs', 'Gemas']]))),
     h('button', { type: 'submit', class: 'botao principal' }, 'Adicionar'),
     listaItens);
   form.onsubmit = async (ev) => {
@@ -168,7 +190,9 @@ function analisar(it, precos) {
   }
   desenharNotif();
   desenharQuero();
-  setInterval(atualizar, 60e3);
+  // a cada 60 s, mas nada de consulta com a aba escondida
+  setInterval(() => { if (!document.hidden) atualizar(); }, 60e3);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) atualizar(); });
 
   function cartaoItem(a) {
     const it = a.it, selo = [it.refino || '+0', it.qual].filter(Boolean).join(' ');
@@ -181,8 +205,11 @@ function analisar(it, precos) {
       ? [h('span', { class: 'val' }, precoTxt(a.igual.ouro)), h('span', { class: 'st-sub' }, lido(a.igual))]
       : [h('span', { class: 'val nada' }, 'Nenhuma'), h('span', { class: 'st-sub' }, `nenhuma ${versaoTxt(a.qual, a.ref)}${a.carta ? ' com essa carta' : ''} nas leituras`)];
     if (a.semCarta) igualTxt.push(h('span', { class: 'st-sub' }, `sem carta: ${precoTxt(a.semCarta.ouro)} (${lido(a.semCarta)})`));
-    const hist = precos.historico(a.igual ? it.id : a.base);
-    const precosHist = hist.map((x) => x.ouro).filter((x) => x != null);
+    const chaveHist = a.igual ? it.id : a.base, painel = h('div'), botao = h('button', { type: 'button', class: 'botao', 'aria-expanded': 'false', onclick: () => {
+      const abrir = botao.getAttribute('aria-expanded') !== 'true';
+      botao.setAttribute('aria-expanded', String(abrir));
+      painel.replaceChildren(...(abrir ? [painelHistorico(chaveHist, 'ouro', `Menor preço de ${versaoTxt(a.qual, a.ref)}${a.igual && a.carta ? ' com carta' : ''}`)] : []));
+    } }, 'Histórico de preço');
     return h('article', { class: 'cartao item-cartao' }, cab,
       h('div', { class: 'dois' },
         h('div', { class: 'caixa' }, h('span', { class: 'rot' }, 'A mesma versão à venda'), igualTxt),
@@ -193,9 +220,7 @@ function analisar(it, precos) {
         h('ul', { class: 'perto' }, a.perto.map((x) => h('li', null,
           h('span', null, `${versaoTxt(x.g.qual, x.g.refino)}${x.g.carta ? ' · com carta' : ', sem carta'}`),
           h('span', { class: 'num' }, precoTxt(x.g.ouro), h('span', { class: 'fraco' }, ` (${x.g.n})`)))))) : null,
-      nota(precosHist.length >= 2
-        ? `Histórico: ${hist.length} leituras desde ${dataHora(hist[0].lidoEm)}, de ${precoTxt(Math.min(...precosHist))} a ${precoTxt(Math.max(...precosHist))}.`
-        : 'Histórico de preço: começa a encher a partir da 2ª leitura do Mercado.'));
+      h('div', { class: 'nuvem-bts' }, botao), painel);
   }
 
   function desenhar() {
@@ -210,7 +235,7 @@ function analisar(it, precos) {
 
     raiz.replaceChildren(
       h('div', { class: 'pagina-cab' },
-        h('h1', null, 'Loja', h('small', null, 'O que você quer comprar, com aviso de preço, e quanto vale o que cada personagem usa.'))),
+        h('h1', null, 'Loja', h('small', null, 'Avisos de preço e o valor da build de cada personagem.'))),
       secQuero,
       h('div', { class: 'pagina-cab' },
         h('h2', { class: 'sub-cab' }, 'Quanto vale o que você está usando', h('small', null, 'Cada item equipado comparado com o Mercado dos jogadores.')),

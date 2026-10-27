@@ -3,12 +3,34 @@
 .site-linha { max-width: 1400px; margin: 0 auto; padding: 8px 20px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 18px; }
 .site-marca { display: inline-flex; align-items: center; gap: 8px; color: var(--texto); text-decoration: none; font-size: 17px; letter-spacing: .02em; }
 .site-marca b { color: var(--ouro); }
-.site-abas { display: flex; flex-wrap: wrap; gap: 2px; flex: 1 1 auto; }
+.site-abas { display: flex; flex-wrap: nowrap; gap: 2px; flex: 1 1 auto; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.site-abas::-webkit-scrollbar { display: none; }
+.site-abas a { flex: none; white-space: nowrap; }
 .site-abas a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 14px; border-radius: 8px; color: var(--texto); text-decoration: none; }
 .site-abas a:hover { background: var(--cartao); }
 .site-abas a[aria-current="page"] { background: var(--cartao-2); color: var(--ouro-claro); font-weight: 600; }
 .site-topo .botao { min-height: 44px; }
 .c-topo { position: static; }
+/* selo de status por personagem (usa .status do painel.css) */
+.site-selos { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
+.site-selos:empty { display: none; }
+.site-selo { gap: 6px; }
+.site-selo b { font-weight: 600; }
+.site-selo-nome { color: var(--texto); }
+.site-selo.ok b { color: var(--verde); }
+.site-selo.velho b { color: var(--laranja); }
+@media (max-width: 720px) {
+  .site-linha { padding: 6px 12px 0; gap: 2px 10px; }
+  .site-marca { order: 1; }
+  .site-topo .botao { order: 2; margin-left: auto; }
+  .site-selos { order: 3; flex: 1 0 100%; padding: 2px 4px; }
+  .site-abas { order: 4; flex: 1 0 100%; margin: 0 -12px; padding: 0 8px; scroll-padding: 0 24px; }
+  .site-abas a { min-height: 44px; padding: 0 16px; }
+  .site-pagina { padding: 12px 12px 32px; }
+  .ativ { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .ativ > span:empty { display: none; }
+  .ativ-eixo { font-size: 10px; }
+}
 
 .site-pagina { max-width: 1400px; margin: 0 auto; padding: 16px 20px 40px; display: flex; flex-direction: column; gap: 16px; }
 .pagina-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 20px; }
@@ -27,6 +49,14 @@
 .st-tabela { width: 100%; border-collapse: collapse; font-size: 13.5px; }
 .st-tabela th { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--borda); color: var(--fraco); font-size: 12px; font-weight: 500; text-transform: uppercase; letter-spacing: .05em; white-space: nowrap; }
 .st-tabela td { padding: 8px 10px; border-bottom: 1px solid var(--cartao-2); vertical-align: middle; }
+.st-tabela th.num { text-align: right; }
+.st-tabela th[aria-sort] { color: var(--texto); }
+.st-tabela .ordenar { display: inline-flex; align-items: center; gap: 4px; min-height: 40px; padding: 0 2px; border: 0; background: none; color: inherit; font: inherit; text-transform: inherit; letter-spacing: inherit; cursor: pointer; border-radius: 6px; }
+.st-tabela .ordenar:hover, .st-tabela .ordenar:focus-visible { color: var(--ouro-claro); outline: none; }
+.st-tabela .ordenar:focus-visible { outline: 2px solid var(--ouro); }
+.st-tabela .seta { width: 10px; text-align: center; }
+.st-tabela th[aria-sort="ascending"] .seta::before { content: "▲"; font-size: 9px; }
+.st-tabela th[aria-sort="descending"] .seta::before { content: "▼"; font-size: 9px; }
 .st-tabela .num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .st-tabela tr.melhor td { background: #232838; }
 .st-tabela .item { gap: 8px; }
@@ -131,3 +161,113 @@ details > summary { cursor: pointer; color: var(--fraco); min-height: 32px; disp
 .aviso-preco .fechar { flex: none; width: 32px; height: 32px; border: 0; background: none; color: var(--fraco); font-size: 20px; cursor: pointer; border-radius: 6px; }
 .aviso-preco .fechar:hover { background: var(--cartao-2); color: var(--texto); }
 .quero .nuvem-bts { align-items: center; flex-wrap: wrap; }
+
+/* Relatório: Hoje, gráfico de XP por hora, filtros dos drops */
+.hoje-pers { display: flex; flex-direction: column; gap: 8px; }
+.hoje-nome { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 15px; }
+.hoje-nome i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.graf { display: flex; flex-direction: column; gap: 6px; }
+.graf svg { display: block; max-width: 100%; height: auto; font: 11px var(--mono); fill: var(--fraco); }
+.graf-grade { stroke: var(--cartao-2); stroke-width: 1; }
+.graf-base { stroke: var(--borda); stroke-width: 1; }
+.graf .graf-rotulo { font-weight: 600; }
+.graf-faixa { fill: transparent; }
+.graf-faixa:hover { fill: #ffffff0d; }
+.filtros-drops { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: end; }
+.filtro { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--fraco); }
+.filtro select, .filtro input { height: 40px; min-width: 160px; padding: 0 10px; background: var(--cartao-2); border: 1px solid var(--borda); border-radius: 8px; color: var(--texto); font: inherit; }
+.filtro select:focus-visible, .filtro input:focus-visible { outline: 2px solid var(--ouro); outline-offset: 1px; }
+
+/* Loja: histórico de preço (sparkline) */
+.historico { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 8px; background: var(--fundo); border: 1px solid var(--borda); }
+.alerta-linha .historico { grid-column: 1 / -1; }
+.spark { display: flex; flex-direction: column; gap: 4px; }
+.sparkline { width: 100%; max-width: 480px; height: auto; display: block; }
+.spark-linha { stroke: var(--ouro); stroke-width: 1.8; stroke-linejoin: round; }
+.spark-area { fill: var(--ouro); opacity: .12; stroke: none; }
+.spark-legenda { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 10px; max-width: 480px; font-size: 12px; color: var(--fraco); }
+.st-tabela th.num .seta { order: -1; }
+
+/* ---------- passada visual (design-taste-frontend · app screen · estilo "data-terminal", paleta e tipo da Lupa) ----------
+   A seleção é sempre a mesma linha dourada de 1 px, do tamanho do rótulo, na borda mais próxima. O dourado fica nos
+   dados e nessa linha; o resto é tinta e cinza. Títulos em caixa normal, números tabulares, um bloco dividido em vez
+   de várias caixas, e a tabela larga rola dentro da própria moldura no celular, com a 1ª coluna fixa. */
+body { font-variant-numeric: tabular-nums; }
+.site-pagina { gap: 20px; }
+.pagina-cab h1 { font-size: 24px; letter-spacing: -.01em; }
+.pagina-cab h1 small { font-size: 14px; margin-top: 2px; }
+:is(.site-pagina, .site-agora) .rotulo, :is(.site-pagina, .site-agora) .c-titulo { text-transform: none; letter-spacing: 0; font-size: 15px; font-weight: 600; color: var(--texto); margin: 0; }
+
+/* navegação: a aba ativa é a linha de 1 px sob o rótulo; o resto em cinza */
+.site-abas { gap: 4px; }
+.site-abas a { position: relative; color: var(--fraco); border-radius: 0; }
+.site-abas a:hover { background: none; color: var(--texto); }
+.site-abas a[aria-current="page"] { background: none; color: var(--texto); font-weight: 600; }
+.site-abas a[aria-current="page"]::after { content: ""; position: absolute; left: 14px; right: 14px; bottom: 0; height: 1px; background: var(--ouro); }
+.site-abas a:focus-visible { outline: 1px solid var(--ouro); outline-offset: -4px; }
+
+/* filtros e períodos: texto, e a linha dourada no escolhido (sem pílula cheia) */
+:is(.site-pagina, .site-agora) .chips { gap: 4px 18px; }
+:is(.site-pagina, .site-agora) .chip { min-height: 36px; padding: 0; border: 0; border-radius: 0; background: none; color: var(--fraco); font-size: 14px; box-shadow: inset 0 -1px 0 transparent; }
+:is(.site-pagina, .site-agora) .chip:hover { color: var(--texto); }
+:is(.site-pagina, .site-agora) .chip[aria-pressed="true"] { background: none; color: var(--texto); box-shadow: inset 0 -1px 0 var(--ouro); }
+:is(.site-pagina, .site-agora) .chip:focus-visible { outline: 1px solid var(--ouro); outline-offset: 3px; }
+
+/* indicadores: um bloco só, dividido por linhas de 1 px (a linha nasce de cada célula e o bloco corta a da borda) */
+.site-pagina .grade-tiles { gap: 0; background: var(--cartao); border: 1px solid var(--borda); border-radius: 8px; overflow: hidden; }
+.site-pagina .grade-tiles > .stat { background: none; border: 0; border-left: 1px solid var(--borda); border-top: 1px solid var(--borda); margin: -1px 0 0 -1px; border-radius: 0; padding: 12px 16px; gap: 2px; }
+.site-pagina .cartao .grade-tiles { background: var(--fundo); }
+.site-pagina .stat .rot { font-size: 13px; }
+.site-pagina .stat.grande .val { font-size: 22px; font-weight: 500; line-height: 1.25; }
+.site-pagina .st-sub { font-size: 13px; }
+@media (max-width: 640px) {
+  /* no celular, lista: rótulo à esquerda, valor à direita */
+  .site-pagina .grade-tiles { grid-template-columns: minmax(0, 1fr); }
+  .site-pagina .grade-tiles > .stat { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 12px; align-items: baseline; padding: 10px 14px; }
+  .site-pagina .grade-tiles > .stat .val { grid-column: 2; grid-row: 1; font-size: 18px; text-align: right; }
+  .site-pagina .grade-tiles > .stat .st-sub { grid-column: 1 / -1; }
+}
+
+/* tabelas: cabeçalho em caixa normal, cinza, sem faixa; nome do item sem moldura; no celular a 1ª coluna fica parada */
+.st-tabela { font-size: 14px; }
+.st-tabela th { text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 500; }
+.st-tabela td { padding: 10px 10px; }
+.st-tabela .item { padding: 0; background: none; border: 0; }
+.st-tabela .item-nome { font-size: 14px; }
+.rar, .legenda, .filtro { font-size: 13px; }
+.st-tabela tr.melhor td { background: none; box-shadow: inset 0 -1px 0 var(--ouro); }
+@media (max-width: 640px) {
+  .st-box .st-tabela th:first-child, .st-box .st-tabela td:first-child { position: sticky; left: 0; z-index: 1; background: var(--cartao); box-shadow: 1px 0 0 var(--borda); }
+}
+
+/* faixa de caça (atividade): o elemento só deste produto. Raias por personagem, sem caixas em volta */
+.ativ-horas span { border-radius: 2px; }
+.ativ-horas .parado { border-width: 1px; }
+
+/* gráfico: grade discreta, sem marcadores; a legenda fica no cabeçalho */
+.graf-grade { stroke: var(--borda); stroke-opacity: .6; }
+.graf-base { stroke: var(--fraco); stroke-opacity: .5; }
+.graf svg { font-size: 12px; }
+
+/* controles da página com uma altura só */
+.filtro select, .filtro input, .alerta-form input, .alerta-form select, .alerta-form .botao { height: 36px; }
+
+/* Hoje: um personagem por coluna em tela larga */
+.hoje-grade { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 560px), 1fr)); gap: 16px; }
+.site-topo .site-selo { font-size: 13px; }
+.st-tabela th.num { font-family: inherit; font-weight: 500; }
+@media (max-width: 640px) {
+  .ativ-eixo > :nth-child(even) { display: none; }      /* 4 horários no celular, não 7 encavalados */
+  .ativ-eixo { font-size: 12px; }
+}
+
+/* Agora (a Central da Lupa dentro do site): título de verdade e a mesma seleção por linha */
+.site-agora .agora-h1 { margin: 0; font-size: 24px; letter-spacing: -.01em; }
+.site-agora .c-filtros { padding: 0; gap: 18px; background: none; border: 0; border-bottom: 1px solid var(--borda); border-radius: 0; }
+.site-agora .c-filtros button { flex: none; min-height: 40px; padding: 0; border-radius: 0; background: none; color: var(--fraco); font-weight: 500; }
+.site-agora .c-filtros button[aria-pressed="true"] { background: none; color: var(--texto); box-shadow: inset 0 -1px 0 var(--ouro); }
+
+/* Farm: a melhor zona num cartão neutro; o dourado fica só no nome da zona (a resposta da tela) */
+.site-pagina .destaque { background: var(--cartao); border-color: var(--borda); }
+.site-pagina .destaque .stat.grande { display: flex; font-size: inherit; font-weight: inherit; color: var(--texto); }
+.site-pagina .destaque .stat.grande .val { color: var(--texto); }

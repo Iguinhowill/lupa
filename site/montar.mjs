@@ -24,6 +24,10 @@ for (const [nome, titulo, extras] of PAGINAS) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lupa Online · ${titulo}</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#161922">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="/icone-192.png">
 <link rel="stylesheet" href="painel.css">
 <link rel="stylesheet" href="central.css">
 <link rel="stylesheet" href="site.css">
