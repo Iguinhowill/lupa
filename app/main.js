@@ -6,7 +6,7 @@
 // pede (o botão "Entregar e seguir" e o Alt+L), liberadas por ele em 27/10/2026: ver acoes.js e ARQUITETURA.md.
 'use strict';
 
-const { app, BaseWindow, BrowserWindow, Menu, Tray, WebContentsView, ipcMain, Notification, nativeImage, powerSaveBlocker, screen, shell, session } = require('electron');
+const { app, BaseWindow, BrowserWindow, Menu, Tray, WebContentsView, ipcMain, Notification, nativeImage, powerSaveBlocker, screen, shell, session, webContents } = require('electron');
 const { autoUpdater } = require('electron-updater');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -170,8 +170,11 @@ function criarJogo(a) {
   ligarAtalhos(wc);
   wc.on('focus', () => { if (ultimoFoco !== a.id) { ultimoFoco = a.id; if (modo() === 'lado') { escolherNoPainel(); avisarCasca(); } } });
   wc.on('did-navigate', () => aplicarZoom());      // o Chromium pode devolver o zoom ao padrão na troca de página
-  // a página recarregou ou caiu no meio de uma ação: a autorização some e o painel não fica parado em "rodando"
-  wc.on('did-start-navigation', (d) => { if (d.isMainFrame && !d.isSameDocument) encerrarAcao(a, 'A página do jogo recarregou no meio. Aperte de novo.'); });
+  // a página recarregou ou caiu no meio de uma ação: a autorização some na hora. O motivo vai para o painel só quando a
+  // página velha já saiu (did-navigate): até lá ela ainda roda e gravaria um passo por cima ("rodando" de novo)
+  let recarregou = null;
+  wc.on('did-start-navigation', (d) => { if (d.isMainFrame && !d.isSameDocument && encerrarAcao(a)) recarregou = pref.nomes[a.id]; });
+  wc.on('did-navigate', () => { if (recarregou) avisarFimDaAcao(recarregou, 'A página do jogo recarregou no meio. Aperte de novo.'); recarregou = null; });
   wc.on('render-process-gone', () => encerrarAcao(a, 'A página do jogo caiu no meio. Aperte de novo.'));
   const tema = fs.readFileSync(path.join(LUPA, 'tema.css'), 'utf8');
   wc.on('dom-ready', () => { if (/^https?:\/\/((www\.)?lolidle\.com|127\.0\.0\.1|localhost)[:/]/.test(wc.getURL())) wc.insertCSS(tema).catch(() => {}); });
@@ -433,22 +436,26 @@ function atualizarSelo() {
 // O pedido (botão do painel ou Alt+L) autoriza UMA aba por pouco tempo (Acoes.REGRAS), e só uma ação por vez entre as contas:
 // no lado a lado, duas juntas disputariam o foco entre o apertar e o soltar do mouse. O preload do jogo (acao-jogo.js) pede
 // cada clique ou tecla e o main manda uma entrada de verdade (sendInputEvent), só na aba que está à vista.
-let acaoAtual = null;      // { aba, tipo, ate, resta }: a ação em andamento
+let acaoAtual = null;      // { aba, tipo, ate, resta, foco }: a ação em andamento (foco: quem tinha o teclado antes dela)
 const emAndamento = () => !!acaoAtual && Date.now() <= acaoAtual.ate;
 // recusa (false) se já tem uma ação em andamento: um segundo pedido não troca nem renova a autorização da primeira
 function pedirAcao(a, tipo) {
   if (!a?.view || a.tipo !== 'jogo' || emAndamento()) return false;
-  acaoAtual = { aba: a.id, ...Acoes.autorizacao(tipo) };
+  acaoAtual = { aba: a.id, ...Acoes.autorizacao(tipo), foco: webContents.getFocusedWebContents() };
   a.view.webContents.send('acao:iniciar', { tipo });
   return true;
 }
-// a ação daquela aba acabou, foi parada ou a página dela foi embora: a autorização some. Com `motivo` (página recarregou ou
-// caiu), o painel deixa de mostrar "rodando" e mostra o motivo
+const avisarFimDaAcao = (nome, motivo) => { if (nome) armazem.set({ ['acao:' + nome]: { tipo: 'tarefa', estado: 'erro', texto: motivo, em: Date.now() } }); };
+// a ação daquela aba acabou, foi parada ou a página dela foi embora: a autorização some e o teclado volta para quem o tinha
+// (no lado a lado, quem digitava na outra metade). Com `motivo`, o painel deixa de mostrar "rodando" e mostra o motivo.
+// Devolve se havia uma ação daquela aba
 function encerrarAcao(a, motivo) {
-  if (!acaoAtual || acaoAtual.aba !== a.id) return;
-  const tipo = acaoAtual.tipo, nome = pref.nomes[a.id];
+  if (!acaoAtual || acaoAtual.aba !== a.id) return false;
+  const { tipo, foco } = acaoAtual;
   acaoAtual = null;
-  if (motivo && tipo === 'tarefa' && nome) armazem.set({ ['acao:' + nome]: { tipo, estado: 'erro', texto: motivo, em: Date.now() } });
+  if (foco && !foco.isDestroyed() && foco !== a.view?.webContents) foco.focus();
+  if (motivo && tipo === 'tarefa') avisarFimDaAcao(pref.nomes[a.id], motivo);
+  return true;
 }
 // a aba que mandou o pedido de entrada, se é a da ação e está à vista (com a janela aberta); null se não pode
 function abaAutorizada(wc) {
@@ -491,7 +498,7 @@ function recarregarAba() { const a = abaAtiva(); if (a.tipo === 'jogo') a.view.w
 // "Usar só a Conta 1": a view da Conta 2 nem existe (economiza memória); a aba e o Lado a lado somem
 function aplicarSoConta1() {
   const a = abas.find((x) => x.id === 'conta2');
-  if (pref.soConta1 && a.view) { janela.contentView.removeChildView(a.view); a.view.webContents.close(); a.view = null; }
+  if (pref.soConta1 && a.view) { encerrarAcao(a, 'A Conta 2 foi fechada no meio.'); janela.contentView.removeChildView(a.view); a.view.webContents.close(); a.view = null; }
   else if (!pref.soConta1 && !a.view) criarJogo(a);
   if (pref.soConta1 && ultimoFoco === 'conta2') ultimoFoco = 'conta1';
   pref.ativa = Layout.modoValido(pref.ativa, pref.soConta1);

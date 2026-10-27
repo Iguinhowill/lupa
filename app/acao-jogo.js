@@ -81,7 +81,8 @@
     if (el.isConnected && visivel(el)) await clicar(el);
     return esperar(cond, Math.max(0, total - cedo));
   }
-  // as teclas da entrega (B e M) respondem na hora; o M abre E fecha o mapa, então só repete depois de 2,5 s sem mudança
+  // as teclas da entrega (B e M) respondem na hora; o M abre e fecha o mapa (e o botão Mapa é chamado com o mesmo prazo),
+  // então só repete depois de 2,5 s sem mudança
   async function teclaAte(k, cond, total, cedo = 2500) {
     await tecla(k);
     const v = await esperar(cond, cedo);
@@ -156,11 +157,12 @@
     // aceita: o jogo fecha a conversa em 0,6 s (dizer('tchau')) e o rastreio volta com a tarefa nova ("0/120 · <zona>")
     const aceitou = () => { const r = $('#rastreio-tarefa'); return $('#janela-npc')?.hidden || (r && !r.hidden && !r.classList.contains('pronta') && mesma(txt($('small', r)).split(' · ').at(-1), o.zona)); };
     if (!(await clicarAte(o.botao, aceitou, 4e3))) throw new Error('O Capitão não aceitou a tarefa.');
+    await esperar(() => $('#janela-npc')?.hidden, 2e3);      // a conversa fecha 0,6 s depois: o mapa não pode abrir por baixo dela
     const nova = `${o.titulo}${o.tipo ? ` (${o.tipo})` : ''}, ~${Math.round(o.min)} min, ${curto(o.xp / o.min)} de XP por minuto`;
 
     passo(`Indo para ${o.zona}…`);
     const mapaAberto = () => $('#janela-mapa') && !$('#janela-mapa').hidden;
-    if (!mapaAberto() && !(await botaoOuTecla('#abrir-mapa', 'm', mapaAberto, 5e3))) throw new Error(`Tarefa nova: ${nova}. O mapa não abriu: a viagem fica com você.`);
+    if (!mapaAberto() && !(await botaoOuTecla('#abrir-mapa', 'm', mapaAberto, 5e3, 2500))) throw new Error(`Tarefa nova: ${nova}. O mapa não abriu: a viagem fica com você.`);
     const mk = await esperar(() => { const m = $$('#marcadores .marcador').find((b) => mesma(b.getAttribute('aria-label'), o.zona)); return visivel(m) ? m : null; }, 3e3);
     if (!mk) throw new Error(`Tarefa nova: ${nova}. Não achei ${o.zona} no mapa do Rift: a viagem fica com você.`);
     const ir = await clicarAte(mk, () => { const b = $(`#mapa-info [data-ir="${mk.dataset.local}"]`); return b && !b.disabled && visivel(b) ? b : null; }, 3e3);

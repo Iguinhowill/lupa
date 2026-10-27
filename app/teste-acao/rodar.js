@@ -139,6 +139,28 @@ app.whenReady().then(async () => {
     const d = await jogo.executeJavaScript('window.__d');
     conferir(d.cliquesFalsos === 1, `a proteção contou ${d.cliquesFalsos} cliques falsos (esperado: só o do teste)`);
     conferir(d.teclasFalsas === 0, 'alguma tecla chegou como falsa');
+
+    // 5) a página recarrega no meio: a ação vira erro com o motivo, um pedido novo é aceito e o Parar para no meio
+    await jogo.executeJavaScript(`window.__preparar({ colunaEscondida: false })`);
+    await espera(5500);
+    const t5 = Date.now();
+    out.c5inicio = await painel.executeJavaScript(`lupaApp.acao('tarefa', 'Teste 1')`);
+    await espera(700);
+    jogo.reload();
+    await espera(4000);
+    const a5 = await acaoDe(painel);
+    out.c5recarga = a5;
+    conferir(out.c5inicio?.ok && a5?.em >= t5 && a5.estado === 'erro' && /recarregou/.test(a5.texto), '5) recarregar no meio não virou erro com o motivo: ' + JSON.stringify(a5));
+    await espera(4000);      // a Lupa relê a página nova (a tarefa pronta de novo)
+    const t6 = Date.now();
+    out.c5novo = await painel.executeJavaScript(`lupaApp.acao('tarefa', 'Teste 1')`);
+    conferir(out.c5novo?.ok, '5) depois de recarregar, um pedido novo foi recusado: ' + JSON.stringify(out.c5novo));
+    await espera(600);
+    out.c5parar = await painel.executeJavaScript(`lupaApp.acao('parar', 'Teste 1')`);
+    let a6 = null;
+    for (let k = 0; k < 30 && !(a6?.em >= t6 && a6.estado !== 'rodando'); k++) { await espera(300); a6 = await acaoDe(painel); }
+    out.c5parado = a6;
+    conferir(a6?.estado === 'parado', '5) o Parar não parou: ' + JSON.stringify(a6));
   } catch (e) { falhas.push(String(e?.stack || e)); }
   Object.assign(out, { falhas, pulados });
   fs.writeFileSync(path.join(SAIDA, 'resultado.json'), JSON.stringify(out, null, 2));

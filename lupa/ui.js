@@ -464,7 +464,7 @@ function cartaoEntregar(e, ctx) {
   const rodando = a?.estado === 'rodando' && agora - a.em < 90e3, morreu = a?.estado === 'rodando' && !rodando;
   const recente = a && !rodando && agora - a.em < 15 * 60e3;
   const pode = !!t?.pronta;
-  const msg = rodando ? h('p', { class: 'entregar-status', role: 'status' }, a.texto)
+  const msg = rodando ? [h('p', { class: 'entregar-status', role: 'status' }, a.texto), h('p', { class: 'entregar-status fraco' }, 'Até terminar, o teclado fica com o jogo desta conta.')]
     : recente ? h('p', { class: 'entregar-status ' + (morreu ? 'erro' : a.estado), role: 'status' }, morreu ? 'A última tentativa parou no meio. Aperte de novo.' : a.texto)
     : !pode ? h('p', { class: 'entregar-status fraco' }, !t ? 'Sem tarefa: pegue a primeira com o Capitão da Legião.' : 'Fica ativo quando a tarefa ficar pronta.')
     : null;
