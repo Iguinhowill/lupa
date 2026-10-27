@@ -2,13 +2,14 @@
 'use strict';
 
 const MIN_SEM_LEITURA = 3 * 60e3;      // o jogo escreve o estado quase todo segundo: 3 min calado é sem leitura
+const MIN_SEM_LEITURA_ESCONDIDA = 10 * 60e3;      // conta fora da tela: o Chromium espaça os timers dela
 const MOCHILA_CHEIA = 0.9;
 
 const n = (x) => (Number.isFinite(x) ? x : 0);
 
 // `est` é o último `estado:<nome>` da conta (ou undefined); campos novos podem faltar nos antigos. `desde` é quando o
 // app abriu: antes de passar 3 min dele, um estado velho do disco não conta como "sem leitura". Devolve [{ tipo, texto }]
-function alertasDe(est, agora, desde = 0) {
+function alertasDe(est, agora, desde = 0, visivel = true) {
   if (!est || typeof est !== 'object') return [];
   const lista = [];
   if (est.tarefa && est.tarefa.pronta) lista.push({ tipo: 'tarefa', texto: 'Tarefa pronta para entregar' });
@@ -26,7 +27,7 @@ function alertasDe(est, agora, desde = 0) {
   if (est.rastreio && est.rastreio.login) lista.push({ tipo: 'premio', texto: 'Prêmio diário ainda não pego' });
   if (Number.isFinite(est.ts)) {
     const parado = agora - Math.max(est.ts, desde);
-    if (parado > MIN_SEM_LEITURA) lista.push({ tipo: 'sem-leitura', texto: `Sem leitura há ${Math.floor(parado / 60e3)} min` });
+    if (parado > (visivel ? MIN_SEM_LEITURA : MIN_SEM_LEITURA_ESCONDIDA)) lista.push({ tipo: 'sem-leitura', texto: `Sem leitura há ${Math.floor(parado / 60e3)} min` });
   }
   return lista;
 }
@@ -44,4 +45,4 @@ function notasEmTexto(notas, max = 300) {
   return t.length > max ? t.slice(0, max - 1).trimEnd() + '…' : t;
 }
 
-module.exports = { alertasDe, notasEmTexto, MIN_SEM_LEITURA };
+module.exports = { alertasDe, notasEmTexto, MIN_SEM_LEITURA, MIN_SEM_LEITURA_ESCONDIDA };

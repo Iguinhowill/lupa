@@ -81,3 +81,11 @@ test('o resto das teclas passa para o jogo', () => {
   assert.equal(atalhoDe({ type: 'keyUp', key: 'F5', control: false }), null);
   assert.equal(atalhoDe(null), null);
 });
+
+test('conta fora da tela só vira "sem leitura" depois de 10 min', () => {
+  const { alertasDe: a } = require('./alertas');
+  const agora = 1e12, est = { ts: agora - 5 * 60e3 };
+  assert.ok(a(est, agora, 0, true).some((x) => x.tipo === 'sem-leitura'), 'visível: 5 min já é sem leitura');
+  assert.ok(!a(est, agora, 0, false).some((x) => x.tipo === 'sem-leitura'), 'escondida: 5 min ainda não');
+  assert.ok(a({ ts: agora - 11 * 60e3 }, agora, 0, false).some((x) => x.tipo === 'sem-leitura'), 'escondida: 11 min sim');
+});

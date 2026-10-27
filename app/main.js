@@ -126,8 +126,9 @@ function mostrarAviso(titulo, texto, aba) {
   if (!Notification.isSupported()) return;
   const n = new Notification({ title: titulo, body: texto, icon: ICONE });
   avisosVivos.add(n);
+  if (avisosVivos.size > 50) avisosVivos.delete(avisosVivos.values().next().value);
   n.on('click', () => { if (aba) ativar(aba.id); mostrarJanela(); });
-  n.on('close', () => avisosVivos.delete(n));
+  for (const ev of ['close', 'failed']) n.on(ev, () => avisosVivos.delete(n));
   n.show();
 }
 // o jogador está olhando para esta conta agora: janela em foco e a conta na tela (aba ativa ou lado a lado)
@@ -237,6 +238,8 @@ function criarJanela() {
   casca = new WebContentsView({ webPreferences: prefs(path.join(__dirname, 'preload-casca.js')) });
   casca.setBackgroundColor('#00000000');      // transparente: com o menu de ajustes aberto a casca cobre a janela toda
   ligarAtalhos(casca.webContents);
+  // a casca recarregou ou caiu com o menu aberto: fecha o menu, senão ela ficaria cobrindo os jogos e prendendo os cliques
+  for (const ev of ['did-start-loading', 'render-process-gone']) casca.webContents.on(ev, () => { if (menuAberto) fecharMenu(); });
   casca.webContents.loadFile(path.join(__dirname, 'casca.html'));
   janela.contentView.addChildView(casca);
   for (const a of abas) if (a.tipo === 'jogo' && !(a.id === 'conta2' && pref.soConta1)) criarJogo(a);
@@ -262,7 +265,10 @@ function criarJanela() {
     janela.hide();
     if (!pref.avisouBandeja) { pref.avisouBandeja = true; salvarPref(); mostrarAviso('Lupa', 'A Lupa continua rodando na bandeja', null); }
   });
-  for (const ev of ['query-session-end', 'session-end']) janela.on(ev, () => { saindo = true; });      // não segurar o desligamento do Windows
+  // não segurar o desligamento do Windows; se outro programa vetar o "query", o X volta a esconder na bandeja em 1 min
+  let vetado = 0;
+  janela.on('query-session-end', () => { saindo = true; clearTimeout(vetado); vetado = setTimeout(() => { saindo = false; }, 60e3); });
+  janela.on('session-end', () => { clearTimeout(vetado); saindo = true; });
   janela.on('closed', () => { janela = null; app.quit(); });
   arrumar();
   if (process.argv.includes(AO_INICIAR[0])) janela.minimize();      // oculta, já aparece direto minimizada
@@ -324,13 +330,15 @@ function aplicarZoom(r = layoutAtual()) {
   const gj = modo() === 'lado' ? 'lado' : 'solo';      // os jogos escondidos já ficam com o zoom do modo seguinte
   for (const a of abas) {
     if (!a.view) continue;
+    // só os jogos: as páginas do app são todas file://, e o Chromium guarda o zoom por host (a Central levaria a casca junto)
     const largura = (a.tipo === 'jogo' ? r.jogos[a.id] : r.central)?.width || a.view.getBounds().width;
-    const z = a.tipo === 'jogo' ? Layout.zoomDoJogo(gj, largura, pref.zoom[gj]) : Layout.zoomDoJogo('central', largura, pref.zoom.central);
+    const z = a.tipo === 'jogo' ? Layout.zoomDoJogo(gj, largura, pref.zoom[gj]) : 1;
     const wc = a.view.webContents;
     if (!wc.isDestroyed() && Math.abs(wc.getZoomFactor() - z) > 0.001) wc.setZoomFactor(z);
   }
 }
 function ajustarZoomAtivo(acao) {
+  if (modo() === 'central') return;      // a Central não tem zoom (ver aplicarZoom)
   const g = Layout.grupoDe(modo());
   pref.zoom[g] = Layout.ajustarZoom(pref.zoom[g], acao);
   aplicarZoom();
@@ -392,7 +400,7 @@ const estados = new Map();      // nome do personagem → último estado:<nome>
 let alertas = {}, totalAlertas = 0, iconePonto = null;
 function recalcularAlertas() {
   const agora = Date.now(), novo = {};
-  for (const a of abas) if (a.tipo === 'jogo' && a.view) novo[a.id] = alertasDe(estados.get(pref.nomes[a.id]), agora, INICIO);
+  for (const a of abas) if (a.tipo === 'jogo' && a.view) novo[a.id] = alertasDe(estados.get(pref.nomes[a.id]), agora, INICIO, modo() === a.id || modo() === 'lado');
   if (JSON.stringify(novo) === JSON.stringify(alertas)) return;
   alertas = novo;
   atualizarSelo();
@@ -511,7 +519,7 @@ function ligarIpc() {
   ipcMain.handle('casca:recarregar', () => recarregarAba());
   ipcMain.handle('casca:menu', (_e, aberto) => {
     menuAberto = !!aberto;
-    if (menuAberto) janela.contentView.addChildView(casca);      // de novo = vai para o topo, sobre os jogos
+    if (menuAberto) { janela.contentView.addChildView(casca); casca.webContents.focus(); }      // de novo = vai para o topo, sobre os jogos
     arrumar(); avisarCasca();
   });
   // opções do menu de ajustes: { chave, valor }, só as conhecidas
@@ -545,7 +553,7 @@ function ligarIpc() {
 // ---------- início ----------
 app.on('second-instance', mostrarJanela);
 app.on('window-all-closed', () => app.quit());
-app.on('before-quit', () => { saindo = true; try { clearTimeout(esperaPref); guardarJanela(); salvarPref(); armazem?.gravar(); } catch {} });
+app.on('before-quit', () => { saindo = true; try { bandeja?.destroy(); bandeja = null; } catch {} try { clearTimeout(esperaPref); guardarJanela(); salvarPref(); armazem?.gravar(); } catch {} });
 app.whenReady().then(() => {
   armazem = new Armazem(path.join(app.getPath('userData'), 'lupa-dados.json'));
   const salvo = armazem.get('app:pref')['app:pref'] || {};
