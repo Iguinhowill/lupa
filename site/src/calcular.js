@@ -339,7 +339,10 @@ function graficoCurva(larg, nivel, alvo) {
     const fB = fichaDe(camp, nivel, B, a.ranks, bonus);
     const barraB = B.barra.filter(Boolean), barraA = a.barra.filter(Boolean);
     const farmA = liberado ? CALC.estimarFarm(fA, camp, zona, nivel, { build: { ranks: a.ranks, barra: barraA } }) : null;
-    const farmB = liberado ? CALC.estimarFarm(fB, camp, zona, nivel, { build: { ranks: a.ranks, barra: barraB } }) : null;
+    // troca de barra: conferido contra o motor (27/10, Yasuo nv 37), o modelo previu +23% de abates/h em trocas que no jogo dão de −2% a 0%.
+    // Até o modelo das habilidades ser refeito, a tela não promete farm quando a barra muda (os stats continuam).
+    const trocouBarra = barraA.slice().sort().join() !== barraB.slice().sort().join();
+    const farmB = liberado && !trocouBarra ? CALC.estimarFarm(fB, camp, zona, nivel, { build: { ranks: a.ranks, barra: barraB } }) : null;
 
     // ---------- o editor da build B ----------
     const seus = [...a.equip.map((i) => ({ obj: itemDaChave(i.id) })), ...a.mochila].filter((i) => i.obj && JOGO.item(i.obj.id)).filter((i, k, l) => l.findIndex((o) => JOGO.chaveItem(o.obj) === JOGO.chaveItem(i.obj)) === k);
@@ -439,7 +442,7 @@ function graficoCurva(larg, nivel, alvo) {
           tl('Ouro por hora', farmA.ouroH, farmB.ouroH, curto)),
         barraMudou ? nota(`A barra de habilidades mudou: o modelo conta o dano e a velocidade das habilidades de forma aproximada${eCamp?.barra ? `; nesse tipo de troca ele errou até ±${nBR(eCamp.barra.max, 0)} pontos na medição` : ''}.`) : null);
     } else {
-      resultado = h('div', { class: 'calc-corpo' }, nota(!calibrado ? `Ainda não calibrei o modelo de farm para ${C.nome}: aqui só os stats.` : `O modelo de farm de ${C.nome} errou ${nBR(eCamp?.mediana ?? 0, 1)} pontos de mediana contra a simulação do jogo (mais do que aceito), então mostro só os stats e não prometo abates por hora.`));
+      resultado = h('div', { class: 'calc-corpo' }, nota(trocouBarra && liberado ? 'Com a barra trocada, o comparador ainda não estima o farm: conferido contra a simulação do jogo, ele errou feio nessas trocas (previu +23% onde o jogo dá entre −2% e 0%). Para comparar barras, teste no jogo: 20 a 30 min com cada uma, usando Nova sessão na aba Caçada da Lupa.' : !calibrado ? `Ainda não calibrei o modelo de farm para ${C.nome}: aqui só os stats.` : `O modelo de farm de ${C.nome} errou ${nBR(eCamp?.mediana ?? 0, 1)} pontos de mediana contra a simulação do jogo (mais do que aceito), então mostro só os stats e não prometo abates por hora.`));
     }
 
     caixa.replaceChildren(

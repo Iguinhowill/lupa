@@ -499,6 +499,16 @@ if (typeof module !== 'undefined') module.exports = JOGO;
     return { P, farm: mk(P), modelo };
   }
 
+  // --simular <builds.json>: só roda o combate do motor para essas builds (para conferir uma previsão do comparador contra o jogo) e
+  // sai, sem gravar nada. Cada build: { id, campeao, nivel, zona, atrib, ranks, barra, itens: [chaves], minutos, sementes }
+  const iSim = process.argv.indexOf('--simular');
+  if (iSim > 0) {
+    const copia = join(pasta, 'jobs-avulsos.json');
+    writeFileSync(copia, JSON.stringify(JSON.parse(readFileSync(process.argv[iSim + 1], 'utf8'))));
+    console.log(JSON.stringify(rodarFilho(`console.log(JSON.stringify(await (${simularFilho})(${j(motorUrl)}, ${j(copia)})));`)));
+    rmSync(pasta, { recursive: true, force: true });
+    process.exit(0);
+  }
   // 5b) roda a calibração (ou, com --sem-farm, reaproveita a anterior: o erro guarda o sha do motor com que foi medido)
   let FARM = { kHab: {}, vaHab: {}, liberado: {} }, erroComparador = null;
   const anterior = (() => { try { const A = createRequire(import.meta.url)(SAIDA); return A.FARM?.kHab && A.meta?.erroComparador ? A : null; } catch { return null; } })();
