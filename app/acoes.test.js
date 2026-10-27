@@ -35,9 +35,14 @@ test('clique e teclas: só B e M, apertar e soltar', () => {
 });
 
 test('ofertas: quantidade, tempo, XP, ouro e zona como o jogo escreve', () => {
-  assert.deepEqual(OFERTA.lerOferta('120 monstros em Fosso do Dragão', '~15 min · 120.3k de XP · 30.1k de ouro · item épico'), { qtd: 120, min: 15, xp: 120300, ouro: 30100, zona: 'Fosso do Dragão' });
-  assert.deepEqual(OFERTA.lerOferta('400 monstros em Covil do Barão', '~1,5 h · 1.2M de XP · 310.5k de ouro'), { qtd: 400, min: 90, xp: 1.2e6, ouro: 310500, zona: 'Covil do Barão' });
-  assert.deepEqual(OFERTA.lerOferta('60 Larva do Vazio em Toca do Vazio', '~12 min · 9800 de XP · 2400 de ouro'), { qtd: 60, min: 12, xp: 9800, ouro: 2400, zona: 'Toca do Vazio' });
+  const sem = (o) => { const { xpFolga, ...resto } = o; return resto; };
+  assert.deepEqual(sem(OFERTA.lerOferta('120 monstros em Fosso do Dragão', '~15 min · 120.3k de XP · 30.1k de ouro · item épico')), { qtd: 120, min: 15, xp: 120300, ouro: 30100, zona: 'Fosso do Dragão' });
+  assert.deepEqual(sem(OFERTA.lerOferta('400 monstros em Covil do Barão', '~1,5 h · 1.2M de XP · 310.5k de ouro')), { qtd: 400, min: 90, xp: 1.2e6, ouro: 310500, zona: 'Covil do Barão' });
+  assert.deepEqual(sem(OFERTA.lerOferta('60 Larva do Vazio em Toca do Vazio', '~12 min · 9800 de XP · 2400 de ouro')), { qtd: 60, min: 12, xp: 9800, ouro: 2400, zona: 'Toca do Vazio' });
+  // a folga do arredondamento: meia unidade da última casa
+  assert.ok(Math.abs(OFERTA.lerOferta('x em Z', '~1 h · 1.2M de XP').xpFolga - 0.05 / 1.2) < 1e-12);
+  assert.ok(Math.abs(OFERTA.folga('145.5k') - 50 / 145500) < 1e-12);
+  assert.equal(OFERTA.folga('9800'), 0);
   assert.equal(OFERTA.lerOferta('1.890 monstros em Fosso do Dragão', '~3 h · 436.6k de XP').qtd, 1890);
   const velha = OFERTA.lerOferta('20× Lobo Gigante', 'Toca dos Lobos · 300 de ouro · 900 de XP');
   assert.equal(velha.min, null);
@@ -47,7 +52,8 @@ test('ofertas: quantidade, tempo, XP, ouro e zona como o jogo escreve', () => {
 test('escolher sem ritmo medido: a de mais prêmio por minuto; empate fica com a mais curta; sem dados não entra', () => {
   const o = (min, xp, zona = 'Z') => ({ min, xp, zona });
   assert.equal(OFERTA.escolher([o(15, 120e3), o(60, 600e3), o(7, 50e3)]), 1);      // 8k, 10k, 7,1k por minuto
-  assert.equal(OFERTA.escolher([o(30, 300e3), o(15, 150e3)]), 1);
+  assert.equal(OFERTA.escolher([o(30, 300e3), o(15, 150e3)]), 0, 'com o custo de 1 min por entrega, a longa rende 3% mais');
+  assert.equal(OFERTA.escolher([o(30, 300e3), o(15, 155e3)]), 1, 'a curta a 0,1%: empate, fica a mais curta');
   assert.equal(OFERTA.escolher([o(null, 1e6), o(10, 0), o(10, 50e3, null)]), -1);
   assert.equal(OFERTA.escolher([]), -1);
   assert.equal(OFERTA.escolher(undefined), -1);
@@ -101,8 +107,15 @@ test('escolher no seu ritmo: o Desafio da zona de cima não ganha só por pagar 
 test('escolher: empate até 1% (o arredondamento do prêmio que o jogo mostra) fica com a mais curta', () => {
   const a = { tipo: 'Normal', zona: 'Z', qtd: 100, min: 10, xp: 1000 }, b = { tipo: 'Normal', zona: 'Z', qtd: 50, min: 5, xp: 1004 };
   assert.equal(OFERTA.escolher([a, b]), 1, 'sem ritmo: 200,8 contra 100 por minuto');
-  const c = { tipo: 'Normal', zona: 'Z', qtd: 100, min: 10, xp: 1000 }, d = { tipo: 'Normal', zona: 'Z', qtd: 99, min: 9.95, xp: 1000 };
-  assert.equal(OFERTA.escolher([c, d]), 1, 'diferença de 0,5%: a mais curta');
+  const c = { tipo: 'Normal', zona: 'Z', qtd: 100, min: 10, xp: 1000 }, d = { tipo: 'Normal', zona: 'Z', qtd: 99, min: 9.95, xp: 990 };
+  assert.equal(OFERTA.escolher([c, d]), 1, 'a curta 0,5% abaixo: empate, fica a mais curta');
+  // não depende da ordem: a de 15 min a 0,6% da melhor (a de 60 min) ganha mesmo vindo antes ou depois
+  const p = { tipo: 'Normal', zona: 'Z', qtd: 70, min: 7, xp: 800 }, q = { tipo: 'Normal', zona: 'Z', qtd: 150, min: 15, xp: 1614 }, w = { tipo: 'Normal', zona: 'Z', qtd: 600, min: 60, xp: 6192 };
+  assert.equal(OFERTA.escolher([p, q, w]), 1);
+  assert.equal(OFERTA.escolher([w, q, p]), 1);
+  // prêmio em "M" erra até ~4%: dentro disso é empate
+  const m1 = { tipo: 'Normal', zona: 'Z', qtd: 2000, min: 180, xp: 1.3e6, xpFolga: 0.05 / 1.3 }, m2 = { tipo: 'Normal', zona: 'Z', qtd: 700, min: 60, xp: 427e3, xpFolga: 50 / 427e3 };
+  assert.equal(OFERTA.escolher([m1, m2]), 1, '7.143/min contra 7.000/min (2%), com o "1.3M" valendo de 1,25 a 1,35 mi');
   // no seu ritmo: a mesma oferta com o prêmio 0,5% maior pelo arredondamento empata com a original, e fica a mais curta
   const r = { z: { abatesMin: 40, xpAbate: 600 } };
   const e = { tipo: 'Normal', zona: 'Z', qtd: 200, min: 20, xp: 46200 }, f = { tipo: 'Normal', zona: 'Z', qtd: 201, min: 20.1, xp: 46200 * 1.005 * 1.005 };

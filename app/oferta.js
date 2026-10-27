@@ -13,14 +13,23 @@ const OFERTA = (() => {
     const n = mult > 1 ? m[1].replace(',', '.') : m[1].replace(/[.,](?=\d{3}(?!\d))/g, '').replace(',', '.');
     return (parseFloat(n) || 0) * mult;
   }
-  // quantidade, tempo ("~15 min" ou "~1,5 h"), XP, ouro e a zona ("... em <zona>"); o que não achar fica null
+  // quanto o número escrito pode estar longe do de verdade, em fração dele: meia unidade da última casa ("1.2M": 0,05 mi, ~4%;
+  // "145.5k": 50, ~0,03%); 0 sem casa decimal num número sem k/M (o jogo escreve inteiro abaixo de 10 mil)
+  function folga(s) {
+    const m = String(s ?? '').trim().match(/^([\d.,]+)\s*([kM])?/), v = numero(s);
+    if (!m || !(v > 0) || !m[2]) return 0;
+    const casas = (m[1].split(/[.,]/)[1] || '').length;
+    return (0.5 * 10 ** -casas * (m[2] === 'M' ? 1e6 : 1e3)) / v;
+  }
+  // quantidade, tempo ("~15 min" ou "~1,5 h"), XP (e a folga do arredondamento dele), ouro e a zona ("... em <zona>"); o que
+  // não achar fica null
   function lerOferta(titulo, detalhe) {
     const d = String(detalhe || ''), t = String(titulo || '').replace(/\s+/g, ' ').trim();
     const h = d.match(/~\s*([\d.,]+)\s*h\b/), m = d.match(/~\s*([\d.,]+)\s*min\b/);
     const min = h ? parseFloat(h[1].replace(',', '.')) * 60 : m ? numero(m[1]) : null;
     const xp = d.match(/([\d.,]+\s*[kM]?) de XP/), ouro = d.match(/([\d.,]+\s*[kM]?) de ouro/);
     const zona = t.match(/\sem (.+)$/), qtd = t.match(/^(\d[\d.]*)\s/);
-    return { qtd: qtd ? numero(qtd[1]) : null, min: min > 0 ? min : null, xp: xp ? numero(xp[1]) : null, ouro: ouro ? numero(ouro[1]) : null, zona: zona ? zona[1].trim() : null };
+    return { qtd: qtd ? numero(qtd[1]) : null, min: min > 0 ? min : null, xp: xp ? numero(xp[1]) : null, xpFolga: xp ? folga(xp[1]) : 0, ouro: ouro ? numero(ouro[1]) : null, zona: zona ? zona[1].trim() : null };
   }
 
   const chaveZona = (z) => String(z || '').trim().toLowerCase();
@@ -28,7 +37,8 @@ const OFERTA = (() => {
   // últimos `dias` (uma sessão longa de dias atrás traria o ritmo de níveis antigos), e só zona com 10 min ou mais.
   // { [zona em minúsculas]: { abatesMin, xpAbate } }. O XP é o sem bônus de live (xpBase): uma zona medida com a live
   // ligada pareceria render mais que outra medida sem ela. Limite: o tempo da sessão só conta com abate no último minuto,
-  // então a demora depois de uma morte fica de fora (a Lupa não guarda mortes por zona)
+  // então a demora depois de uma morte fica de fora (a Lupa não guarda mortes por zona): o ritmo sai otimista, e mais na zona
+  // em que você morre mais
   function ritmosDe(sessoes, agora = Date.now(), dias = 7) {
     const soma = {};
     for (const s of sessoes || []) {
@@ -69,18 +79,20 @@ const OFERTA = (() => {
   }
   // a melhor oferta: a de mais XP por hora caçando com ela, no seu ritmo, entre as das zonas em que a Lupa já mediu você (o
   // Desafio da zona de cima o jogo calcula como se você matasse no mesmo ritmo lá, e por isso parecia render mais). Sem
-  // medição em nenhuma, a de mais prêmio por minuto pelo tempo do jogo. Empate (até 1%, o arredondamento do prêmio que o jogo
-  // mostra, como "145.5k"): a mais curta. Devolve o índice ou -1
+  // medição em nenhuma, a de mais prêmio por minuto pelo tempo do jogo (também com o custo da entrega). Empate: as que ficam
+  // a até 1% da melhor, ou dentro do arredondamento do prêmio que o jogo mostra ("1.2M" erra até ~4%), e dessas a mais
+  // curta. Devolve o índice ou -1
   function escolher(ofertas, ritmos = {}) {
     const validas = (ofertas || []).map((o, k) => ({ o, k })).filter(({ o }) => o && o.min > 0 && o.xp > 0 && o.zona);
     const medidas = validas.map((x) => ({ ...x, v: noSeuRitmo(x.o, ofertas, ritmos) })).filter((x) => x.v);
-    const lista = medidas.length ? medidas.map((x) => ({ k: x.k, nota: x.v.xpHora, min: x.v.min })) : validas.map(({ o, k }) => ({ k, nota: o.xp / o.min, min: o.min }));
-    const EMPATE = 0.01;
-    let melhor = null;
-    for (const x of lista) if (!melhor || x.nota > melhor.nota * (1 + EMPATE) || (x.nota >= melhor.nota * (1 - EMPATE) && x.min < melhor.min)) melhor = x;
-    return melhor ? melhor.k : -1;
+    const lista = medidas.length ? medidas.map((x) => ({ k: x.k, nota: x.v.xpHora, min: x.v.min, folga: x.o.xpFolga || 0 }))
+      : validas.map(({ o, k }) => ({ k, nota: o.xp / (o.min + CUSTO_ENTREGA_MIN), min: o.min, folga: o.xpFolga || 0 }));
+    if (!lista.length) return -1;
+    const topo = lista.reduce((a, b) => (b.nota > a.nota ? b : a));
+    const empatadas = lista.filter((x) => x.nota >= topo.nota * (1 - Math.max(0.01, x.folga + topo.folga)));
+    return empatadas.reduce((a, b) => (b.min < a.min ? b : a)).k;
   }
-  return { numero, lerOferta, ritmosDe, abatesDa, noSeuRitmo, escolher, CUSTO_ENTREGA_MIN };
+  return { numero, folga, lerOferta, ritmosDe, abatesDa, noSeuRitmo, escolher, CUSTO_ENTREGA_MIN };
 })();
 
 if (typeof module === 'object' && module && module.exports) module.exports = OFERTA;
