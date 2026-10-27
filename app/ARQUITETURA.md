@@ -223,8 +223,10 @@ Ficha (e da Central; no site, Calcular → Pontos e barra) desenha. O envio.js s
 
 - **Pontos**: um ponto sozinho mexe uns 0,2 a 0,4%, menos que a margem da simulação. Por isso a conta olha 5 níveis à frente:
   os pontos livres mais os que vêm (1 de habilidade por nível até o 50, 3 de atributo por nível), todos numa habilidade (até o
-  rank que o nível de chegada deixa; habilidade nova entra na barra no lugar de cada uma, e fica o melhor lugar) ou todos num
-  atributo, comparados no nível de chegada contra uma base nesse nível com os pontos guardados. As regras de rank
+  rank que o nível de chegada deixa) ou todos num atributo, comparados no nível de chegada contra uma base nesse nível com os
+  pontos guardados. Habilidade fora da barra (o jogo não a usa) entra na barra no lugar de cada uma, e fica o melhor lugar: a
+  nova é comparada com a barra atual (aprender e pôr na barra é uma coisa só); a aprendida, com uma base que já tem a mesma
+  barra, para o ganho ser só o dos pontos (a troca de barra sozinha aparece na parte Barra). As regras de rank
   (`rankMaximo`, `KIT_HABS`, `BARRA`, `PONTOS_POR_NIVEL`, `NIVEL_PONTOS_HAB`) vêm do `dados-jogo.js`, conferidas pelo gerador
   contra o `rankMaximoNoNivel` do motor em todos os campeões e níveis; o campeão sai do nome das habilidades da ficha
   (`campeaoPelasHabs`).

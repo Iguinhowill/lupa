@@ -573,8 +573,8 @@ function cartaoTreino(e, ctx, opts = {}) {
     // a barra da ficha guarda null nos espaços vazios; a da conta, não
     const mudou = String(g.nivel) !== String(parseInt(e.nivel, 10)) || (g.barraAtual || []).join() !== (e.ficha?.barra || []).map((x) => x?.t).filter(Boolean).join();
     partes.push(h('p', { class: 'gasto-quando fraco' }, `Conta de ${dataHora(g.em)} · nível ${g.nivel} · ${g.zona?.nome || '?'}`,
-      mudou ? h('span', { class: 'gasto-mudou' }, g.esperandoFicha ? ' · mudou, mas um item equipado ainda está sendo avaliado (ou é novo demais para a Lupa): a conta espera'
-        : noApp ? ' · mudou: a conta refaz sozinha em 2 min' : ' · mudou desde esta conta') : null));
+      g.esperandoFicha ? h('span', { class: 'gasto-mudou' }, ' · um item equipado ainda está sendo avaliado (ou é novo demais para a Lupa): a conta espera')
+        : mudou ? h('span', { class: 'gasto-mudou' }, noApp ? ' · mudou: a conta refaz sozinha em 2 min' : ' · mudou desde esta conta') : null));
     const hb = g.habilidade, at = g.atributo, br = g.barra;
     if (hb?.nivel) partes.push(blocoTreino(`Habilidade · os próximos ${hb.pontos} ${hb.pontos === 1 ? 'ponto' : 'pontos'} (até o nível ${hb.nivel})`, hb.opcoes || [],
       'Nenhuma habilidade muda o farm de um jeito que dê para medir: ponha onde quiser.'));
@@ -584,7 +584,7 @@ function cartaoTreino(e, ctx, opts = {}) {
       const melhor = (br.opcoes || [])[0];
       partes.push(melhor?.rende ? blocoTreino('Barra', br.opcoes, '')
         : h('div', { class: 'treino-bloco' }, h('h3', { class: 'sub-cab' }, 'Barra'),
-          h('p', { class: 'gasto-nada' }, br.testadas ? `Nenhuma das outras ${br.testadas} barras com as habilidades que você já aprendeu rende mais que a margem da simulação${melhor ? ` (a mais perto: ${pctGanho(melhor.ganho)})` : ''}: fique com a sua (${(g.barraAtual || []).join(' ')}).` : 'Você ainda não tem habilidades para mais de uma barra.')));
+          h('p', { class: 'gasto-nada' }, br.testadas ? `${br.testadas === 1 ? 'A outra barra' : `Nenhuma das outras ${br.testadas} barras`} com as habilidades que você já aprendeu rende mais que a margem da simulação${melhor ? ` (a mais perto: ${pctGanho(melhor.ganho)})` : ''}: fique com a sua (${(g.barraAtual || []).join(' ')}).` : 'Você ainda não tem habilidades para mais de uma barra.')));
     }
     partes.push(nota(`Simulação do próprio jogo: ${g.sim?.conferir?.cacadas || 8} caçadas de ${g.sim?.conferir?.minutos || 60} min por opção. Os pontos são comparados no nível de chegada, contra a sua build com os pontos guardados; um ponto sozinho mexe menos que a margem, por isso a conta olha 5 níveis à frente.`));
   } else if (!rodando && g?.estado !== 'erro') partes.push(h('p', { class: 'entregar-status fraco' }, noApp ? 'Ainda não calculei. Roda junto com o Onde gastar o ouro (cerca de 1 min cada).' : 'O app ainda não mandou esta conta.'));

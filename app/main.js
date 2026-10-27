@@ -493,11 +493,13 @@ function vigiarGasto(nome, e, agora = Date.now()) {
   }
   if (g?.esperandoFicha) gravarGasto(nome, { esperandoFicha: false });
   const sig = Gastar.assinatura(b);
-  // em dia: as duas contas prontas para esta build e com menos de 6 h. Depois de um erro (em qualquer uma), a mesma build espera
-  // 30 min (sem internet, por exemplo); uma build nova tenta já
-  const contas = CONTAS.map((c) => lerChave(c + ':' + nome));
-  const emDia = contas.every((x) => x?.estado === 'pronto' && x.assinatura === sig && agora - (x.em || 0) < GASTO.velho);
-  const esperaErro = contas.some((x) => x?.estado === 'erro' && x.erroAssinatura === sig && agora - (x.erroEm || 0) < GASTO.depoisDoErro);
+  // em dia: o Onde gastar o ouro pronto para esta build e com menos de 6 h, e os Pontos e barra prontos para ela ou já tendo falhado
+  // nela (um erro que se repete na mesma build, como o campeão não reconhecido, não faz a rodada inteira voltar a cada 30 min).
+  // Depois de um erro do Onde gastar o ouro, a mesma build espera 30 min (sem internet, por exemplo); uma build nova tenta já
+  const tr = lerChave('treino:' + nome);
+  const emDia = g?.estado === 'pronto' && g.assinatura === sig && agora - (g.em || 0) < GASTO.velho
+    && ((tr?.estado === 'pronto' && tr.assinatura === sig) || (tr?.estado === 'erro' && tr.erroAssinatura === sig));
+  const esperaErro = g?.estado === 'erro' && g.erroAssinatura === sig && agora - (g.erroEm || 0) < GASTO.depoisDoErro;
   if (emDia || esperaErro) { if (pend) { clearTimeout(pend.t); esperasGasto.delete(nome); } return; }
   if (pend?.sig === sig) return;
   clearTimeout(pend?.t);

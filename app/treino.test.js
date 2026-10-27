@@ -7,6 +7,7 @@ const T = require('./treino');
 const G = require('./gastar');
 const ESTADO = require('./teste-gastar/estado-yasuo.json');
 const copia = (o) => JSON.parse(JSON.stringify(o));
+const nova0 = (hab) => hab.filter((x) => x.grupo === 'hab:T');
 
 test('combinações', () => {
   assert.equal(T.combinacoes(['a', 'b', 'c', 'd', 'e'], 4).length, 5);
@@ -34,7 +35,9 @@ test('opções do Yasuo: ranks até o máximo do nível, atributos e as barras d
   // aprendida e fora da barra (E): os pontos só rendem com ela na barra, então entra no lugar de cada uma das 4
   const e = hab.filter((x) => x.grupo === 'hab:E');
   assert.equal(e.length, 4);
-  assert.ok(e.every((x) => x.barra.includes('E') && x.ranks.E === 10 && /rank 5 → 10 e pôr na barra no lugar de/.test(x.titulo)));
+  assert.ok(e.every((x) => x.barra.includes('E') && x.ranks.E === 10 && /rank 5 → 10, com ela na barra no lugar de/.test(x.titulo)));
+  assert.ok(e.every((x) => x.base && x.base.nivel === 42 && x.base.barra.join() === x.barra.join()), 'comparada com uma base que já tem a mesma barra');
+  assert.ok(nova0(hab).every((x) => !x.base), 'a nova (rank 0) é comparada com a barra atual');
   // na barra (F) ou passiva (D): só o rank
   assert.ok(!f.barra && !hab.find((x) => x.id === 'hab:D').barra);
   // habilidade nova: aprende e entra na barra no lugar de cada uma das 4
@@ -70,6 +73,9 @@ test('a conta com o simulador falso', async () => {
   assert.equal(at.length, 5);
   assert.ok(at.slice(0, 2).every((l) => /Força|Foco/.test(l.titulo) && l.rende));
   assert.ok(r.barra.opcoes.every((l) => !l.rende && l.ganho < 0), 'a barra atual é a melhor');
+  // a aprendida fora da barra (E): os pontos nela não mudam nada no "motor" falso; comparada com a base de mesma barra, dá 0, e não os −2% da troca
+  const eE = r.habilidade.opcoes.find((l) => /Espada Ágil/.test(l.titulo));
+  if (eE) assert.ok(Math.abs(eE.ganho) < 1e-6, 'só o ganho dos pontos: ' + eE.ganho);
   assert.equal(r.barra.testadas, 34);
   assert.equal(r.assinatura, G.assinatura(G.buildDoEstado(ESTADO)));
   const sem = copia(ESTADO); sem.ficha.habs = [{ t: 'Q', nome: 'Habilidade que não existe', rank: '1/10' }];

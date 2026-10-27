@@ -45,12 +45,16 @@ function opcoesTreino(b, campeao, livres) {
     const ranks = { ...b.ranks, [t]: r + mais };
     if (!h.passiva && !b.barra.includes(t)) {
       // fora da barra o jogo não usa a habilidade: os pontos nela só rendem com ela na barra (no espaço vazio ou no lugar de cada
-      // uma; fica o melhor lugar). Vale para a nova (rank 0) e para a aprendida que está fora
+      // uma; fica o melhor lugar). A nova (rank 0) é comparada com a barra atual (aprender e pôr na barra é uma coisa só); a
+      // aprendida que está fora, com uma base que já tem a mesma barra, para o ganho ser só o dos pontos (a troca de barra
+      // sozinha aparece na parte Barra)
       const lugares = b.barra.length < JOGO.BARRA ? [-1] : b.barra.map((_, k) => k);
-      const acao = r === 0 ? `Aprender ${nome(t)}${mais > 1 ? ` até o rank ${mais}` : ''}` : `${nome(t)}: rank ${r} → ${r + mais}`;
-      for (const k of lugares) lista.push({ id: `hab:${t}@${k}`, grupo: 'hab:' + t, parte: 'habilidade', nivel: nivelHab, ranks,
-        barra: k < 0 ? [...b.barra, t] : b.barra.map((x, j) => (j === k ? t : x)),
-        titulo: k < 0 ? `${acao} e pôr na barra` : `${acao} e pôr na barra no lugar de ${nome(b.barra[k])}` });
+      for (const k of lugares) {
+        const barra = k < 0 ? [...b.barra, t] : b.barra.map((x, j) => (j === k ? t : x)), onde = k < 0 ? 'na barra' : `na barra no lugar de ${nome(b.barra[k])}`;
+        lista.push({ id: `hab:${t}@${k}`, grupo: 'hab:' + t, parte: 'habilidade', nivel: nivelHab, ranks, barra,
+          base: r > 0 ? { id: `base@${nivelHab}:${barra.join('')}`, nivel: nivelHab, barra } : null,
+          titulo: r === 0 ? `Aprender ${nome(t)}${mais > 1 ? ` até o rank ${mais}` : ''} e pôr ${onde}` : `${nome(t)}: rank ${r} → ${r + mais}, com ela ${onde}` });
+      }
     } else lista.push({ id: 'hab:' + t, grupo: 'hab:' + t, parte: 'habilidade', nivel: nivelHab, ranks, titulo: `${nome(t)}: rank ${r} → ${r + mais}` });
   }
   // 2) os pontos de atributo, todos num atributo só
@@ -68,9 +72,15 @@ function opcoesTreino(b, campeao, livres) {
   return { lista, nivelHab, nivelAtrib, qtdAtrib: qtd, qtdHab: alvo.habilidade };
 }
 
-// a base de cada nível usado (o atual e, sem ponto livre, o de cima)
+// as bases de comparação: a build atual em cada nível usado (o atual e o de chegada dos pontos) e as de barra trocada que alguma
+// opção pede (habilidade aprendida fora da barra)
 const baseDo = (nivel) => ({ id: 'base@' + nivel, nivel });
-const ganhoDe = (r, c) => G.ganhoPareado(r['base@' + c.nivel], r[c.id]);
+const basesDe = (opcoes, nivel) => {
+  const m = new Map([...new Set(opcoes.map((c) => c.nivel).concat(nivel))].map((n) => [`base@${n}`, baseDo(n)]));
+  for (const c of opcoes) if (c.base) m.set(c.base.id, c.base);
+  return [...m.values()];
+};
+const ganhoDe = (r, c) => G.ganhoPareado(r[c.base?.id || 'base@' + c.nivel], r[c.id]);
 
 // da triagem para a conferência: de cada parte, as melhores (de cada habilidade nova, o melhor lugar na barra)
 function escolher(opcoes, triagem) {
@@ -92,10 +102,10 @@ async function calcular({ estado, sessoes = [], agora = Date.now(), rodar }) {
   if (!campeao) throw new Error('Não reconheci o campeão pelas habilidades da ficha (abra a aba de habilidades no jogo uma vez).');
   const livres = { habilidade: Math.max(0, Number(estado.pontos?.habilidade) || 0), atributo: Math.max(0, Number(estado.pontos?.atributo) || 0) };
   const { lista, nivelHab, nivelAtrib, qtdAtrib, qtdHab } = opcoesTreino(b, campeao, livres);
-  const opcoes = lista.slice(0, MAX_TRIAGEM), bases = [...new Set(opcoes.map((c) => c.nivel).concat(b.nivel))].map(baseDo);
+  const opcoes = lista.slice(0, MAX_TRIAGEM), bases = basesDe(opcoes, b.nivel);
   const triagem = await rodar(G.jobsDe(b, opcoes, G.SIM.triagem, bases), 'triagem');
   const escolhidas = escolher(opcoes, triagem);
-  const basesConf = [...new Set(escolhidas.map((c) => c.nivel).concat(b.nivel))].map(baseDo);
+  const basesConf = basesDe(escolhidas, b.nivel);
   const conf = await rodar(G.jobsDe(b, escolhidas, G.SIM.conferir, basesConf), 'conferir');
   const base = conf['base@' + b.nivel], media = (v) => v.reduce((s, x) => s + x, 0) / v.length;
   const econ = G.economiaMedida(sessoes, b.zona.nome, agora) || G.economiaSimulada(b, media(base.abatesH));
