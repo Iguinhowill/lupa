@@ -161,7 +161,7 @@
       const [, id, q] = (s.dataset.id || '').split(':'), d = dica(s), l1 = d.split('\n')[0];
       const nome = l1.replace(/\s*×.*$/, '').trim(), qtd = numero(q) || numero((l1.match(/×\s*([\d.,]+)/) || [])[1]);
       if (!id || !nome || !qtd) continue;
-      const x = por.get(id) || { id, nome, qtd: 0, cada: numero((d.match(/por ([\d.,]+) de ouro cada/) || [])[1]) || null };
+      const x = por.get(id) || { id, nome, qtd: 0, cada: numero((d.match(/por ([\d.,]+[kM]?) de ouro cada/) || [])[1]) || null };
       x.qtd += qtd;
       por.set(id, x);
     }
@@ -475,8 +475,11 @@
       for (const [d, q] of Object.entries(pend.drops)) s.drops[d] = (s.drops[d] || 0) + q;
       pend = novoPend();
       tenta(() => chrome.storage.local.set({ ['cacada:' + nome]: cacada }));
-    } else if (s && dm) {
+    } else if (s && (dm || Object.keys(pend.drops).length)) {
+      // sem abate agora: a morte e o lendário que o servidor manda depois (o que esperava espaço na mochila) vão para a última sessão
       s.mortes += dm;
+      for (const [d, q] of Object.entries(pend.drops)) s.drops[d] = (s.drops[d] || 0) + q;
+      pend.drops = {};
       tenta(() => chrome.storage.local.set({ ['cacada:' + nome]: cacada }));
     }
   }

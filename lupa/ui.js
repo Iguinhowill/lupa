@@ -119,13 +119,13 @@ function haQuanto(ms) {
   const m = Math.floor(ms / 60e3);
   return m < 1 ? 'agora' : m < 60 ? `há ${m} min` : m < 48 * 60 ? `há ${Math.floor(m / 60)} h` : `há ${Math.floor(m / 1440)} d`;
 }
-// O preço de um item pelo código da tela: loja (null sem as tabelas ou com a qualidade ainda sendo sorteada, "~?") e o menor visto
-// no Mercado nos últimos 7 dias (visto: { ouro, gemas, n, em } ou null). comCarta: o Mercado é o da mesma versão sem a carta.
 // a chave da mesma versão sem a carta, como o Mercado agrupa ("3031+4#velocidade2~B" → "3031+4~B"); null fora do formato
 function chaveMercado(id) {
   const m = String(id || '').match(RE_CHAVE_ITEM);
   return m ? `${m[1]}${m[2]}${m[3] && +m[3] ? '+' + +m[3] : ''}~${m[5]}` : null;
 }
+// O preço de um item pelo código da tela: loja (null sem as tabelas ou com a qualidade ainda sendo sorteada, "~?") e o menor visto
+// no Mercado nos últimos 7 dias (visto: { ouro, gemas, n, em } ou null). comCarta: o Mercado é o da mesma versão sem a carta.
 function precoItem(it, ctx) {
   const m = String(it?.id || '').match(RE_CHAVE_ITEM);
   if (!m) return null;
@@ -211,16 +211,20 @@ function secaoMochila(e, ctx) {
   const f = e.ficha, oc = e.mochila;
   const grupos = new Map();
   for (const it of f.mochila || []) { const k = it.id || it.nome; const g = grupos.get(k); if (g) g.qtd++; else grupos.set(k, { it, qtd: 1, p: precoItem(it, ctx) }); }
-  const itens = [...grupos.values()].sort((a, b) => (b.p?.loja ?? -1) * b.qtd - (a.p?.loja ?? -1) * a.qtd);
+  // do que mais vale no Lojista para o que menos vale; os sem preço vão para o fim, os mais numerosos primeiro
+  const itens = [...grupos.values()].sort((a, b) => (b.p?.loja != null) - (a.p?.loja != null) || (b.p?.loja ?? 0) * b.qtd - (a.p?.loja ?? 0) * a.qtd || b.qtd - a.qtd);
   const esp = (f.espolios || []).map((x) => ({ x, total: (cadaEspolio(x) ?? 0) * x.qtd })).sort((a, b) => b.total - a.total);
   if (!itens.length && !esp.length) return null;
   const somaItens = itens.reduce((s0, g) => s0 + (g.p?.loja ?? 0) * g.qtd, 0), somaEsp = esp.reduce((s0, y) => s0 + y.total, 0);
   // "~?" no código: o servidor ainda está sorteando a qualidade, e o Lojista não compra até sair
   const comMercado = itens.filter((g) => g.p?.visto?.ouro != null), avaliando = itens.filter((g) => /~\?$/.test(g.it.id || '')).reduce((s0, g) => s0 + g.qtd, 0);
+  // item que as tabelas não conhecem (mais novo que o dados-jogo.js) não soma no Lojista: o detalhe diz quantos ficaram de fora
+  const semPreco = typeof JOGO === 'undefined' ? 0 : itens.filter((g) => g.p?.loja == null && !/~\?$/.test(g.it.id || '')).reduce((s0, g) => s0 + g.qtd, 0);
   const mercado = comMercado.reduce((s0, g) => s0 + g.p.visto.ouro * g.qtd, 0), nItens = itens.reduce((s0, g) => s0 + g.qtd, 0);
   const temLoja = typeof JOGO !== 'undefined' || esp.some((y) => y.x.cada != null);
   const titulo = `Mochila${oc?.total ? ` · ${oc.usados}/${oc.total}` : ''}`;
-  const detalhe = [itens.length ? `itens ${milhar(somaItens)}` : null, esp.length ? `espólios ${milhar(somaEsp)}` : null, avaliando ? `${avaliando} sendo avaliado${avaliando > 1 ? 's' : ''} (sem preço ainda)` : null].filter(Boolean).join(' · ');
+  const detalhe = [itens.length ? `itens ${milhar(somaItens)}` : null, esp.length ? `espólios ${milhar(somaEsp)}` : null, avaliando ? `${avaliando} sendo avaliado${avaliando > 1 ? 's' : ''} (sem preço ainda)` : null,
+    semPreco ? `${semPreco} sem preço nas tabelas (não somado${semPreco > 1 ? 's' : ''})` : null].filter(Boolean).join(' · ');
   return secao(titulo,
     temLoja ? h('div', { class: 'valor-mochila' },
       h('div', { class: 'grade-2' },
@@ -361,10 +365,10 @@ function desenharCacada(e, ctx) {
   if (!x) return vazio('Ainda não há caçada registrada para este personagem. Os números aparecem depois do primeiro abate com a Lupa ligada.');
   const ativa = Date.now() - (x.ultimoAbate || x.fim) < PAUSA, campo = semBonus ? 'xpBase' : 'xp';
   const zonas = Object.entries(x.zonas || {}).filter(([, z]) => z.seg >= 30 || z.abates).sort((a, b) => b[1].seg - a[1].seg);
-  // o que caiu, do que mais vale no Lojista para o que menos vale (sem preço: pela quantidade, no fim)
+  // o que caiu, do que mais vale no Lojista para o que menos vale (sem preço: no fim, os mais numerosos primeiro)
   const vd = valorDrops(x.drops);
   const drops = Object.entries(x.drops || {}).map(([n, q]) => ({ n, q, v: valorDrop(n)?.loja ?? null }))
-    .sort((a, b) => (b.v ?? -1) * b.q - (a.v ?? -1) * a.q || b.q - a.q).slice(0, 8);
+    .sort((a, b) => (b.v != null) - (a.v != null) || (b.v ?? 0) * b.q - (a.v ?? 0) * a.q || b.q - a.q).slice(0, 8);
   const anteriores = sessoes.slice(0, -1).slice(-5).reverse();
   // melhor zona por XP/h: só entre as que têm 2 min para a taxa valer, e se houver mais de uma para comparar
   const taxaZona = (z) => (z.seg >= 120 ? porHora(z[campo], z.seg) : null);

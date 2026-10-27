@@ -240,15 +240,13 @@ const Nuvem = {
     return data.reverse().map((r) => ({ ts: Date.parse(r.lido_em), ouro: r.ouro, gemas: r.gemas, n: r.n }));
   },
   // o menor preço mais recente de cada versão pedida (chaves sem carta, como "3031+4~B") nos últimos 7 dias, no mesmo formato
-  // do mercado:menores da Lupa ({ [chave]: { ouro, gemas, n, em } }): a Ficha do site mostra o Mercado como a do PC de casa
+  // do mercado:menores da Lupa ({ [chave]: { ouro, gemas, n, em } }): a Ficha do site mostra o Mercado como a do PC de casa.
+  // Lê de mercado_ultimos (uma linha por versão, mantida por gatilho a cada leitura), não das leituras de 7 dias.
   async menores(chaves) {
     if (!chaves.length) return {};
-    const { data, error } = await SB.from('mercado_precos').select('chave,lido_em,ouro,gemas,n').in('chave', chaves)
-      .gte('lido_em', iso(Date.now() - 7 * DIA)).order('lido_em', { ascending: false }).limit(1000);
+    const { data, error } = await SB.from('mercado_ultimos').select('chave,lido_em,ouro,gemas,n').in('chave', chaves).gte('lido_em', iso(Date.now() - 7 * DIA));
     if (error) throw error;
-    const r = {};
-    for (const x of data) if (!r[x.chave] && (x.ouro != null || x.gemas != null)) r[x.chave] = { ouro: x.ouro, gemas: x.gemas, n: x.n, em: Date.parse(x.lido_em) };
-    return r;
+    return Object.fromEntries(data.map((x) => [x.chave, { ouro: x.ouro, gemas: x.gemas, n: x.n, em: Date.parse(x.lido_em) }]));
   },
   async mercado(limite = 40) {
     const { data, error } = await SB.from('mercado_leituras').select('lido_em,completa,filtros,grupos,personagem').order('lido_em', { ascending: false }).limit(limite);

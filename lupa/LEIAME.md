@@ -72,7 +72,8 @@ menor preço visto no Mercado para a mesma versão (item, qualidade e refino, se
 `mercado:menores` (`{ chave: { ouro, gemas, n, em } }`, 7 dias, até 400 chaves). A Lupa só mostra: não vende nada.
 A seção **Mochila** soma tudo: quanto a mochila vale no Lojista (itens, inclusive os básicos, e as pilhas de espólio, pelo preço
 que a dica do jogo mostra) e quanto os itens valem pelo menor preço do Mercado. Itens iguais aparecem juntos ("3× Botas").
-No site, a aba Agora busca o mesmo menor preço no banco (`mercado_precos`, 7 dias).
+No site, a aba Agora busca o mesmo menor preço no banco (`mercado_ultimos`: o último preço de cada versão, que um
+gatilho atualiza a cada leitura do Mercado; vale o dos últimos 7 dias).
 
 **Valor dos drops na Caçada:** a sessão mostra **Drops no Lojista/h** e **Ouro + drops/h**, e a lista do que caiu traz o valor
 de cada linha. Espólio vale o preço do jogo; item comum conta como qualidade B (a do chat ainda não é a sorteada); o lendário
