@@ -209,6 +209,16 @@ button { font: inherit; color: inherit; }
 .nuvem-form input { height: 40px; padding: 0 10px; background: var(--cartao-2); border: 1px solid var(--borda); border-radius: 8px; color: var(--texto); font: inherit; }
 .nuvem-form input:focus-visible { outline: 2px solid var(--ouro); outline-offset: 1px; }
 .nuvem-form .botao { align-self: flex-start; }
+/* Entregar e seguir (só no app) */
+.entregar .linha-topo { gap: 10px; align-items: center; }
+.entregar-titulo { display: flex; flex-direction: column; min-width: 0; }
+.entregar-sub { font-size: 12.5px; }
+.entregar .botao { flex: none; }
+.entregar .botao.principal:not(:disabled) { background: var(--pronta-fundo); border-color: var(--pronta-borda); color: var(--ouro-claro); }
+.entregar .botao:disabled { opacity: .5; cursor: default; }
+.entregar-status { margin: 0; font-size: 13px; }
+.entregar-status.erro { color: var(--laranja); }
+.entregar-status.ok { color: var(--verde); }
 .nuvem-linha { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; }
 .nuvem-erro { margin: 0; font-size: 13px; color: var(--alerta-texto); }
 .nuvem-erro:empty { display: none; }

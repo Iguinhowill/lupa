@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8"><title>LoL Idle (falso)</title>
+<style>
+  body { margin: 0; font: 14px system-ui; background: #111; color: #ddd; }
+  #cliente { display: grid; grid-template-columns: minmax(0, 1fr) 300px; height: 100vh; }
+  body.coluna-escondida #cliente { grid-template-columns: minmax(0, 1fr); }
+  body.coluna-escondida #lateral { display: none; }
+  #moldura { position: relative; background: #1b2a3a; }
+  #hud { position: absolute; left: 10px; top: 8px; }
+  #rastreador { position: absolute; left: 10px; top: 40px; display: flex; flex-direction: column; gap: 4px; width: 230px; }
+  .rastreio { text-align: left; padding: 6px; } .rastreio small { display: block; }
+  #bt-esconder-coluna { position: absolute; right: 2px; top: 60px; width: 22px; height: 40px; }
+  #lateral { background: #222; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .janela { position: fixed; left: 25%; top: 15%; width: 50%; min-height: 200px; background: #2a2a33; border: 2px solid #777; padding: 10px; z-index: 5; }
+  #marcadores { position: relative; height: 260px; background: #234; }
+  .marcador { position: absolute; transform: translate(-50%, -50%); }
+  .troca-linha { display: flex; gap: 8px; align-items: center; margin: 4px 0; } .troca-linha .info { flex: 1; } .troca-linha small { display: block; }
+  #debug { position: fixed; left: 10px; bottom: 10px; margin: 0; font: 11px monospace; color: #9f9; z-index: 1; pointer-events: none; white-space: pre-wrap; max-width: 60%; max-height: 30vh; overflow: hidden; opacity: .6; }
+</style></head>
+<body>
+<div id="cliente">
+  <div id="moldura">
+    <div id="hud"><span id="hud-local">Fosso do Dragão</span></div>
+    <div id="rastreador">
+      <button type="button" id="rastreio-topo" class="rt-aba">Missões</button>
+      <button type="button" id="rastreio-tarefa" class="rastreio pronta"><b>Tarefa: 120 monstros</b><small>Pronta! Volte ao Capitão da Legião.</small></button>
+    </div>
+    <div id="log"></div>
+    <button type="button" id="bt-esconder-coluna">›</button>
+  </div>
+  <aside id="lateral">
+    <div id="painel-status"><header><span id="st-nome">Teste 1</span></header></div>
+    <span id="st-nivel">40</span>
+    <span id="mochila-qtd">5/34</span>
+    <div class="botoes"><button id="voltar-base" class="botao">Voltar para a Fonte</button><button id="abrir-mapa" class="botao">Mapa</button></div>
+  </aside>
+</div>
+<div class="janela" id="janela-npc" hidden><b>Capitão da Legião</b><div id="npc-conversa"></div><div id="npc-palavras"></div><div id="npc-troca"></div></div>
+<div class="janela" id="janela-mapa" hidden><div id="marcadores"></div><div id="mapa-info"></div></div>
+<pre id="debug"></pre>
+<script>
+  const $ = (s) => document.querySelector(s);
+  // a proteção p751 do jogo: clique, change e input que não vieram de uma pessoa não fazem nada (e o jogo conta)
+  let cliqueInterno = 0;
+  const D = window.__d = { cliquesFalsos: 0, cliquesReais: 0, teclasFalsas: 0, teclasReais: 0, passos: [] };
+  for (const tipo of ['click', 'change', 'input']) addEventListener(tipo, (e) => {
+    if (e.isTrusted || cliqueInterno) { if (tipo === 'click') D.cliquesReais++; return; }
+    e.stopImmediatePropagation(); e.preventDefault(); D.cliquesFalsos++;
+  }, true);
+  // diagnóstico: cada evento de mouse que chega (onde, em quem, se é de verdade)
+  D.mouse = [];
+  for (const tipo of ['focus', 'blur']) addEventListener(tipo, () => { D.mouse.push({ t: tipo, ms: Math.round(performance.now()) }); });
+  for (const tipo of ['mouseover', 'mousemove', 'mousedown', 'mouseup', 'click', 'pointerdown']) addEventListener(tipo, (e) => {
+    D.mouse.push({ t: tipo, x: Math.round(e.clientX), y: Math.round(e.clientY), alvo: e.target.id || e.target.className || e.target.tagName, ok: e.isTrusted, ms: Math.round(performance.now()), foco: document.hasFocus(), vis: document.visibilityState });
+    if (D.mouse.length > 60) D.mouse.shift();
+  }, true);
+  const mostrar = () => { $('#debug').textContent = JSON.stringify({ ...D, local: $('#hud-local').textContent }); };
+  const passo = (p) => { D.passos.push(p); mostrar(); };
+  let tarefa = { pronta: true };
+  const ZONAS = [['fonte', 'Fonte', 10, 85], ['lobos', 'Toca dos Lobos', 30, 60], ['dragao', 'Fosso do Dragão', 60, 40], ['barao', 'Covil do Barão', 80, 20]];
+  const ir = (nome, ms) => setTimeout(() => { $('#hud-local').textContent = nome; passo('chegou:' + nome); }, ms);
+  addEventListener('keydown', (e) => {
+    if (!e.isTrusted) { D.teclasFalsas++; return; }
+    if (e.altKey || e.ctrlKey) return;
+    if (e.target.tagName === 'INPUT') return;
+    if (e.key === 'b' || e.key === 'B') { D.teclasReais++; passo('tecla:b'); ir('Fonte', 1200); }
+    if (e.key === 'm' || e.key === 'M') { D.teclasReais++; passo('tecla:m'); abrirMapa(); }
+  });
+  $('#rastreio-tarefa').addEventListener('click', () => {
+    passo('rastreio');
+    if (!tarefa || !tarefa.pronta || $('#hud-local').textContent !== 'Fonte') return;
+    setTimeout(() => {
+      $('#janela-npc').hidden = false;
+      $('#npc-conversa').innerHTML = '<p class="ele">Você abateu 120! Venha <b>entregar</b> a tarefa.</p>';
+      palavras(['entregar', 'cancelar', 'tchau']);
+    }, 1500);
+  });
+  const palavras = (l) => { $('#npc-palavras').innerHTML = l.map((w) => `<button class="opcao" data-palavra="${w}">${w}</button>`).join(''); };
+  $('#npc-palavras').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-palavra]'); if (!b) return;
+    passo('palavra:' + b.dataset.palavra);
+    if (b.dataset.palavra === 'entregar') {
+      tarefa = null; $('#rastreio-tarefa').hidden = true;
+      $('#npc-conversa').insertAdjacentHTML('beforeend', '<p class="ele">Excelente trabalho! Aqui está: 30k de ouro. Quer outra <b>tarefa</b>?</p>');
+      palavras(['tarefa', 'tchau']);
+    } else if (b.dataset.palavra === 'tarefa') {
+      const O = [['60 monstros em Toca dos Lobos', 'Rápida', '~7 min · 50.0k de XP · 12.0k de ouro'],
+        ['120 monstros em Fosso do Dragão', 'Normal', '~15 min · 150.0k de XP · 30.0k de ouro · item épico'],
+        ['400 monstros em Covil do Barão', 'Longa', '~1,5 h · 600.0k de XP · 150.0k de ouro']];
+      $('#npc-troca').innerHTML = '<div class="troca-lista">' + O.map(([t, s, d], k) => `<div class="troca-linha"><img alt=""><div class="info"><b>${t} <span class="selo-tarefa">${s}</span></b><small>${d}</small></div><button class="botao" data-tarefa="${k}">Aceitar</button></div>`).join('') + '</div>';
+    }
+  });
+  $('#npc-troca').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-tarefa]'); if (!b) return;
+    passo('aceitou:' + b.dataset.tarefa);
+    const zona = ['Toca dos Lobos', 'Fosso do Dragão', 'Covil do Barão'][+b.dataset.tarefa];
+    tarefa = { pronta: false, zona };
+    const r = $('#rastreio-tarefa'); r.hidden = false; r.classList.remove('pronta'); r.innerHTML = `<b>Tarefa nova</b><small>0/120 · ${zona}</small>`;
+    $('#npc-troca').innerHTML = '';
+    setTimeout(() => { $('#janela-npc').hidden = true; }, 600);
+  });
+  function abrirMapa() {
+    $('#janela-mapa').hidden = !$('#janela-mapa').hidden;
+    $('#marcadores').innerHTML = ZONAS.map(([id, nome, x, y]) => `<button class="marcador" data-local="${id}" style="left:${x}%;top:${y}%" aria-label="${nome}"><span class="mk-nome">${nome}</span></button>`).join('');
+  }
+  $('#marcadores').addEventListener('click', (e) => {
+    const m = e.target.closest('.marcador'); if (!m) return;
+    passo('marcador:' + m.dataset.local);
+    $('#mapa-info').innerHTML = `<button class="botao mi-ir" data-ir="${m.dataset.local}">Viajar para ${m.getAttribute('aria-label')}</button>`;
+  });
+  $('#mapa-info').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-ir]'); if (!b) return;
+    passo('ir:' + b.dataset.ir);
+    $('#janela-mapa').hidden = true;
+    ir(ZONAS.find((z) => z[0] === b.dataset.ir)[1], 1000);
+  });
+  // os botões da coluna fazem o mesmo que as teclas B e M (como no jogo)
+  $('#voltar-base').addEventListener('click', () => { passo('botao:voltar'); ir('Fonte', 1200); });
+  $('#abrir-mapa').addEventListener('click', () => { passo('botao:mapa'); abrirMapa(); });
+  $('#bt-esconder-coluna').addEventListener('click', () => { document.body.classList.toggle('coluna-escondida'); passo('coluna:' + document.body.classList.contains('coluna-escondida')); });
+  // controle do teste (rodar.js): um clique falso, como um bot faria, para conferir que a proteção pega
+  window.__cliqueFalso = () => $('#rastreio-topo').click();
+  // controle do teste: volta ao começo (tarefa pronta, caçando na zona), com ou sem a coluna da direita
+  window.__preparar = ({ colunaEscondida = false, local = 'Fosso do Dragão' } = {}) => {
+    tarefa = { pronta: true }; D.passos = [];
+    document.body.classList.toggle('coluna-escondida', colunaEscondida);
+    $('#hud-local').textContent = local;
+    const r = $('#rastreio-tarefa'); r.hidden = false; r.classList.add('pronta'); r.innerHTML = '<b>Tarefa: 120 monstros</b><small>Pronta! Volte ao Capitão da Legião.</small>';
+    $('#janela-npc').hidden = true; $('#janela-mapa').hidden = true; mostrar();
+  };
+  mostrar();
+</script>
+</body></html>

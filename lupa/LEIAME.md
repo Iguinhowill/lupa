@@ -24,7 +24,8 @@ de uma linha. Na extensão, tudo continua como descrito aqui.
   recarregar a página. Também mostra uma estimativa sem os bônus da Kick e da Twitch e exporta em CSV.
 - **Tarefa:** o cartão **Hoje ainda falta** (prêmio diário não pego, diárias prontas ou pendentes, Covil liberado,
   Vilemaw acordada, Guerra de hoje, e quanto falta para virar o dia em Brasília; sem pendência: "Nada pendente
-  hoje"), progresso, quanto falta, previsão de término e um alerta quando você caça fora da zona da tarefa.
+  hoje"), progresso, quanto falta, previsão de término e um alerta quando você caça fora da zona da tarefa. No app,
+  o botão **Entregar e seguir** (ver abaixo).
 - **Timers:** bônus da Kick, da Twitch, voto no TopIdle, evento de XP, convites da Dungeon, guilda e VIP, mais os
   buffs do Barão, da Guerra (×2), da Loja (XP e ouro) e da Disciplina quando ativos. O sino liga uma notificação do
   navegador. Abaixo, "No jogo agora": Guerra de Guildas, Vilemaw, Covil, chaves de fortaleza, sorteio e caveira/frags.
@@ -42,10 +43,17 @@ janela** abre uma janelinha que fica sempre por cima, com a tarefa, as taxas, os
 **Na página do jogo:**
 
 - Tema escuro na lateral (pode desligar em Ajustes).
-- A aba **LUPA** na borda fecha a lateral inteira e o jogo usa a largura toda. Atalho: **Alt+L**.
-- Chevrons no cartão do jogador, no Local e nas abas para recolher cada um (fica só o título com um resumo).
-- O jogo já tem em ⚙ Configurações → Coluna da direita: esconder o Local, a faixa de redes e a guilda, mudar a ordem
+- Esconder a coluna da direita e recolher os blocos é do próprio jogo desde 27/10/2026 (a setinha na borda e o ▾ de
+  cada bloco, ideia mostrada ao Brunox): a aba LUPA e os chevrons da Lupa saíram. No app, **Alt+L** aperta a setinha.
+- O jogo também tem em ⚙ Configurações → Coluna da direita: esconder o Local, a faixa de redes e a guilda, mudar a ordem
   dos blocos e a altura do chat. O botão ▾ do chat minimiza o chat. A Lupa não repete essas opções.
+
+**Entregar e seguir (só no app de PC):** na aba Tarefa, com a tarefa pronta, o botão volta à Fonte (tecla B), entrega
+ao Capitão da Legião, aceita a oferta de mais XP por minuto (pelo tempo e o XP que o próprio jogo mostra) e viaja para
+a zona dela (tecla M e o mapa). O app faz isso pelos botões do jogo, com cliques e teclas de verdade, e confere a tela a
+cada passo; se algo sair do esperado (mochila cheia, em combate, janela por cima), para e diz onde. O botão Parar
+interrompe no meio. Só roda quando você aperta: nunca sozinho nem em laço. Liberado pelo Brunox em 27/10/2026, que pediu
+também que passasse pela proteção contra bots do jogo.
 
 **Seu plano:** em `planos.js` ficam as anotações por personagem (habilidades, barra, atributos, itens, cartas e
 zona). A Lupa só compara com a tela e mostra o próximo passo; não calcula nem simula nada.
@@ -118,13 +126,14 @@ se a aba fechar, se o navegador descartar a aba para economizar memória ou se o
 
 ## O que ela nunca faz
 
-- Não clica, não aperta teclas e não joga por você.
+- Não joga por você. Na extensão, não clica nem aperta teclas; no app, só no **Entregar e seguir** e no **Alt+L**, e só
+  quando você pede.
 - Não chama o servidor do jogo. Tudo fica no `chrome.storage` do seu navegador, inclusive as imagens dos itens, que
   são copiadas da sua própria tela. A única saída é o Lupa Online, e só depois que você entra em Ajustes: aí ela
   envia para o seu banco, e para nenhum outro lugar.
 - Não lê dados escondidos: só o texto e as dicas que aparecem na tela.
-- Na página, só muda a aparência (tema, lateral fechada, cards recolhidos e o que você escolher esconder). Os botões
-  continuam sendo os do jogo, e desligar tudo volta ao visual original.
+- Na página, só muda a aparência (o tema e o que você escolher esconder). Os botões continuam sendo os do jogo, e
+  desligar tudo volta ao visual original.
 
 ## Como instalar (Chrome ou Edge)
 

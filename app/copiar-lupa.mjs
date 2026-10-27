@@ -28,16 +28,20 @@ for (const pagina of ['painel.html', 'central.html']) {
   writeFileSync(arq, html.replace('<script src="planos.js"></script>', '<script src="app-chrome.js"></script>\n<script src="planos.js"></script>'));
 }
 
-// preload do jogo = shim do chrome + content.js (IIFE que usa o `chrome` do escopo), só no lolidle.com
+// preload do jogo = shim do chrome + content.js (IIFE que usa o `chrome` do escopo) + as ações que o jogador pede
+// (oferta.js e acao-jogo.js, que usam o ipcRenderer do shim), só no lolidle.com
 const shim = readFileSync(path.join(aqui, 'shim-jogo.js'), 'utf8');
 const content = readFileSync(path.join(origem, 'content.js'), 'utf8');
-const saida = `// GERADO por copiar-lupa.mjs (npm run preparar). Não edite: vem de shim-jogo.js + ../lupa/content.js.
+const acoes = ['oferta.js', 'acao-jogo.js'].map((f) => readFileSync(path.join(aqui, f), 'utf8')).join('\n');
+const saida = `// GERADO por copiar-lupa.mjs (npm run preparar). Não edite: vem de shim-jogo.js + ../lupa/content.js + oferta.js e acao-jogo.js.
 ${shim}
 // ---------- content.js da Lupa ----------
 // só nas páginas do jogo (e no servidor local de teste); em qualquer outra o preload não faz nada
 if (['lolidle.com', 'www.lolidle.com', '127.0.0.1', 'localhost'].includes(location.hostname)) {
   const iniciar = () => {
 ${content}
+// ---------- ações que o jogador pede (só no app): oferta.js + acao-jogo.js ----------
+${acoes}
   };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar, { once: true });
   else iniciar();

@@ -25,7 +25,7 @@
     else if (k.startsWith('cacada:')) { if (v) cacadas[k.slice(7)] = v; else delete cacadas[k.slice(7)]; }
     else if (k.startsWith('eventos:')) { if (v) eventos[k.slice(8)] = v; else delete eventos[k.slice(8)]; }
   }
-  const salvarConfig = (mud) => chrome.storage.local.set({ config: { ...config, ...mud, recolhidos: { ...config.recolhidos, ...(mud.recolhidos || {}) }, avisos: { ...config.avisos, ...(mud.avisos || {}) } } });
+  const salvarConfig = (mud) => chrome.storage.local.set({ config: { ...config, ...mud, avisos: { ...config.avisos, ...(mud.avisos || {}) } } });
   const alternarAviso = (k) => salvarConfig({ avisos: { [k]: !config.avisos[k] } });
 
   const ctx = {
@@ -275,7 +275,7 @@
   }
 
   // ---------- início ----------
-  if (globalThis.lupaApp) { const r = DOC.querySelector('.rodape span'); if (r) r.textContent = 'Só leitura: não clica e não aperta teclas.'; }
+  if (globalThis.lupaApp) { const r = DOC.querySelector('.rodape span'); if (r) r.textContent = 'Lê a tela; só clica no jogo quando você aperta Entregar e seguir ou o Alt+L.'; }
   chrome.storage.local.get(null).then((tudo) => { for (const [k, v] of Object.entries(tudo)) guardar(k, v); desenhar(); });
   chrome.storage.onChanged.addListener((mud, area) => {
     if (area !== 'local') return;

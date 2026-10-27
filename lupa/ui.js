@@ -8,6 +8,8 @@
 //     eventos,                // { [nome]: [{ ts, tipo, titulo, texto, item?, raridade?, qual? }] }  (chave "eventos:<nome>")
 //     icones,                 // { chave: dataURL }  (chave "icones")
 //     menores,                // { [chave]: { ouro, gemas, n, em } }  (chave "mercado:menores": menor preço visto no Mercado por versão)
+//     acoes,                  // { [nome]: { tipo, estado: 'rodando'|'ok'|'erro'|'parado', texto, em } }  (chave "acao:<nome>", só no app)
+//     iniciarAcao(tipo, nome),// só no app: 'tarefa' (Entregar e seguir) ou 'parar'; sem ela o cartão nem aparece
 //     salvarConfig(mud),      // grava uma mudança parcial em config (avisos é mesclado)
 //     alternarAviso(k),       // liga/desliga config.avisos[k]
 //     semBonus,               // boolean: Caçada sem bônus de live
@@ -19,8 +21,7 @@
 const COR_RARIDADE = { basico: '#d0d0d0', epico: '#c88aff', lendario: '#ffc040', mitico: '#ff5a78' };
 const PADRAO = {
   esconderLoot: false, tema: true, semBonusLateral: false, semRedes: false, novaSessao: 0,
-  manterAcordado: false, lateralFechada: false, novaSessaoPor: {},
-  recolhidos: { status: false, local: false, abas: false },
+  manterAcordado: false, novaSessaoPor: {},
   avisos: { kick: true, twitch: true, voto: true, tarefa: true, evento: true, convites: false, mochila: true, chao: true, morte: true, pontos: true, nivel: true,
     premio: true, diaria: true, guerra: true, vilemaw: true, covil: true, reinicio: true, lendario: true }
 };
@@ -30,7 +31,7 @@ const PAUSA = 15 * 60e3, BALDE = 5 * 60e3;
 
 // Mescla o config salvo com os padrões (inclusive os objetos aninhados).
 function mesclarConfig(c) {
-  return { ...PADRAO, ...c, recolhidos: { ...PADRAO.recolhidos, ...(c?.recolhidos || {}) }, avisos: { ...PADRAO.avisos, ...(c?.avisos || {}) } };
+  return { ...PADRAO, ...c, avisos: { ...PADRAO.avisos, ...(c?.avisos || {}) } };
 }
 
 // ---------- formatos ----------
@@ -450,15 +451,39 @@ function cartaoHoje(e) {
       h('span', null, i.texto, i.sub ? h('span', { class: 'hoje-sub' }, i.sub) : null)))));
 }
 
+// ---------- Entregar e seguir (só no app) ----------
+// Com a tarefa pronta, o app volta à Fonte, entrega ao Capitão, aceita a oferta de mais XP por minuto e viaja para a zona
+// dela, pelos botões do próprio jogo (liberado pelo Brunox em 27/10/2026). Aqui só o botão, o Parar e o andamento.
+function cartaoEntregar(e, ctx) {
+  if (typeof ctx?.iniciarAcao !== 'function') return null;
+  const t = e.tarefa, a = ctx.acoes?.[e.nome], agora = Date.now();
+  // cada passo atualiza o "em"; sem notícia há 90 s (a espera mais longa, a da janela coberta, é de 1 min), a tentativa
+  // morreu no meio (página recarregada, app fechado)
+  const rodando = a?.estado === 'rodando' && agora - a.em < 90e3, morreu = a?.estado === 'rodando' && !rodando;
+  const recente = a && !rodando && agora - a.em < 15 * 60e3;
+  const pode = !!t?.pronta;
+  const msg = rodando ? h('p', { class: 'entregar-status', role: 'status' }, a.texto)
+    : recente ? h('p', { class: 'entregar-status ' + (morreu ? 'erro' : a.estado), role: 'status' }, morreu ? 'A última tentativa parou no meio. Aperte de novo.' : a.texto)
+    : !pode ? h('p', { class: 'entregar-status fraco' }, !t ? 'Sem tarefa: pegue a primeira com o Capitão da Legião.' : 'Fica ativo quando a tarefa ficar pronta.')
+    : null;
+  return h('section', { class: 'cartao entregar', 'aria-label': 'Entregar e seguir' },
+    h('div', { class: 'linha-topo' },
+      h('span', { class: 'entregar-titulo' }, h('b', null, 'Entregar e seguir'), h('span', { class: 'fraco entregar-sub' }, 'Entrega, pega a de mais XP por minuto e vai caçar.')),
+      rodando ? h('button', { type: 'button', class: 'botao', onclick: () => ctx.iniciarAcao('parar', e.nome) }, 'Parar')
+        : h('button', { type: 'button', class: 'botao principal', disabled: !pode, onclick: () => ctx.iniciarAcao('tarefa', e.nome) }, 'Entregar e seguir')),
+    msg);
+}
+
 // ---------- Tarefa ----------
 // opts.semHoje: a Central põe o cartão "Hoje ainda falta" em outro lugar
 function desenharTarefa(e, ctx, opts = {}) {
   const t = e.tarefa, partes = [];
   if (!opts.semHoje) partes.push(cartaoHoje(e));
-  if (!t) partes.push(vazio('Nenhuma tarefa ativa. Pegue uma com o Capitão da Legião, na Fonte.'));
+  if (!t) partes.push(vazio('Nenhuma tarefa ativa. Pegue uma com o Capitão da Legião, na Fonte.'), cartaoEntregar(e, ctx));
   else {
     if (t.pronta) partes.push(h('div', { class: 'alerta pronta', role: 'status' }, icone('estrela', 20), h('span', null, 'Tarefa pronta! Volte à Fonte e fale com o Capitão da Legião.')));
     else if (t.cacandoFora) partes.push(h('div', { class: 'alerta fora', role: 'alert' }, icone('alerta', 20), h('span', null, `Esses abates não contam para a tarefa. Zona da tarefa: ${t.local} · você está em: ${t.zona}.`)));
+    partes.push(cartaoEntregar(e, ctx));
     const pct = t.qtd ? Math.min(100, (100 * t.feitos) / t.qtd) : t.pronta ? 100 : 0;
     const ritmo = t.pronta ? 'concluída'
       : t.ritmo ? `≈ ${Math.max(1, Math.round(t.eta))} min (${t.ritmo.toFixed(1).replace('.', ',')} abates/min)`

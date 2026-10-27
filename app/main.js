@@ -1,8 +1,9 @@
 // Lupa (app) · processo principal
 // Uma janela com a barra de abas (casca), uma aba por conta do jogo (cada uma na sua partição: login separado), o
 // painel da Lupa à direita e a Central. Faz o papel do service worker da extensão: guarda os dados (armazem.js), roda
-// o envio.js da Lupa num vm com um `chrome` equivalente, mostra os avisos e segura o PC acordado. Só lê a tela: nada
-// aqui clica, aperta tecla ou fala com o servidor do jogo. Liberado pelo Brunox em 26/10/2026. Ver ARQUITETURA.md.
+// o envio.js da Lupa num vm com um `chrome` equivalente, mostra os avisos e segura o PC acordado. Lê a tela e nunca fala
+// com o servidor do jogo. Liberado pelo Brunox em 26/10/2026. Clica ou aperta tecla no jogo só em duas ações que o jogador
+// pede (o botão "Entregar e seguir" e o Alt+L), liberadas por ele em 27/10/2026: ver acoes.js e ARQUITETURA.md.
 'use strict';
 
 const { app, BaseWindow, BrowserWindow, Menu, Tray, WebContentsView, ipcMain, Notification, nativeImage, powerSaveBlocker, screen, shell, session } = require('electron');
@@ -17,6 +18,8 @@ const { DA_CONTA, DO_GOOGLE, permitido: permitidoNo } = require('./regras');
 const Layout = require('./layout');
 const { alertasDe, notasEmTexto } = require('./alertas');
 const { atalhoDe, LISTA: ATALHOS } = require('./atalhos');
+// as ações que o jogador pede (entregar a tarefa, a setinha da coluna): autorização e entradas, puro (acoes.test.js)
+const Acoes = require('./acoes');
 
 const JOGO = process.env.LUPA_JOGO || 'https://lolidle.com/jogar';
 const ORIGEM_JOGO = new URL(JOGO).origin;
@@ -423,9 +426,27 @@ function atualizarSelo() {
   janela.setOverlayIcon(total ? iconePonto : null, total ? `${total} alerta${total > 1 ? 's' : ''}` : '');
 }
 
+// ---------- ações no jogo (só quando o jogador pede) ----------
+// O pedido (botão do painel ou Alt+L) autoriza UMA aba por pouco tempo (Acoes.REGRAS); o preload do jogo (acao-jogo.js) pede
+// cada clique ou tecla e o main manda uma entrada de verdade (sendInputEvent), só na aba que está à vista.
+const autorizadas = new Map();      // aba.id → { tipo, ate, resta }
+function pedirAcao(a, tipo) {
+  if (!a?.view || a.tipo !== 'jogo') return false;
+  autorizadas.set(a.id, Acoes.autorizacao(tipo));
+  a.view.webContents.send('acao:iniciar', { tipo });
+  return true;
+}
+// a aba que mandou o pedido de entrada, se está autorizada e à vista (com a janela aberta); null se não pode
+function abaAutorizada(wc) {
+  const a = abaDe(wc);
+  if (!a || a.tipo !== 'jogo' || !janela || !janela.isVisible() || janela.isMinimized()) return null;
+  const r = layoutAtual().jogos[a.id];
+  return r ? { a, r } : null;
+}
+
 // ---------- atalhos do app ----------
-// só as teclas do atalhos.js são do app: o preventDefault vale só para elas, o resto segue para a página. O app nunca
-// injeta tecla, clique ou comando no jogo
+// só as teclas do atalhos.js são do app: o preventDefault vale só para elas, o resto segue para a página. Fora as duas
+// ações acima, o app não injeta tecla, clique ou comando no jogo
 function ligarAtalhos(wc) {
   wc.on('before-input-event', (e, input) => {
     const acao = atalhoDe(input);
@@ -444,6 +465,7 @@ function executarAtalho(acao) {
   } else if (acao === 'painel') alternarPainel();
   else if (acao === 'recarregar') recarregarAba();
   else if (acao.startsWith('zoom:')) ajustarZoomAtivo(acao.slice(5));
+  else if (acao === 'coluna' && modo() !== 'central') pedirAcao(abaAtiva(), 'coluna');      // a setinha do próprio jogo
 }
 function alternarPainel() {
   if (modo() === 'central') return;
@@ -513,6 +535,36 @@ function ligarIpc() {
     else if (/^file:.*central\.html(#.*)?$/.test(u)) { ativar('central'); mostrarJanela(); }
     else externo(u);
   });
+  // o botão "Entregar e seguir" do painel (tipo 'tarefa') e o Parar: na aba do personagem que o painel mostra
+  ipcMain.handle('lupa:acao', (e, { tipo, nome } = {}) => {
+    if (!painel || e.sender !== painel.webContents || !['tarefa', 'parar'].includes(tipo)) return { erro: 'Pedido inválido.' };
+    const a = abas.find((x) => x.tipo === 'jogo' && x.view && pref.nomes[x.id] === nome);
+    if (!a) return { erro: 'Não achei a aba desse personagem.' };
+    if (tipo === 'parar') { a.view.webContents.send('acao:parar'); return { ok: true }; }
+    if (modo() !== a.id && modo() !== 'lado') ativar(a.id);      // a ação acontece à vista
+    return pedirAcao(a, 'tarefa') ? { ok: true } : { erro: 'A aba do jogo não está pronta.' };
+  });
+  // as entradas que o acao-jogo.js pede: clique em px CSS da página e as teclas B e M; devolve se mandou
+  ipcMain.handle('acao:clicar', async (e, p) => {
+    const v = abaAutorizada(e.sender);
+    if (!v) return false;
+    const wc = v.a.view.webContents, pt = Acoes.pontoNaView(p, wc.getZoomFactor(), v.r);
+    if (!pt || !Acoes.gastar(autorizadas.get(v.a.id))) return false;
+    // o foco vai para o jogo, como num clique de verdade: com o foco no painel (onde está o botão "Entregar e seguir"), o
+    // Chromium descartava o apertar e o soltar e só o mover chegava. Mover, apertar e soltar com um intervalo, como a mão
+    if (!wc.isFocused()) { wc.focus(); await new Promise((ok) => setTimeout(ok, 120)); }      // o foco não muda na hora
+    for (const ev of Acoes.clique(pt)) { if (wc.isDestroyed()) return false; wc.sendInputEvent(ev); await new Promise((ok) => setTimeout(ok, Acoes.INTERVALO)); }
+    return true;
+  });
+  ipcMain.handle('acao:tecla', async (e, p) => {
+    const v = abaAutorizada(e.sender), evs = Acoes.tecla(p?.tecla);
+    if (!v || !evs || !Acoes.gastar(autorizadas.get(v.a.id))) return false;
+    const wc = v.a.view.webContents;
+    if (!wc.isFocused()) { wc.focus(); await new Promise((ok) => setTimeout(ok, 120)); }      // a tecla vai para a view em foco
+    for (const ev of evs) { if (wc.isDestroyed()) return false; wc.sendInputEvent(ev); await new Promise((ok) => setTimeout(ok, Acoes.INTERVALO)); }
+    return true;
+  });
+  ipcMain.handle('acao:fim', (e) => { const a = abaDe(e.sender); if (a) autorizadas.delete(a.id); });
   ipcMain.handle('casca:estado', () => estadoCasca());
   ipcMain.handle('casca:ativar', (_e, id) => ativar(id));
   ipcMain.handle('casca:painel', () => alternarPainel());
