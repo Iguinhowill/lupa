@@ -1,18 +1,28 @@
 // Lupa (app) · o chrome.storage.local do app: um JSON em userData. Lê uma vez ao abrir, guarda tudo em memória e grava
-// no disco 1,5 s depois da última mudança (e ao fechar), trocando o arquivo de uma vez para nunca ficar pela metade.
+// no disco 1,5 s depois da última mudança, ou no máximo 10 s depois da primeira (caçando, o estado muda a cada segundo
+// e a espera curta nunca venceria), e ao fechar. Troca o arquivo de uma vez para nunca ficar pela metade e deixa a
+// versão anterior em ".bak", que é lida se o principal estiver estragado.
 // Cada mudança sai no evento "mudou" no formato do chrome.storage.onChanged: { chave: { oldValue, newValue } }.
 'use strict';
 
 const fs = require('node:fs');
 const { EventEmitter } = require('node:events');
 
+// só um objeto conta como dados válidos (um JSON solto como 123 ou [] também é "estragado")
+const lerJson = (arq) => {
+  try { const v = JSON.parse(fs.readFileSync(arq, 'utf8')); return v && typeof v === 'object' && !Array.isArray(v) ? v : null; } catch { return null; }
+};
+
 class Armazem extends EventEmitter {
-  constructor(arquivo) {
+  constructor(arquivo, { espera = 1500, esperaMax = 10e3, retentar = 5000 } = {}) {
     super();
     this.arquivo = arquivo;
-    this.dados = {};
+    this.tempos = { espera, esperaMax, retentar };
     this.espera = null;
-    try { this.dados = JSON.parse(fs.readFileSync(arquivo, 'utf8')) || {}; } catch { this.dados = {}; }
+    this.desde = 0;      // quando ficou a primeira mudança ainda não gravada
+    const principal = lerJson(arquivo);
+    this.principalBom = !!principal;      // estragado, ele não vira .bak (o .bak bom fica até a 1ª gravação dar certo)
+    this.dados = principal || lerJson(arquivo + '.bak') || {};
   }
 
   // como o chrome.storage.local.get: null (tudo), uma chave, uma lista ou { chave: padrão }
@@ -47,16 +57,29 @@ class Armazem extends EventEmitter {
   avisar(mud) {
     if (!Object.keys(mud).length) return;
     this.emit('mudou', mud);
+    const agora = Date.now();
+    if (!this.desde) this.desde = agora;
     clearTimeout(this.espera);
-    this.espera = setTimeout(() => this.gravar(), 1500);
+    this.espera = setTimeout(() => this.gravar(), Math.max(0, Math.min(this.tempos.espera, this.desde + this.tempos.esperaMax - agora)));
   }
 
+  // o principal (sempre trocado inteiro, então bom) vira o .bak, e o novo entra no lugar dele. Um erro de disco
+  // (antivírus segurando o arquivo, disco cheio) não derruba o app: tenta de novo em alguns segundos
   gravar() {
     clearTimeout(this.espera);
     this.espera = null;
     const tmp = this.arquivo + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(this.dados));
-    fs.renameSync(tmp, this.arquivo);
+    try {
+      fs.writeFileSync(tmp, JSON.stringify(this.dados));
+      if (this.principalBom) try { fs.renameSync(this.arquivo, this.arquivo + '.bak'); } catch {}
+      fs.renameSync(tmp, this.arquivo);
+      this.principalBom = true;
+      this.desde = 0;
+    } catch (e) {
+      console.error('[Lupa] não gravou os dados:', e?.message || e);
+      this.espera = setTimeout(() => this.gravar(), this.tempos.retentar);
+      this.espera.unref?.();      // a nova tentativa não segura o processo aberto sozinha
+    }
   }
 }
 
