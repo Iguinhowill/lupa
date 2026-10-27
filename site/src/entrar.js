@@ -1,4 +1,4 @@
-// Lupa Online · entrar (ou criar a conta, uma vez só: o banco recusa uma segunda conta)
+// Lupa Online · entrar, ou criar uma conta com um código de convite (o banco confere o código e o gasta: um por conta)
 'use strict';
 (async () => {
   const SB = supabase.createClient(LUPA_CONFIG.url, LUPA_CONFIG.chave);
@@ -20,12 +20,14 @@
   });
 
   document.getElementById('criar').addEventListener('click', async () => {
-    const d = dados();
-    if (!d.email || d.password.length < 8) { msg.textContent = 'Para criar a conta: e-mail e uma senha com 8 caracteres ou mais.'; return; }
+    const d = dados(), convite = String(new FormData(form).get('convite') || '').trim().toUpperCase();
+    if (!d.email || d.password.length < 8) { msg.textContent = 'Para criar a conta: e-mail e uma senha com 8 caracteres ou mais, nos campos de cima.'; return; }
+    if (!convite) { msg.textContent = 'Digite o código do convite.'; return; }
     travar(true); msg.textContent = 'Criando…';
-    const { data, error } = await SB.auth.signUp({ ...d, options: { emailRedirectTo: location.origin + location.pathname } });
+    const { data, error } = await SB.auth.signUp({ ...d, options: { emailRedirectTo: location.origin + location.pathname, data: { convite } } });
     travar(false);
-    if (error) { msg.textContent = /Database error/i.test(error.message) ? 'Este Lupa Online já tem dono: só dá para entrar.' : error.message; return; }
+    // o banco recusa sem dizer o motivo ao navegador ("Database error saving new user")
+    if (error) { msg.textContent = /Database error/i.test(error.message) ? 'Convite inválido ou já usado. Confira o código com quem te convidou.' : /already registered/i.test(error.message) ? 'Este e-mail já tem conta: use Entrar.' : error.message; return; }
     if (data.session) { location.replace('agora.html'); return; }
     msg.textContent = 'Conta criada. Confirme pelo link que chegou no seu e-mail e depois entre aqui.';
   });
