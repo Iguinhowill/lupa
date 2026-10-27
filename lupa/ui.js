@@ -11,6 +11,7 @@
 //     acoes,                  // { [nome]: { tipo, estado: 'rodando'|'ok'|'erro'|'parado', texto, em } }  (chave "acao:<nome>", só no app)
 //     iniciarAcao(tipo, nome),// só no app: 'tarefa' (Entregar e seguir) ou 'parar'; sem ela o cartão nem aparece
 //     gastos,                 // { [nome]: resultado do Onde gastar o ouro }  (chave "gastar:<nome>", que o app calcula)
+//     treinos,                // { [nome]: resultado dos Pontos e barra }  (chave "treino:<nome>", calculada na mesma rodada)
 //     calcularGasto(nome),    // só no app: pede a conta (botão Calcular); sem ela e sem conta guardada, o cartão nem aparece
 //     salvarConfig(mud),      // grava uma mudança parcial em config (avisos é mesclado)
 //     alternarAviso(k),       // liga/desliga config.avisos[k]
@@ -289,6 +290,7 @@ function desenharFicha(e, ctx, opts = {}) {
     opts.semPlano ? null : desenharPlano(e, ctx, { compacto: true }),
     avisoMochila(e),
     secao('Equipamento', f.equip.length ? f.equip.map((i) => linhaItem(i, ctx, 40)) : vazio('Nenhum item equipado.')),
+    cartaoTreino(e, ctx),
     cartaoGastar(e, ctx),
     secao('Barra de combate',
       h('div', { class: 'grade-4' }, barra.map((b) => (!b ? h('div', { class: 'hab vaga' }, 'vazia') : h('div', { class: 'hab', title: b.nome },
@@ -510,9 +512,7 @@ function cartaoGastar(e, ctx, opts = {}) {
   if (!g && !noApp && !opts.completo) return null;
   const rodando = g?.estado === 'rodando' || g?.estado === 'na-fila';
   const ouro = ouroDaFicha(e.ficha?.stats?.ouro) ?? g?.ouro ?? null;
-  const ETAPA = { motor: 'Baixando o motor do jogo…', triagem: 'Testando todas as opções…', conferir: 'Conferindo as melhores…' };
-  const status = rodando ? (g.estado === 'na-fila' ? 'Na fila: o outro personagem está sendo calculado.' : `${ETAPA[g.etapa] || 'Calculando…'}${g.total ? ` ${g.feito}/${g.total}` : ''}`)
-    : g?.estado === 'erro' ? `Não deu para calcular: ${g.erro}` : null;
+  const status = statusConta(g);
   const partes = [];
   if (status) partes.push(h('p', { class: 'entregar-status' + (g?.estado === 'erro' ? ' erro' : ''), role: 'status' }, status));
   if (g?.opcoes) {
@@ -537,6 +537,59 @@ function cartaoGastar(e, ctx, opts = {}) {
     h('div', { class: 'linha-topo' },
       h('span', { class: 'entregar-titulo' }, h('b', null, 'Onde gastar o ouro'), h('span', { class: 'fraco entregar-sub' }, 'O que o ouro compra e quanto rende de caça, pela simulação do jogo.')),
       noApp ? h('button', { type: 'button', class: 'botao', disabled: rodando, onclick: () => ctx.calcularGasto(e.nome) }, rodando ? 'Calculando…' : g?.opcoes ? 'Recalcular' : 'Calcular') : null),
+    partes);
+}
+
+// ---------- Pontos e barra ----------
+// A conta é do app (treino.js), na mesma rodada do Onde gastar o ouro: para onde vão os pontos dos próximos 5 níveis (todos numa
+// habilidade ou num atributo) e qual combinação de 4 habilidades rende mais na barra. Aqui só desenha "treino:<nome>" (ctx.treinos).
+const ETAPA_CONTA = { motor: 'Baixando o motor do jogo…', espera: 'Na vez depois do Onde gastar o ouro…', triagem: 'Testando todas as opções…', conferir: 'Conferindo as melhores…' };
+function statusConta(g) {
+  if (g?.estado === 'na-fila') return 'Na fila: o outro personagem está sendo calculado.';
+  if (g?.estado === 'rodando') return `${ETAPA_CONTA[g.etapa] || 'Calculando…'}${g.total ? ` ${g.feito}/${g.total}` : ''}`;
+  if (g?.estado === 'erro') return `Não deu para calcular: ${g.erro}`;
+  return null;
+}
+// as que empatam com a melhor (a diferença fica dentro da margem das duas)
+const empatadas = (l) => (l.length && l[0].rende ? l.filter((x) => x.rende && x.ganho >= l[0].ganho - Math.max(l[0].erro, x.erro)) : []);
+function blocoTreino(rotulo, opcoes, vazioTxt) {
+  const melhores = empatadas(opcoes), resto = opcoes.filter((x) => !melhores.includes(x));
+  const linhaCurta = (l) => h('li', null, `${l.titulo}: ${pctGanho(l.ganho)} (${margem(l)})`);
+  return h('div', { class: 'treino-bloco' },
+    h('h3', { class: 'sub-cab' }, rotulo),
+    melhores.length ? h('ul', { class: 'gasto-lista' }, melhores.map((l) => h('li', { class: 'gasto' },
+      h('span', { class: 'gasto-titulo' }, h('b', null, l.titulo)),
+      h('span', { class: 'gasto-ganho' }, h('span', { class: 'num' }, pctGanho(l.ganho)), ` de XP e ouro por hora (${margem(l)})`, l.xpH > 0 ? [' · ', h('span', { class: 'num' }, `+${curto(l.xpH)}`), ' XP/h'] : null))))
+      : h('p', { class: 'gasto-nada' }, vazioTxt),
+    melhores.length > 1 ? h('p', { class: 'gasto-detalhe fraco' }, 'Empatam: a diferença entre elas fica dentro da margem da simulação. Escolha qualquer uma.') : null,
+    resto.length ? h('details', { class: 'gasto-sem' }, h('summary', null, `As outras (${resto.length})`), h('ul', { class: 'lista-simples' }, resto.map(linhaCurta))) : null);
+}
+function cartaoTreino(e, ctx, opts = {}) {
+  const g = ctx?.treinos?.[e.nome], noApp = typeof ctx?.calcularGasto === 'function';
+  if (!g && !noApp && !opts.completo) return null;
+  const rodando = g?.estado === 'rodando' || g?.estado === 'na-fila', status = statusConta(g), partes = [];
+  if (status) partes.push(h('p', { class: 'entregar-status' + (g?.estado === 'erro' ? ' erro' : ''), role: 'status' }, status));
+  if (g?.habilidade || g?.atributo || g?.barra) {
+    const mudou = String(g.nivel) !== String(parseInt(e.nivel, 10)) || (g.barraAtual || []).join() !== (e.ficha?.barra || []).map((x) => x?.t).join();
+    partes.push(h('p', { class: 'gasto-quando fraco' }, `Conta de ${dataHora(g.em)} · nível ${g.nivel} · ${g.zona?.nome || '?'}`,
+      mudou ? h('span', { class: 'gasto-mudou' }, noApp ? ' · mudou: a conta refaz sozinha em 2 min' : ' · mudou desde esta conta') : null));
+    const hb = g.habilidade, at = g.atributo, br = g.barra;
+    if (hb?.nivel) partes.push(blocoTreino(`Habilidade · os próximos ${hb.pontos} ${hb.pontos === 1 ? 'ponto' : 'pontos'} (até o nível ${hb.nivel})`, hb.opcoes || [],
+      'Nenhuma habilidade muda o farm de um jeito que dê para medir: ponha onde quiser.'));
+    if (at?.pontos) partes.push(blocoTreino(`Atributo · os próximos ${at.pontos} pontos (até o nível ${at.nivel})`, at.opcoes || [],
+      'Nenhum atributo muda o farm de um jeito que dê para medir.'));
+    if (br) {
+      const melhor = (br.opcoes || [])[0];
+      partes.push(melhor?.rende ? blocoTreino('Barra', br.opcoes, '')
+        : h('div', { class: 'treino-bloco' }, h('h3', { class: 'sub-cab' }, 'Barra'),
+          h('p', { class: 'gasto-nada' }, br.testadas ? `A sua barra (${(g.barraAtual || []).join(' ')}) é a melhor das ${br.testadas + 1} combinações das habilidades que você já aprendeu${melhor ? `; a mais perto fica em ${pctGanho(melhor.ganho)}` : ''}.` : 'Você ainda não tem habilidades para mais de uma barra.')));
+    }
+    partes.push(nota(`Simulação do próprio jogo: ${g.sim?.conferir?.cacadas || 8} caçadas de ${g.sim?.conferir?.minutos || 60} min por opção. Os pontos são comparados no nível de chegada, contra a sua build com os pontos guardados; um ponto sozinho mexe menos que a margem, por isso a conta olha 5 níveis à frente.`));
+  } else if (!rodando && g?.estado !== 'erro') partes.push(h('p', { class: 'entregar-status fraco' }, noApp ? 'Ainda não calculei. Roda junto com o Onde gastar o ouro (cerca de 1 min cada).' : 'O app ainda não mandou esta conta.'));
+  return h('section', { class: 'cartao entregar treino', 'aria-label': 'Pontos e barra' },
+    h('div', { class: 'linha-topo' },
+      h('span', { class: 'entregar-titulo' }, h('b', null, 'Pontos e barra'), h('span', { class: 'fraco entregar-sub' }, 'Para onde vão os próximos pontos e qual barra rende mais, pela simulação do jogo.')),
+      noApp ? h('button', { type: 'button', class: 'botao', disabled: rodando, onclick: () => ctx.calcularGasto(e.nome) }, rodando ? 'Calculando…' : g?.assinatura ? 'Recalcular' : 'Calcular') : null),
     partes);
 }
 

@@ -232,6 +232,8 @@ button { font: inherit; color: inherit; }
 .gasto-nada { margin: 0; font-size: 13px; color: var(--texto-2); }
 .gasto-sem summary { cursor: pointer; font-size: 13px; color: var(--fraco); }
 .gasto-sem .lista-simples { margin-top: 6px; font-size: 12.5px; color: var(--fraco); }
+.treino-bloco { display: flex; flex-direction: column; gap: 6px; }
+.treino-bloco .sub-cab { margin: 4px 0 0; font-size: 13px; color: var(--texto-2); }
 .nuvem-linha { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 13px; }
 .nuvem-erro { margin: 0; font-size: 13px; color: var(--alerta-texto); }
 .nuvem-erro:empty { display: none; }
