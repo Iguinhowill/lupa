@@ -655,7 +655,8 @@
     const mapa = {};
     for (const [k, v] of Object.entries(antigo || {})) if (v && agora - v.em < VALIDADE_MENORES) mapa[k] = v;
     for (const g of grupos) {
-      if (!g.chave || (g.ouro == null && g.gemas == null)) continue;
+      // só a versão sem carta: é a que a Ficha consulta, e as com carta ocupariam o limite à toa
+      if (!g.chave || g.carta || (g.ouro == null && g.gemas == null)) continue;
       mapa[g.chave] = { ouro: g.ouro ?? null, gemas: g.gemas ?? null, n: g.n ?? null, em: agora };
     }
     const manter = Object.entries(mapa).sort((a, b) => b[1].em - a[1].em).slice(0, MAX_MENORES);

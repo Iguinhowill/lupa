@@ -19,16 +19,30 @@
     location.replace('agora.html');
   });
 
-  document.getElementById('criar').addEventListener('click', async () => {
+  // o que o Supabase responde em inglês, em palavras daqui (o banco recusa o convite sem dizer o motivo: "Database error")
+  const erroCadastro = (m) => /Database error/i.test(m) ? 'Convite inválido ou já usado. Confira o código com quem te convidou.'
+    : /already registered/i.test(m) ? 'Este e-mail já tem conta: use Entrar.'
+    : /Password should|weak/i.test(m) ? 'Senha fraca: use 8 caracteres ou mais, misturando letras e números.'
+    : /rate limit|too many/i.test(m) ? 'Muitas tentativas seguidas: espere alguns minutos e tente de novo.'
+    : /invalid.*email|email.*invalid/i.test(m) ? 'Esse e-mail não parece válido.'
+    : m;
+  async function criar() {
     const d = dados(), convite = String(new FormData(form).get('convite') || '').trim().toUpperCase();
     if (!d.email || d.password.length < 8) { msg.textContent = 'Para criar a conta: e-mail e uma senha com 8 caracteres ou mais, nos campos de cima.'; return; }
     if (!convite) { msg.textContent = 'Digite o código do convite.'; return; }
     travar(true); msg.textContent = 'Criando…';
-    const { data, error } = await SB.auth.signUp({ ...d, options: { emailRedirectTo: location.origin + location.pathname, data: { convite } } });
-    travar(false);
-    // o banco recusa sem dizer o motivo ao navegador ("Database error saving new user")
-    if (error) { msg.textContent = /Database error/i.test(error.message) ? 'Convite inválido ou já usado. Confira o código com quem te convidou.' : /already registered/i.test(error.message) ? 'Este e-mail já tem conta: use Entrar.' : error.message; return; }
-    if (data.session) { location.replace('agora.html'); return; }
-    msg.textContent = 'Conta criada. Confirme pelo link que chegou no seu e-mail e depois entre aqui.';
-  });
+    try {
+      const { data, error } = await SB.auth.signUp({ ...d, options: { emailRedirectTo: location.origin + location.pathname, data: { convite } } });
+      if (error) { msg.textContent = erroCadastro(error.message); return; }
+      // e-mail que já tem conta: com confirmação por e-mail ligada, o Supabase devolve um usuário "vazio", sem erro e sem e-mail
+      if (data.user && Array.isArray(data.user.identities) && !data.user.identities.length) { msg.textContent = 'Este e-mail já tem conta: use Entrar (o convite não foi gasto).'; return; }
+      if (data.session) { location.replace('agora.html'); return; }
+      msg.textContent = 'Conta criada. Confirme pelo link que chegou no seu e-mail e depois entre aqui.';
+    } catch (e) {
+      msg.textContent = 'Não deu para falar com o servidor agora. Confira a internet e tente de novo.';
+    } finally { travar(false); }
+  }
+  document.getElementById('criar').addEventListener('click', criar);
+  // Enter no campo do convite cria a conta (senão o formulário faria "Entrar")
+  form.elements.convite?.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); criar(); } });
 })();

@@ -111,7 +111,7 @@ const RE_CHAVE_ITEM = /^(\d+)(!?)(?:\+(\d+))?(?:#([a-z]+\d))?~([A-Z]+)$/;
 const VALIDADE_MENOR = 7 * 24 * 3600e3;
 function milhar(n) {
   if (n == null) return '—';
-  if (n >= 1e6) return (n / 1e6).toFixed(2).replace(/\.?0+$/, '').replace('.', ',') + ' mi';
+  if (n >= 999.5e3) return (n / 1e6).toFixed(2).replace(/\.?0+$/, '').replace('.', ',') + ' mi';      // 999.999 já é "1 mi", não "1000 mil"
   if (n >= 1e3) return (n / 1e3).toFixed(n >= 1e5 ? 0 : 1).replace(/\.0$/, '').replace('.', ',') + ' mil';
   return inteiro(n);
 }
@@ -130,8 +130,13 @@ function textoValor(it, ctx) {
   const visto = v && agora - v.em < VALIDADE_MENOR && (v.ouro != null || v.gemas != null) ? v : null;
   const partes = [];
   if (loja != null) partes.push(['Loja ', milhar(loja)]);
-  const preco = !visto ? '—' : visto.ouro != null ? milhar(visto.ouro) : `${inteiro(visto.gemas)} gemas`;
-  partes.push(['Mercado ', preco + (visto ? ' · ' + haQuanto(agora - visto.em) : '')]);
+  // sem leitura local do Mercado (o site, que não tem mercado:menores) a parte do Mercado nem aparece
+  if (ctx?.menores) {
+    const preco = !visto ? '—' : visto.ouro != null ? milhar(visto.ouro) : `${inteiro(visto.gemas)} gemas`;
+    // item com carta: o preço é o da mesma versão SEM carta, e o texto diz isso
+    partes.push(['Mercado ', preco + (visto && m[4] ? ' sem carta' : '') + (visto ? ' · ' + haQuanto(agora - visto.em) : '')]);
+  }
+  if (!partes.length) return null;
   return h('span', { class: 'item-valor fraco' }, partes.map(([r, n], k) => [k ? ' · ' : '', r, h('span', { class: 'num' }, n)]));
 }
 

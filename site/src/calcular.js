@@ -332,7 +332,7 @@ function graficoCurva(larg, nivel, alvo) {
     let inferido = false;
     for (const [k, rot] of [['ad', 'Dano'], ['armadura', 'Armadura'], ['rm', 'Resistência mágica']]) {
       const x = conf.find((l) => l.rot === rot), r = x && x.calc > 0 ? x.jogo / x.calc : 1;
-      if (!x.ok && r > 1.004 && r < 1.2) { bonus[k] = +(r - 1).toFixed(4); inferido = true; }
+      if (x && !x.ok && r > 1.004 && r < 1.2) { bonus[k] = +(r - 1).toFixed(4); inferido = true; }
     }
     if (inferido) { fA = fichaDe(camp, nivel, a, a.ranks, bonus); conf = conferirComOJogo(fA, a.stats); }
     const salvar = () => gravarPref('comp-b:' + quem, JSON.stringify(B));
@@ -367,13 +367,13 @@ function graficoCurva(larg, nivel, alvo) {
     };
     const totalA = Object.values(a.atrib).reduce((s, v) => s + v, 0), totalB = Object.values(B.atrib).reduce((s, v) => s + v, 0);
     const inputsAtrib = ATRIBUTOS.map(([k, nome]) => {
-      const inp = camposNum({ id: 'cb-at-' + k, value: String(B.atrib[k]), 'aria-label': nome });
+      const inp = camposNum({ id: 'cb-at-' + k, value: String(B.atrib[k]), 'aria-label': `${nome} (A: ${a.atrib[k]})` });
       inp.addEventListener('change', () => { B.atrib[k] = Math.max(0, Math.floor(numeroDoTexto(inp.value) || 0)); mudou(); });
       return campo(`${nome} (A: ${a.atrib[k]})`, inp);
     });
     const aprendidas = a.habs.filter((x) => !x.passiva && /^[1-9]/.test(String(x.rank || '')));
     const selBarra = (k) => {
-      const sel = h('select', { id: 'cb-barra-' + k, 'aria-label': `Habilidade ${k + 1} da barra`, onchange: () => { B.barra[k] = sel.value; mudou(); } }, h('option', { value: '' }, '(vazio)'),
+      const sel = h('select', { id: 'cb-barra-' + k, 'aria-label': `Espaço ${k + 1} da barra de habilidades`, onchange: () => { B.barra[k] = sel.value; mudou(); } }, h('option', { value: '' }, '(vazio)'),
         aprendidas.map((x) => h('option', { value: x.t }, `${x.t} · ${x.nome} ${String(x.rank).split('/')[0]}`)));
       sel.value = B.barra[k] || '';
       return campo(`Espaço ${k + 1}`, sel);
@@ -389,7 +389,8 @@ function graficoCurva(larg, nivel, alvo) {
     const confere = !conf.length ? nota('A ficha lida não trouxe os stats do jogo, então não dá para conferir a conta.')
       : ruins.length ? h('div', { class: 'comp-confere diverge' }, h('p', null, h('b', null, 'Difere do jogo. '), ruins.map((l) => `${l.rot}: o jogo mostra ${l.fmt(l.jogo)} e a conta dá ${l.fmt(l.calc)}.`).join(' ')),
         nota('Pode ser um bônus passageiro (Fúria, buff de guilda), um item ou carta lidos pela metade ou uma regra nova do jogo (rode gerar-tabelas.mjs). A comparação segue com a conta, que é a mesma nas duas builds.'))
-        : h('p', { class: 'comp-confere ok' }, h('b', null, 'Confere com o jogo. '), `A conta da build A bate com os ${conf.length} stats que o jogo mostra${inferido ? `, depois de um bônus de ${Object.entries(bonus).map(([k, v]) => `${sinal(v * 100, 1)}% de ${NOME_BONUS[k]}`).join(' e ')} que a ficha não mostra (conquistas ou mascote)` : ''}.`);
+        : inferido ? h('p', { class: 'comp-confere ok' }, h('b', null, 'Ajustado ao jogo. '), `A conta da build A bate com os ${conf.length - Object.keys(bonus).length} stats conferidos sem ajuste. Já ${Object.entries(bonus).map(([k, v]) => `${sinal(v * 100, 1)}% de ${NOME_BONUS[k]}`).join(' e ')} a conta não explica (pode ser conquista, mascote ou um bônus passageiro): esse bônus entrou igual nas duas builds, então a comparação não muda.`)
+        : h('p', { class: 'comp-confere ok' }, h('b', null, 'Confere com o jogo. '), `A conta da build A bate com os ${conf.length} stats que o jogo mostra.`);
 
     // ---------- o resultado ----------
     const L = [
@@ -424,6 +425,11 @@ function graficoCurva(larg, nivel, alvo) {
       const arred = Math.abs(dAb.p) >= 2 ? sinal(Math.round(dAb.p), 0) + '%' : dAb.txt;
       frase = Math.abs(dAb.p) < 0.5 ? `A build B rende praticamente o mesmo de abates/h que a A na zona ${zona.nome}.` : `A build B rende cerca de ${arred} de abates/h na zona ${zona.nome}.`;
       erroTxt = eCamp ? ` Estimativa: o comparador erra até ±${nBR(Math.max(1, Math.ceil(eCamp.p90)), 0)} pontos contra a simulação do jogo na maioria das trocas (mediana ±${nBR(eCamp.mediana, 1)}; no pior caso medido, ±${nBR(Math.ceil(eCamp.max), 0)}).` : ' Estimativa.';
+      const fx = eCamp?.faixa, fora = fx && (nivel < fx.niveis[0] || nivel > fx.niveis[1] || (fx.zonas && !fx.zonas.includes(zona.id)));
+      if (fora) erroTxt += ` Atenção: esse erro foi medido do nível ${fx.niveis[0]} ao ${fx.niveis[1]} e em outras zonas; aqui ele pode ser maior.`;
+      const nTrocas = B.itens.filter((it, k) => JOGO.chaveItem(it) !== JOGO.chaveItem(a.itens[k] || { id: '' })).length
+        + (JSON.stringify(B.atrib) !== JSON.stringify(a.atrib) ? 1 : 0) + (barraB.join() !== barraA.join() ? 1 : 0);
+      if (nTrocas > 1) erroTxt += ' O erro foi medido com uma troca por vez; várias trocas juntas somam incerteza.';
       resultado = h('div', { class: 'calc-corpo' },
         h('div', { class: 'grade-tiles' },
           tl('Dano por segundo', farmA.dps, farmB.dps, curto),
@@ -439,7 +445,7 @@ function graficoCurva(larg, nivel, alvo) {
     caixa.replaceChildren(
       confere,
       h('div', { class: 'filtros-drops' }, campo('Zona de caça', selZona), h('div', { class: 'filtro' }, h('span', null, 'Build B'), btnVoltar)),
-      frase ? h('p', { class: 'estimativa-resumo comp-resposta' }, h('b', null, 'Resposta. '), frase, h('span', { class: 'fraco' }, erroTxt)) : null,
+      frase ? h('p', { class: 'estimativa-resumo comp-resposta', role: 'status' }, h('b', null, 'Resposta. '), frase, h('span', { class: 'fraco' }, erroTxt)) : null,
       h('div', { class: 'comp-grade' },
         h('div', { class: 'calc-corpo comp-edit' },
           h('h3', { class: 'sub-cab' }, 'Edite a build B'),

@@ -503,6 +503,8 @@ if (typeof module !== 'undefined') module.exports = JOGO;
   let FARM = { kHab: {}, vaHab: {}, liberado: {} }, erroComparador = null;
   const anterior = (() => { try { const A = createRequire(import.meta.url)(SAIDA); return A.FARM?.kHab && A.meta?.erroComparador ? A : null; } catch { return null; } })();
   if (process.argv.includes('--sem-farm') && anterior) {
+    // a calibração vale para o motor com que foi medida: com o jogo mudado, reaproveitá-la publicaria um erro que não é mais o real
+    if (anterior.meta.erroComparador.motorSha256 !== sha) throw new Error('o motor do jogo mudou desde a última calibração do farm: rode sem --sem-farm para recalibrar');
     FARM = anterior.FARM; erroComparador = anterior.meta.erroComparador;
     console.log(`farm: calibração anterior reaproveitada (medida com o motor ${String(erroComparador.motorSha256 || '?').slice(0, 12)}).`);
   } else {
@@ -520,18 +522,27 @@ if (typeof module !== 'undefined') module.exports = JOGO;
     jobs.forEach((jb, k) => partes[k % lotes].push(jb));
     console.log(`farm: simulando ${jobs.length} builds (${FARM_SIM.sementes} sementes x ${FARM_SIM.minutos} min cada) em ${lotes} processos isolados...`);
     const inicio = Date.now();
+    // cada lote num processo isolado, com tempo-limite; se um falhar, os outros são encerrados (senão seguiriam rodando
+    // com a pasta temporária aberta e o rmSync do fim falharia, escondendo o erro de verdade)
+    const filhos = new Set(), LIMITE_LOTE = 20 * 60e3;
     const rodarAsync = (corpo) => new Promise((ok, falha) => {
       const p = spawn(process.execPath, ['--permission', `--allow-fs-read=${pasta}`, '--input-type=module', '-e', corpo], { cwd: pasta, env: ENV_FILHO });
+      filhos.add(p);
+      const relogio = setTimeout(() => { p.kill(); falha(new Error('a simulação passou do tempo-limite')); }, LIMITE_LOTE);
       let out = '', err = '';
       p.stdout.on('data', (d) => { out += d; }); p.stderr.on('data', (d) => { err += d; });
-      p.on('error', falha);
-      p.on('close', (cod) => { if (cod !== 0) return falha(new Error('a simulação falhou:\n' + (err || out).slice(0, 2000))); try { ok(JSON.parse(out.trim().split('\n').pop())); } catch (e) { falha(e); } });
+      p.on('error', (e) => { clearTimeout(relogio); filhos.delete(p); falha(e); });
+      p.on('close', (cod) => {
+        clearTimeout(relogio); filhos.delete(p);
+        if (cod !== 0) return falha(new Error('a simulação falhou:\n' + (err || out).slice(0, 2000)));
+        try { ok(JSON.parse(out.trim().split('\n').pop())); } catch (e) { falha(e); }
+      });
     });
     const parciais = await Promise.all(partes.map((lista, k) => {
       const arq = join(pasta, `jobs-${k}.json`);
       writeFileSync(arq, JSON.stringify(lista));
       return rodarAsync(`console.log(JSON.stringify(await (${simularFilho})(${j(motorUrl)}, ${j(arq)})));`);
-    }));
+    })).catch((e) => { for (const p of filhos) p.kill(); throw e; });
     const res = Object.assign({}, ...parciais);
     console.log(`farm: simulações prontas em ${Math.round((Date.now() - inicio) / 1000)} s.`);
     const pontos = (campeao, conjunto) => jobs.filter((jb) => jb.campeao === campeao && jb.conjunto === conjunto && res[jb.id] && res[jb.id].mortes === 0).map((jb) => {
@@ -557,7 +568,10 @@ if (typeof module !== 'undefined') module.exports = JOGO;
         }
       }
       const resumo = (v) => ({ n: v.length, mediana: +quantil(v, 0.5).toFixed(2), p90: +quantil(v, 0.9).toFixed(2), max: +Math.max(...v).toFixed(2) });
-      porCampeao[campeao] = { ...resumo(erros), barra: errosBarra.length ? resumo(errosBarra) : null, parametros: aj.P };
+      // a faixa em que o erro foi medido (níveis e zonas das builds simuladas): fora dela a tela avisa que pode errar mais
+      const doCamp = jobs.filter((jb) => jb.campeao === campeao), niveis = doCamp.map((jb) => jb.nivel);
+      const faixa = { niveis: [Math.min(...niveis), Math.max(...niveis)], zonas: [...new Set(doCamp.map((jb) => jb.zona))].sort() };
+      porCampeao[campeao] = { ...resumo(erros), barra: errosBarra.length ? resumo(errosBarra) : null, faixa, parametros: aj.P };
       FARM.liberado[campeao] = porCampeao[campeao].mediana <= LIMITE_FARM.mediana && porCampeao[campeao].p90 <= LIMITE_FARM.p90;
       if (process.env.LUPA_DEBUG_FARM) for (const p of piores.sort((x, y) => y.e - x.e).slice(0, 8)) console.log('  pior', p.campeao, p.tipo, 'erro', p.e.toFixed(1), 'motor', p.sim.toFixed(1), 'modelo', p.modelo.toFixed(1), JSON.stringify({ nivel: p.base.nivel, zona: p.base.zona, barra: p.base.barra, ranks: p.base.ranks, itens: p.base.itens, itens2: p.variante.itens, atrib: p.variante.atrib, barra2: p.variante.barra }));
       todos.push(...erros); todosBarra.push(...errosBarra);
