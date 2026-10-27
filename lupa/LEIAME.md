@@ -18,7 +18,8 @@ de uma linha. Na extensão, tudo continua como descrito aqui.
 **Painel lateral** (clique no ícone da lupa):
 
 - **Ficha:** o seu plano no topo, os itens equipados com a imagem, refino, qualidade e carta; a barra de combate com
-  o ícone e a habilidade de cada tecla (a tecla R pode ser o G, por exemplo); ranks, atributos, mochila e cartas.
+  o ícone e a habilidade de cada tecla (a tecla R pode ser o G, por exemplo); ranks, atributos, mochila e cartas. No
+  app, o cartão **Onde gastar o ouro** (ver abaixo).
 - **Caçada:** abates, XP e ouro por hora caçando, por sessão e por zona (a melhor zona por XP/h ganha uma estrela), com o multiplicador de bônus ("XP ×1,45 · ouro ×1,20")
   e o gráfico de 5 em 5 min que alterna entre XP e Abates. "Nova sessão" vale só para o personagem aberto. Fica salvo por personagem e não zera ao
   recarregar a página. Também mostra uma estimativa sem os bônus da Kick e da Twitch e exporta em CSV.
@@ -58,6 +59,15 @@ isso o Desafio da zona de cima parecia render mais. O app faz isso pelos botões
 cada passo; se algo sair do esperado (mochila cheia, em combate, janela por cima), para e diz onde. O botão Parar
 interrompe no meio. Só roda quando você aperta: nunca sozinho nem em laço. Liberado pelo Brunox em 27/10/2026, que pediu
 também que passasse pela proteção contra bots do jogo.
+
+**Onde gastar o ouro (só no app de PC):** o app testa no motor do próprio jogo o que o seu ouro compra e pode render mais
+caça: forjar cada item equipado em +1, trocar uma carta (da bolsa ou do Mercado), um item do Mercado ou da mochila no
+lugar de um equipado e o reset de atributos. Para cada um, mostra quanto rende de XP e ouro por hora (com a margem de
+erro), quanto custa e em quantas horas de caça se paga, e lista à parte o que não muda nada (por exemplo, refinar um
+item de velocidade com a velocidade no teto). Roda sozinho uns 2 min depois que a build muda e pelo botão Calcular; leva
+cerca de 1 min. O app baixa para isso os arquivos públicos do motor (os mesmos que a página do jogo carrega) e simula
+numa página isolada, sem internet; nada da sua conta sai daqui. Só informa: comprar, forjar e trocar é com você, no jogo.
+A conta também aparece no site, em Calcular.
 
 **Seu plano:** em `planos.js` ficam as anotações por personagem (habilidades, barra, atributos, itens, cartas e
 zona). A Lupa só compara com a tela e mostra o próximo passo; não calcula nem simula nada.
@@ -132,7 +142,8 @@ se a aba fechar, se o navegador descartar a aba para economizar memória ou se o
 
 - Não joga por você. Na extensão, não clica nem aperta teclas; no app, só no **Entregar e seguir** e no **Alt+L**, e só
   quando você pede.
-- Não chama o servidor do jogo. Tudo fica no `chrome.storage` do seu navegador, inclusive as imagens dos itens, que
+- Não chama o servidor do jogo. (No app, o Onde gastar o ouro baixa os arquivos públicos do motor, os mesmos que a
+  página do jogo carrega, para simular; não manda nada da sua conta.) Tudo fica no `chrome.storage` do seu navegador, inclusive as imagens dos itens, que
   são copiadas da sua própria tela. A única saída é o Lupa Online, e só depois que você entra em Ajustes: aí ela
   envia para o seu banco, e para nenhum outro lugar.
 - Não lê dados escondidos: só o texto e as dicas que aparecem na tela.
