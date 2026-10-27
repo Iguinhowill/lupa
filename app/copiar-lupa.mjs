@@ -19,6 +19,9 @@ cpSync(origem, destino, {
   filter: (src) => !(path.dirname(src) === origem && fora.has(path.basename(src))),
 });
 
+// o Monte Carlo da forja do site (calculos.js) vai junto das tabelas: o Onde gastar o ouro (gastar.js) usa o mesmo
+cpSync(path.resolve(aqui, '..', 'site', 'src', 'calculos.js'), path.join(destino, 'calculos.js'));
+
 // app-chrome.js vai para dentro de lupa/ e entra como primeiro <script>, antes de qualquer código da Lupa
 cpSync(path.join(aqui, 'app-chrome.js'), path.join(destino, 'app-chrome.js'));
 for (const pagina of ['painel.html', 'central.html']) {

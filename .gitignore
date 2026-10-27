@@ -10,3 +10,4 @@ site/dist/
 *.log
 Thumbs.db
 .claude/
+app/teste-gastar/saida/

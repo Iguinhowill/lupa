@@ -1,0 +1,160 @@
+{
+ "nome": "Teste",
+ "nivel": "37",
+ "zona": "Covil do Barão",
+ "ts": 0,
+ "ficha": {
+  "equip": [
+   {
+    "id": "3172!+5#ataque2~B"
+   },
+   {
+    "id": "3031+5#ataque2~B"
+   },
+   {
+    "id": "3153+5#ataque2~B"
+   },
+   {
+    "id": "3046+4#ataque2~B"
+   },
+   {
+    "id": "3085+4#ataque2~A"
+   }
+  ],
+  "atributos": [
+   {
+    "nome": "Força",
+    "valor": "108"
+   },
+   {
+    "nome": "Vitalidade",
+    "valor": "0"
+   },
+   {
+    "nome": "Resistência",
+    "valor": "0"
+   },
+   {
+    "nome": "Agilidade",
+    "valor": "0"
+   },
+   {
+    "nome": "Foco",
+    "valor": "0"
+   }
+  ],
+  "habs": [
+   {
+    "t": "Q",
+    "nome": "Tempestade de Aço",
+    "rank": "10/10"
+   },
+   {
+    "t": "W",
+    "nome": "Parede de Vento",
+    "rank": "1/10"
+   },
+   {
+    "t": "E",
+    "nome": "Espada Ágil",
+    "rank": "5/10"
+   },
+   {
+    "t": "R",
+    "nome": "Último Suspiro",
+    "rank": "5/5"
+   },
+   {
+    "t": "G",
+    "nome": "Respiração do Vento",
+    "rank": "7/10"
+   },
+   {
+    "t": "A",
+    "nome": "Investida do Vendaval",
+    "rank": "3/10"
+   },
+   {
+    "t": "F",
+    "nome": "Lâmina Fantasma",
+    "rank": "4/10"
+   },
+   {
+    "t": "T",
+    "nome": "Furacão Cortante",
+    "rank": "0/10"
+   },
+   {
+    "t": "D",
+    "nome": "Lâmina Inquieta",
+    "rank": "2/10",
+    "passiva": true
+   }
+  ],
+  "barra": [
+   {
+    "t": "Q"
+   },
+   {
+    "t": "R"
+   },
+   {
+    "t": "F"
+   },
+   {
+    "t": "G"
+   }
+  ],
+  "stats": {
+   "ouro": "11.4M"
+  },
+  "cartas": [
+   {
+    "qtd": 2,
+    "nome": "Carta de Ataque Rara"
+   },
+   {
+    "qtd": 3,
+    "nome": "Carta de Velocidade de Ataque Rara"
+   },
+   {
+    "qtd": 3,
+    "nome": "Carta de Crítico Rara"
+   },
+   {
+    "qtd": 134,
+    "nome": "Carta de Ataque Básica"
+   }
+  ],
+  "mochila": [
+   {
+    "id": "3172~C",
+    "raridade": "lendario"
+   },
+   {
+    "id": "3158~C",
+    "raridade": "epico"
+   },
+   {
+    "id": "3086~B",
+    "raridade": "epico"
+   },
+   {
+    "id": "3053~C",
+    "raridade": "lendario"
+   },
+   {
+    "id": "3083~C",
+    "raridade": "lendario"
+   },
+   {
+    "id": "3046~B",
+    "raridade": "lendario"
+   },
+   {
+    "id": "3168~A",
+    "raridade": "lendario"
+   }
+  ]
+ }
+}

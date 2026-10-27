@@ -47,4 +47,6 @@ contextBridge.exposeInMainWorld('lupaApp', {
   aoEscolher: (fn) => { ipcRenderer.on('lupa:escolher', (_e, nome) => fn(nome)); },
   // o botão "Entregar e seguir" ('tarefa') e o Parar ('parar'), na aba desse personagem → { ok } ou { erro }
   acao: (tipo, nome) => ipcRenderer.invoke('lupa:acao', { tipo: String(tipo), nome: String(nome) }),
+  // o botão "Calcular" do Onde gastar o ouro: o app simula as compras desse personagem → { ok } ou { erro }
+  gastar: (nome) => ipcRenderer.invoke('lupa:gastar', { nome: String(nome) }),
 });
