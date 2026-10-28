@@ -178,8 +178,10 @@ const CALC = (() => {
       const pg = J.paginaCodex(id), k = Number(x?.k);
       if (!pg || !Number.isInteger(k) || k < 0) continue;
       if (k >= 10) { prog[id] = J.maxPontosCodex(pg); continue; }
-      // o exato só vale se o "de N" lido for o tamanho desta estrela (o detalhe pode ainda ser o do item anterior)
-      const faixa = J.CODEX.paginas[pg].pontos[k], exato = Number.isFinite(x.de) && x.ate === faixa;
+      // o exato só vale se bater com o cartão do próprio item: o "de N" é o tamanho desta estrela e a barra (arredondada) é a mesma
+      // conta (o detalhe pode ainda ser o do item anterior)
+      const faixa = J.CODEX.paginas[pg].pontos[k];
+      const exato = Number.isFinite(x.de) && x.ate === faixa && Math.abs((100 * x.de) / faixa - (Number(x.pct) || 0)) <= 1;
       const de = exato ? x.de : ((Number(x.pct) || 0) / 100) * faixa;
       if (!exato && x.pct > 0) aprox.add(id);
       prog[id] = rd2(J.pontosAteEstrela(pg, k) + Math.max(0, Math.min(faixa - 0.01, de)));
@@ -240,7 +242,8 @@ const CALC = (() => {
   // próximo patamar da coleção) e quanto rende por milhão de ouro (taxa + o que o Lojista pagaria por ela; opts.venda(chave)).
   // Dentro de cada item, da cópia que vale menos para a que vale mais: a que rende pelo menos opts.limiar entra no plano (recomendada)
   // e o item avança; a que não rende fica de fora sem avançar o item, então a cópia grande seguinte é avaliada sem ela na frente (o
-  // rende só cai com as estrelas, e uma cópia pulada continuaria abaixo do limiar se viesse depois). depois = o progresso do plano.
+  // rende não sobe quando o item avança, e uma cópia pulada continuaria abaixo do limiar se viesse depois). A que fica de fora aparece
+  // avaliada depois do plano do item (onde ela cairia se fosse registrada mesmo assim). depois = o progresso do plano.
   function planoMochila(prog, chaves, opts = {}) {
     const venda = opts.venda || (() => 0), limiar = opts.limiar ?? 0, pat = Object.fromEntries(patamares(prog).map((x) => [x.pg + '/' + x.colecao, x]));
     const porItem = new Map();
@@ -248,19 +251,24 @@ const CALC = (() => {
     const linhas = [], depois = { ...prog };
     let taxa = 0;
     for (const [id, lista] of porItem) {
-      const pg = J.paginaCodex(id), col = J.colecaoCodex(id), pm = pat[pg + '/' + col], doItem = [];
-      let p = prog[id] || 0, ordem = Infinity;
-      for (const chave of porPontos(lista)) {
+      const pg = J.paginaCodex(id), col = J.colecaoCodex(id), pm = pat[pg + '/' + col], doItem = [], fora = [];
+      const avaliar = (p, chave) => {
         const s = passoCodex(pg, p, chave);
         const bonusItem = s.pulada ? 0 : bonusContinuo(pg, s.para) - bonusContinuo(pg, s.de);
         const rumo = pm?.prox ? Math.max(0, Math.min(s.para, pm.alvo) - Math.min(s.de, pm.alvo)) : 0;
         const bonusPatamar = rumo * (pm?.porPonto || 0), v = venda(s.chave) || 0, custo = s.taxa + v;
         const rende = custo > 0 ? ((bonusItem + bonusPatamar) * 100) / (custo / 1e6) : 0;      // % de bônus por milhão de ouro
-        const recomendada = !s.pulada && rende >= limiar;
+        return { ...s, id, pg, colecao: col, tipo: J.tipoBonusCodex(id), bonusItem, bonusPatamar, venda: v, custo, rende };
+      };
+      let p = prog[id] || 0, ordem = Infinity;
+      for (const chave of porPontos(lista)) {
+        const l = avaliar(p, chave);
+        if (l.pulada || l.rende < limiar) { fora.push(chave); continue; }
         // na lista, uma cópia do plano nunca vem antes das que o mesmo item registra antes dela (ela depende delas)
-        if (recomendada) { ordem = Math.min(ordem, rende); p = s.para; taxa += s.taxa; }
-        doItem.push({ ...s, id, pg, colecao: col, tipo: J.tipoBonusCodex(id), recomendada, bonusItem, bonusPatamar, venda: v, custo, rende, ordem: recomendada ? ordem : rende });
+        ordem = Math.min(ordem, l.rende); p = l.para; taxa += l.taxa;
+        doItem.push({ ...l, recomendada: true, ordem });
       }
+      for (const chave of fora) { const l = avaliar(p, chave); doItem.push({ ...l, recomendada: false, ordem: l.rende }); }
       const plano = doItem.filter((l) => l.recomendada);
       plano.forEach((l, n) => Object.assign(l, { passo: n + 1, deN: plano.length }));
       linhas.push(...doItem);

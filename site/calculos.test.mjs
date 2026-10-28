@@ -169,9 +169,9 @@ test('Arsenal: pontos por cópia (comprado vale metade, refino do +3 em diante m
 
 test('Arsenal: progresso pela leitura da janela (estrelas exatas, barra arredondada, pontos exatos do item escolhido)', () => {
   const [a, b, c, d] = ATQ;
-  const { prog, aprox } = C.progressoCodex({ itens: { [a]: { k: 3, pct: 50 }, [b]: { k: 3, pct: 60, de: 2.5, ate: 5 }, [c]: { k: 10, pct: 100 }, [d]: { k: 2, pct: 100 }, x: { k: 1 } } });
+  const { prog, aprox } = C.progressoCodex({ itens: { [a]: { k: 3, pct: 50 }, [b]: { k: 3, pct: 51, de: 2.55, ate: 5 }, [c]: { k: 10, pct: 100 }, [d]: { k: 2, pct: 100 }, x: { k: 1 } } });
   assert.equal(prog[a], 8.5);                       // 6 pontos até a 3ª + metade dos 5 da 4ª
-  assert.equal(prog[b], 8.5);                       // o exato vale mais que a barra
+  assert.equal(prog[b], 8.55);                      // o exato vale mais que a barra
   assert.equal(prog[c], J.maxPontosCodex('lendario'));
   assert.equal(prog[d], 5.99);                      // a barra cheia (arredondada) não fecha a estrela
   assert.equal(J.estrelasCodex('lendario', prog[d]), 2);
@@ -179,6 +179,9 @@ test('Arsenal: progresso pela leitura da janela (estrelas exatas, barra arredond
   // o "de N" do detalhe não é o tamanho da estrela: era o do item anterior, vale a barra
   const r2 = C.progressoCodex({ itens: { [a]: { k: 3, pct: 40, de: 0.5, ate: 2 } } });
   assert.equal(r2.prog[a], 8); assert.ok(r2.aprox.has(a));
+  // mesma estrela, mas a barra do cartão não bate com o detalhe: também era o do item anterior
+  const r3 = C.progressoCodex({ itens: { [a]: { k: 3, pct: 10, de: 4.5, ate: 5 } } });
+  assert.equal(r3.prog[a], 6.5); assert.ok(r3.aprox.has(a));
 });
 
 test('Arsenal: leitura completa só quando a soma das estrelas bate com a aba do jogo', () => {
@@ -221,7 +224,9 @@ test('Arsenal: a cópia que não compensa sai do plano e a grande seguinte é av
   const plano = linhas.filter((l) => l.recomendada);
   assert.equal(depois[id], p3 + plano.reduce((s, l) => s + l.pts, 0));    // o C não avançou o item
   assert.equal(taxa, plano.reduce((s, l) => s + l.taxa, 0));
-  assert.equal(plano[0].taxa, J.custoCodex('lendario', p3));             // a 1ª do plano paga a taxa da ★3, sem o C na frente
+  assert.notEqual(plano[0].chave, id + '~C');
+  assert.equal(ss.de, p3 + J.pontosCopia(id + '+4~A'));                 // a SS vem logo depois da A+4, sem o C na frente
+  assert.equal(c.de, depois[id]);                                        // a que ficou de fora aparece avaliada depois do plano
 });
 
 test('Arsenal: custo de cada estrela com a mesma cópia', () => {
