@@ -176,6 +176,9 @@ test('Arsenal: progresso pela leitura da janela (estrelas exatas, barra arredond
   assert.equal(prog[d], 5.99);                      // a barra cheia (arredondada) não fecha a estrela
   assert.equal(J.estrelasCodex('lendario', prog[d]), 2);
   assert.ok(aprox.has(a) && !aprox.has(b) && !('x' in prog));
+  // o "de N" do detalhe não é o tamanho da estrela: era o do item anterior, vale a barra
+  const r2 = C.progressoCodex({ itens: { [a]: { k: 3, pct: 40, de: 0.5, ate: 2 } } });
+  assert.equal(r2.prog[a], 8); assert.ok(r2.aprox.has(a));
 });
 
 test('Arsenal: leitura completa só quando a soma das estrelas bate com a aba do jogo', () => {
@@ -203,6 +206,22 @@ test('Arsenal: plano da mochila (ordem por rendimento, sem passar na frente da c
   assert.ok(perto(l0.rende, ((0.0004 + 0.004 / 17) * 100) / 0.021));
   assert.equal(linhas[2].bonusPatamar, 0);                               // b já passou da 1ª estrela
   assert.equal(depois[a], 2);
+});
+
+test('Arsenal: a cópia que não compensa sai do plano e a grande seguinte é avaliada sem ela na frente', () => {
+  const id = ATQ[0], p3 = J.pontosAteEstrela('lendario', 3);
+  const copias = [id + '~C', id + '+4~A', id + '~SS'];
+  const sem = C.planoMochila({ [id]: p3 }, copias, { venda: () => 1000 });
+  assert.ok(sem.linhas.every((l) => l.recomendada));                     // sem limiar, todas entram
+  const { linhas, depois, taxa } = C.planoMochila({ [id]: p3 }, copias, { venda: () => 1000, limiar: 0.1 });
+  const c = linhas.find((l) => l.chave === id + '~C'), ss = linhas.find((l) => l.chave === id + '~SS');
+  assert.equal(c.recomendada, false); assert.ok(c.rende < 0.1);
+  assert.equal(ss.recomendada, true); assert.ok(ss.rende >= 0.1);
+  assert.equal(linhas.at(-1).chave, id + '~C');                          // a que fica de fora vai para o fim
+  const plano = linhas.filter((l) => l.recomendada);
+  assert.equal(depois[id], p3 + plano.reduce((s, l) => s + l.pts, 0));    // o C não avançou o item
+  assert.equal(taxa, plano.reduce((s, l) => s + l.taxa, 0));
+  assert.equal(plano[0].taxa, J.custoCodex('lendario', p3));             // a 1ª do plano paga a taxa da ★3, sem o C na frente
 });
 
 test('Arsenal: custo de cada estrela com a mesma cópia', () => {

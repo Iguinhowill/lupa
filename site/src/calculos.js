@@ -178,7 +178,8 @@ const CALC = (() => {
       const pg = J.paginaCodex(id), k = Number(x?.k);
       if (!pg || !Number.isInteger(k) || k < 0) continue;
       if (k >= 10) { prog[id] = J.maxPontosCodex(pg); continue; }
-      const faixa = J.CODEX.paginas[pg].pontos[k], exato = Number.isFinite(x.de);
+      // o exato só vale se o "de N" lido for o tamanho desta estrela (o detalhe pode ainda ser o do item anterior)
+      const faixa = J.CODEX.paginas[pg].pontos[k], exato = Number.isFinite(x.de) && x.ate === faixa;
       const de = exato ? x.de : ((Number(x.pct) || 0) / 100) * faixa;
       if (!exato && x.pct > 0) aprox.add(id);
       prog[id] = rd2(J.pontosAteEstrela(pg, k) + Math.max(0, Math.min(faixa - 0.01, de)));
@@ -201,18 +202,21 @@ const CALC = (() => {
     if (k >= 10) return b;
     return b + ((p - J.pontosAteEstrela(pg, k)) / J.CODEX.paginas[pg].pontos[k]) * J.CODEX.paginas[pg].bonus[k];
   }
+  // UM registro de uma cópia num item com p pontos. Igual ao servidor: item cheio pula a cópia; o que passa do máximo se perde; os
+  // pontos ficam arredondados em 2 casas a cada registro (registrarCodex do jogo)
+  function passoCodex(pg, p, chave) {
+    const pts = J.pontosCopia(chave), max = J.maxPontosCodex(pg);
+    if (p >= max - 1e-9) return { chave, pts, pulada: true, de: p, para: p, taxa: 0, kDe: 10, kPara: 10, perdidos: pts };
+    const para = Math.min(max, rd2(p + pts));
+    return { chave, pts, de: p, para, taxa: J.custoCodex(pg, p), kDe: J.estrelasCodex(pg, p), kPara: J.estrelasCodex(pg, para), perdidos: rd2(p + pts - para) };
+  }
+  const porPontos = (chaves) => [...chaves].sort((a, b) => J.pontosCopia(a) - J.pontosCopia(b));
   // registra as cópias (chaves do jogo) de UM item, da que vale menos para a que vale mais: a taxa vai pela estrela em que o item
-  // está, então a cópia grande por último sai mais barato. Igual ao servidor: item cheio pula a cópia; o que passa do máximo se perde.
+  // está, então a cópia grande por último sai mais barato
   function registrarCopias(id, p0, chaves) {
-    const pg = J.paginaCodex(id), max = J.maxPontosCodex(pg), passos = [];
+    const pg = J.paginaCodex(id), passos = [];
     let p = p0 || 0, taxa = 0;
-    for (const chave of [...chaves].sort((a, b) => J.pontosCopia(a) - J.pontosCopia(b))) {
-      const pts = J.pontosCopia(chave);
-      if (p >= max - 1e-9) { passos.push({ chave, pts, pulada: true, de: p, para: p, taxa: 0, kDe: 10, kPara: 10, perdidos: pts }); continue; }
-      const t = J.custoCodex(pg, p), para = Math.min(max, rd2(p + pts));
-      passos.push({ chave, pts, de: p, para, taxa: t, kDe: J.estrelasCodex(pg, p), kPara: J.estrelasCodex(pg, para), perdidos: rd2(p + pts - para) });
-      taxa += t; p = para;
-    }
+    for (const chave of porPontos(chaves)) { const s = passoCodex(pg, p, chave); passos.push(s); taxa += s.taxa; p = s.para; }
     return { passos, taxa, p };
   }
   // o próximo patamar de cada coleção, repartido pelos pontos que faltam para ele: cada ponto que leva um item atrasado até a estrela
@@ -232,30 +236,38 @@ const CALC = (() => {
     }
     return out;
   }
-  // o plano da mochila: cada cópia registrável (motivoCodex nulo), na ordem mais barata dentro do item, com a taxa, o bônus que ela
-  // acrescenta (estrelas + a parte dela no próximo patamar da coleção) e quanto rende por milhão de ouro (taxa + o que o Lojista
-  // pagaria por ela). opts.venda(chave) dá o valor no Lojista.
+  // o plano da mochila: cada cópia registrável (motivoCodex nulo) com a taxa, o bônus que ela acrescenta (estrelas + a parte dela no
+  // próximo patamar da coleção) e quanto rende por milhão de ouro (taxa + o que o Lojista pagaria por ela; opts.venda(chave)).
+  // Dentro de cada item, da cópia que vale menos para a que vale mais: a que rende pelo menos opts.limiar entra no plano (recomendada)
+  // e o item avança; a que não rende fica de fora sem avançar o item, então a cópia grande seguinte é avaliada sem ela na frente (o
+  // rende só cai com as estrelas, e uma cópia pulada continuaria abaixo do limiar se viesse depois). depois = o progresso do plano.
   function planoMochila(prog, chaves, opts = {}) {
-    const venda = opts.venda || (() => 0), pat = Object.fromEntries(patamares(prog).map((x) => [x.pg + '/' + x.colecao, x]));
+    const venda = opts.venda || (() => 0), limiar = opts.limiar ?? 0, pat = Object.fromEntries(patamares(prog).map((x) => [x.pg + '/' + x.colecao, x]));
     const porItem = new Map();
     for (const chave of chaves) if (!J.motivoCodex(chave)) { const id = String(chave).split(/[!+~#]/)[0]; (porItem.get(id) ?? porItem.set(id, []).get(id)).push(chave); }
     const linhas = [], depois = { ...prog };
+    let taxa = 0;
     for (const [id, lista] of porItem) {
-      const pg = J.paginaCodex(id), col = J.colecaoCodex(id), pm = pat[pg + '/' + col], r = registrarCopias(id, prog[id] || 0, lista);
-      let ordem = Infinity;
-      r.passos.forEach((s, n) => {
+      const pg = J.paginaCodex(id), col = J.colecaoCodex(id), pm = pat[pg + '/' + col], doItem = [];
+      let p = prog[id] || 0, ordem = Infinity;
+      for (const chave of porPontos(lista)) {
+        const s = passoCodex(pg, p, chave);
         const bonusItem = s.pulada ? 0 : bonusContinuo(pg, s.para) - bonusContinuo(pg, s.de);
         const rumo = pm?.prox ? Math.max(0, Math.min(s.para, pm.alvo) - Math.min(s.de, pm.alvo)) : 0;
         const bonusPatamar = rumo * (pm?.porPonto || 0), v = venda(s.chave) || 0, custo = s.taxa + v;
         const rende = custo > 0 ? ((bonusItem + bonusPatamar) * 100) / (custo / 1e6) : 0;      // % de bônus por milhão de ouro
-        // na lista, uma cópia nunca vem antes das que o mesmo item registra antes dela (ela depende delas)
-        ordem = Math.min(ordem, rende);
-        linhas.push({ ...s, id, pg, colecao: col, tipo: J.tipoBonusCodex(id), passo: n + 1, deN: r.passos.length, bonusItem, bonusPatamar, venda: v, custo, rende, ordem });
-      });
-      depois[id] = r.p;
+        const recomendada = !s.pulada && rende >= limiar;
+        // na lista, uma cópia do plano nunca vem antes das que o mesmo item registra antes dela (ela depende delas)
+        if (recomendada) { ordem = Math.min(ordem, rende); p = s.para; taxa += s.taxa; }
+        doItem.push({ ...s, id, pg, colecao: col, tipo: J.tipoBonusCodex(id), recomendada, bonusItem, bonusPatamar, venda: v, custo, rende, ordem: recomendada ? ordem : rende });
+      }
+      const plano = doItem.filter((l) => l.recomendada);
+      plano.forEach((l, n) => Object.assign(l, { passo: n + 1, deN: plano.length }));
+      linhas.push(...doItem);
+      depois[id] = p;
     }
-    linhas.sort((a, b) => b.ordem - a.ordem || (a.id === b.id ? a.passo - b.passo : a.id < b.id ? -1 : 1));
-    return { linhas, depois };
+    linhas.sort((a, b) => b.recomendada - a.recomendada || b.ordem - a.ordem || (a.id === b.id ? a.pts - b.pts : a.id < b.id ? -1 : 1));
+    return { linhas, depois, taxa };
   }
   // quanto custa cada estrela de uma página registrando sempre a mesma cópia (chave): por estrela, a cópia em que ela fecha, a taxa
   // e o bônus acumulados até ali

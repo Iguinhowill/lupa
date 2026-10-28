@@ -99,16 +99,13 @@ const lerNum = (t) => { const x = String(t ?? '').trim().replace(',', '.'); if (
     const mochila = (e?.ficha?.mochila || []).filter((i) => i.raridade === 'lendario' || i.raridade === 'epico');
     const chaves = mochila.map((i) => String(i.id || '')).filter((x) => JOGO.paginaCodex(x));
     const fora = { carta: chaves.filter((x) => JOGO.cartaDe(x)).length, pendente: chaves.filter((x) => /~\?$/.test(x)).length };
-    const { linhas } = planoMochila(prog, chaves, { venda: vendaLojista });
+    // o plano: só as cópias que valem (o mesmo item, da cópia que vale menos para a que vale mais, pulando a que não compensa)
+    const { linhas, depois, taxa } = planoMochila(prog, chaves, { venda: vendaLojista, limiar: FAIXAS[0][0] });
     const corpo = [];
     if (!linhas.length) {
       corpo.push(vazio(e?.ficha ? 'Nenhum lendário ou épico registrável na mochila agora.' : 'Ainda não tenho a mochila deste personagem: a Lupa precisa ler o jogo e enviar.'));
     } else {
-      // o resumo: registrar só as que valem (o mesmo item, sempre da cópia que vale menos para a que vale mais)
-      const vale = linhas.filter((l) => !l.pulada && l.ordem >= FAIXAS[0][0]), porItem = new Map(), depois = { ...prog };
-      for (const l of vale) (porItem.get(l.id) ?? porItem.set(l.id, []).get(l.id)).push(l.chave);
-      let taxa = 0;
-      for (const [id, lista] of porItem) { const r = registrarCopias(id, prog[id] || 0, lista); depois[id] = r.p; taxa += r.taxa; }
+      const vale = linhas.filter((l) => l.recomendada);
       const ganho = difBonus(JOGO.bonusCodex(prog), JOGO.bonusCodex(depois)), ouro = lerPreco(e?.ficha?.stats?.ouro || '');
       corpo.push(vale.length
         ? h('div', { class: 'destaque' },
@@ -121,11 +118,11 @@ const lerNum = (t) => { const x = String(t ?? '').trim().replace(',', '.'); if (
         const veredito = l.pulada ? h('span', { class: 'etiqueta muito-caro' }, 'Item completo: venda')
           : h('span', { class: 'etiqueta-pilha' }, h('span', { class: 'etiqueta ' + cls }, rot), topo(l.chave) ? h('span', { class: 'fraco' }, 'S, SS ou +3: compare com o Mercado') : null);
         return {
-          classe: l.pulada || cls !== 'vale' ? 'fraca' : null,
+          classe: l.recomendada ? null : 'fraca',
           celulas: [
             h('div', { class: 'item' }, icoItem(l.id), h('div', { class: 'item-texto' }, h('span', { class: 'item-nome' }, nomeItem(l.id)), h('span', { class: 'fraco' }, `${NOME_COL[l.colecao]} · ${UM_PG[l.pg]}`))),
             h('span', null, versao(l.chave), h('small', { class: 'fraco bloco' }, pontosTxt(l.pts))),
-            h('span', null, l.pulada ? '★10' : l.kPara > l.kDe ? `★${l.kDe} → ★${l.kPara}` : `★${l.kDe}`, l.deN > 1 ? h('small', { class: 'fraco bloco' }, `${l.passo}ª de ${l.deN} deste item`) : null,
+            h('span', null, l.pulada ? '★10' : l.kPara > l.kDe ? `★${l.kDe} → ★${l.kPara}` : `★${l.kDe}`, l.recomendada && l.deN > 1 ? h('small', { class: 'fraco bloco' }, `${l.passo}ª de ${l.deN} deste item`) : null,
               l.perdidos > 0 && !l.pulada ? h('small', { class: 'fraco bloco' }, `${pontosTxt(l.perdidos)} passam do máximo`) : null),
             h('span', null, '+' + pctB(l.bonusItem), l.bonusPatamar > 0 ? h('small', { class: 'fraco bloco' }, `+${pctB(l.bonusPatamar)} do patamar`) : null, h('small', { class: 'fraco bloco' }, NOME_BONUS[l.tipo])),
             precoTxt(l.taxa), precoTxt(l.venda), merc != null ? precoTxt(merc) : '—', rendeTxt(l.rende), veredito],
@@ -133,7 +130,7 @@ const lerNum = (t) => { const x = String(t ?? '').trim().replace(',', '.'); if (
         };
       });
       corpo.push(tabela(colunas, lin, 'Cópias da mochila que podem entrar no Arsenal'));
-      corpo.push(nota('Rende: quanto bônus a cópia acrescenta por milhão de ouro (a taxa da Guardiã mais o que o Lojista pagaria por ela). A cópia que não fecha estrela conta a fração dela, e a que leva um item atrasado até a estrela do próximo patamar ganha a parte dela no bônus do patamar. Vale: 0,1% por milhão ou mais (a 1ª estrela de um lendário rende uns 2%); caro: de 0,02% a 0,1%. O Mercado é o menor anúncio da mesma versão e é só referência.'));
+      corpo.push(nota('Rende: quanto bônus a cópia acrescenta por milhão de ouro (a taxa da Guardiã mais o que o Lojista pagaria por ela). A cópia que não fecha estrela conta a fração dela, e a que leva um item atrasado até a estrela do próximo patamar ganha a parte dela no bônus do patamar. No mesmo item, a cópia que não compensa fica de fora e a seguinte é avaliada sem ela na frente. Vale: 0,1% por milhão ou mais (a 1ª estrela de um lendário rende uns 2%); caro: de 0,02% a 0,1%. O Mercado é o menor anúncio da mesma versão e é só referência.'));
     }
     if (fora.carta || fora.pendente) corpo.push(nota([fora.carta ? `${fora.carta} com carta (tire a carta no jogo antes de registrar)` : '', fora.pendente ? `${fora.pendente} ainda sem qualidade avaliada` : ''].filter(Boolean).join(' e ') + ' ficaram de fora.'));
     return cartao('Da mochila: o que registrar', ...corpo);
