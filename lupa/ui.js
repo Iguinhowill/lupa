@@ -314,10 +314,12 @@ function desenharFicha(e, ctx, opts = {}) {
 // inteira mente quando um bônus de XP acabou no meio dela; com menos de 15 min para medir, é ela que vale.
 function ritmoRecente(sessao, campo = 'xp', agora = Date.now()) {
   if (!sessao) return null;
-  const fim = Math.floor(agora / BALDE) * BALDE, ini = Math.max(fim - 3600e3, Math.floor((sessao.ini || 0) / BALDE) * BALDE);
-  if (fim - ini < 15 * 60e3) return porHora(sessao[campo], sessao.seg);
-  const soma = (sessao.baldes || []).filter((b) => b.t >= ini && b.t + BALDE <= fim).reduce((t, b) => t + (b[campo] || 0), 0);
-  return soma / ((fim - ini) / 3600e3);
+  // o tempo conta a partir do começo de verdade da sessão; o balde em que ela começou entra (só tem o XP de depois dele)
+  const fim = Math.floor(agora / BALDE) * BALDE, desde = Math.max(fim - 3600e3, sessao.ini || 0);
+  if (fim - desde < 15 * 60e3) return porHora(sessao[campo], sessao.seg);
+  const primeiro = Math.floor(desde / BALDE) * BALDE;
+  const soma = (sessao.baldes || []).filter((b) => b.t >= primeiro && b.t + BALDE <= fim).reduce((t, b) => t + (b[campo] || 0), 0);
+  return soma / ((fim - desde) / 3600e3);
 }
 const prazoTexto = (min) => (min >= 60 ? `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min` : `${min} min`);
 // quanto falta para o próximo nível e a que horas ele chega no ritmo da última hora (sem caça ativa: sem previsão)

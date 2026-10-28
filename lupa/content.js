@@ -533,7 +533,8 @@
       xp: txt($('#hud-xpb-txt')),
       xpPct: txt($('#st-xp-pct')),
       ficha: tenta(lerFicha),
-      tarefa: tenta(() => extraTarefa(lerTarefa(), zona)),
+      // null = o jogo não mostra tarefa; leitura que falhou fica sem a chave (undefined), para não virar "sem tarefa"
+      tarefa: tenta(() => extraTarefa(lerTarefa(), zona), undefined),
       diarias: tenta(lerDiarias, []),
       timers: tenta(lerTimers),
       rastreio: tenta(lerRastreio),

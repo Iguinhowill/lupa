@@ -22,7 +22,7 @@
 .c-filtros button { flex: 1 1 0; min-height: 40px; border: 0; border-radius: 6px; background: transparent; color: var(--fraco); font-weight: 600; cursor: pointer; }
 /* o escolhido é o botão invertido (tinta clara, letra escura): sem cor, mas bem diferente do resto */
 .c-filtros button[aria-pressed="true"] { background: var(--texto); color: var(--fundo); }
-.c-filtros button:hover { color: var(--texto); }
+.c-filtros button:not([aria-pressed="true"]):hover { color: var(--texto); }
 .status { font-size: 13px; }
 .status.ok::before { animation: c-pulso 2s ease-in-out infinite; }
 @keyframes c-pulso { 50% { opacity: .35; } }

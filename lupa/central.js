@@ -102,7 +102,8 @@
     const x = cacadas[e.nome]?.sessoes?.at(-1);
     return x && Date.now() - e.ts <= LIMITE_VELHO && Date.now() - (x.ultimoAbate || x.fim) < PAUSA ? x : null;
   };
-  const inicioDoDia = () => { const ms = msAteViradaDia(); return ms == null ? Date.now() - 86400e3 : Date.now() + ms - 86400e3; };
+  // a meia-noite de Brasília em ms (o msAteViradaDia conta em segundos inteiros: arredonda para não sobrar a fração do agora)
+  const inicioDoDia = () => { const ms = msAteViradaDia(); return ms == null ? Date.now() - 86400e3 : Math.floor((Date.now() + ms) / 1000) * 1000 - 86400e3; };
   // XP de hoje (desde 00:00 de Brasília): a soma dos baldes de 5 min das sessões. Duas sessões que se sobrepõem (duas Lupas
   // lendo o mesmo personagem) têm os mesmos baldes: o de uma sessão que começou antes da outra acabar não conta de novo. O balde
   // que o "Nova sessão" corta no meio fica nas duas, uma depois da outra, e as duas partes somam.
@@ -306,7 +307,8 @@
   // meia-noite, a conta vale a partir do evento mais antigo que sobrou, e o cabeçalho diz desde quando
   const CAP_EVENTOS = globalThis.LUPA_CAP_EVENTOS || 80;
   function cartaoLendarios(lista) {
-    let desde = inicioDoDia();
+    const ini = inicioDoDia();
+    let desde = ini;
     for (const e of lista) {
       const evs = eventos[e.nome] || [];
       if (evs.length >= CAP_EVENTOS) desde = Math.max(desde, Math.min(...evs.map((v) => v.ts)));
@@ -322,7 +324,7 @@
     }).sort((a, b) => b.n - a.n);
     const total = linhas.reduce((t, l) => t + l.n, 0), max = Math.max(1, ...linhas.map((l) => l.n));
     const textoQual = (por) => juntar(QUALS.filter((q) => por[q]).map((q) => `${por[q]} ${NOME_QUAL[q] || q}`));
-    const doDia = desde <= inicioDoDia();
+    const doDia = desde <= ini;
     return h('section', { class: 'vg-cartao', 'aria-labelledby': 'vg-t-lend' },
       cabCartao('vg-t-lend', doDia ? 'Lendários de hoje' : 'Lendários recentes', doDia ? 'desde 00:00' : `desde ${hora(desde)}, o que a Lupa ainda guarda`),
       h('div', { class: 'vg-lend' },
