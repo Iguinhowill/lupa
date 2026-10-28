@@ -44,7 +44,7 @@ function lerItem(x) {
 }
 const chaveDe = (o) => JOGO.chaveItem({ id: o.id, refino: o.refino, carta: o.carta, qual: o.qual });
 const nomeItem = (o) => `${JOGO.item(o.base).nome} +${o.refino} ${o.qual}`;
-const forca = (o) => (1 + JOGO.BONUS_REFINO * o.refino) * (JOGO.QUALIDADES[o.qual]?.mult || 1);
+const forca = (o) => JOGO.multRefino(o.refino) * (JOGO.QUALIDADES[o.qual]?.mult || 1);      // o +7 ganha um pouco mais (multRefino)
 const ehBota = (o) => JOGO.item(o.base)?.espaco === 'botas';
 const raridade = (o) => JOGO.item(o.base)?.raridade;
 
