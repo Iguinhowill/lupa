@@ -14,7 +14,8 @@ function indicePorNome(precos) {
   return m;
 }
 
-const COR_LINHA = ['#5cc8b8', '#e0b05a', '#c88aff', '#f5a66b'];
+// a mesma cor de cada personagem da Agora (painel.css, --p1 a --p4), na mesma ordem: a dos nomes
+const COR_LINHA = ['var(--p1)', 'var(--p2)', 'var(--p3)', 'var(--p4)'];
 const BALDE_MS = 5 * 60e3;
 
 // XP/h por faixa do dia (30 min ou 1 h): cada faixa soma os baldes de 5 min que caem nela. A faixa em andamento
@@ -169,10 +170,10 @@ function graficoXp(series, ini, agora, passo, larg) {
     const eixo = Array.from({ length: 7 }, (_, i) => hora(Math.floor(agora / HORA) * HORA - 23 * HORA + i * 4 * HORA));
     const secAtiv = cartao(periodo === '24h' ? 'Atividade nas últimas 24 h' : `Atividade nas últimas 24 h (os pulsos são só de 24 h, mesmo com ${periodo === '7d' ? '7 dias' : '30 dias'} escolhidos)`,
       h('div', { class: 'legenda' },
-        h('span', null, h('i', { style: 'background:#5cc8b8' }), 'Caçando'),
-        h('span', null, h('i', { style: 'background:linear-gradient(to top,#5cc8b8 50%,#1d212c 50%);border:1px solid #5cc8b8' }), 'Parte da hora'),
-        h('span', null, h('i', { style: 'border:1.5px solid #f5a66b' }), 'Sem caçar ou sem leitura'),
-        h('span', null, h('i', { style: 'background:#252a36' }), 'Antes do Lupa Online')),
+        h('span', null, h('i', { style: 'background:var(--verde)' }), 'Caçando'),
+        h('span', null, h('i', { style: 'background:linear-gradient(to top,var(--verde) 50%,var(--cartao) 50%);border:1px solid var(--verde)' }), 'Parte da hora'),
+        h('span', null, h('i', { style: 'border:1.5px solid var(--laranja)' }), 'Sem caçar ou sem leitura'),
+        h('span', null, h('i', { style: 'background:var(--cartao-2)' }), 'Antes do Lupa Online')),
       ativ.map((a) => h('div', { class: 'ativ' }, h('span', null, nomeCurto(a.p)), h('div', { class: 'ativ-horas' }, a.celulas))),
       h('div', { class: 'ativ' }, h('span'), h('div', { class: 'ativ-eixo' }, eixo.map((x) => h('span', null, x)))),
       buracos.map((b) => h('div', { class: 'alerta fora' }, icone('alerta', 18),

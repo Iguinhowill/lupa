@@ -13,6 +13,8 @@ for (const f of readdirSync(dist)) if (f !== '.vercel') rmSync(join(dist, f), { 
 cpSync(join(aqui, 'src'), dist, { recursive: true });
 for (const f of ['supabase.js', '591.supabase.js']) cpSync(join(aqui, 'vendor', f), join(dist, f));
 for (const f of ['ui.js', 'plano.js', 'central.js', 'painel.css', 'central.css']) cpSync(join(lupa, f), join(dist, f));
+// a fonte da paleta nova (painel.css a pede em fontes/, ao lado dele)
+cpSync(join(lupa, 'fontes'), join(dist, 'fontes'), { recursive: true });
 
 // as páginas simples têm o mesmo esqueleto: muda o título, o script e se usa o plano.js
 const PAGINAS = [['relatorio', 'Relatório', ['dados-jogo.js']], ['guia', 'Guia', ['plano.js']], ['farm', 'Farm', ['dados-jogo.js']], ['loja', 'Loja', []], ['calcular', 'Calcular', ['dados-jogo.js', 'calculos.js']]];
@@ -25,7 +27,7 @@ for (const [nome, titulo, extras] of PAGINAS) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lupa Online · ${titulo}</title>
 <link rel="manifest" href="/manifest.webmanifest">
-<meta name="theme-color" content="#161922">
+<meta name="theme-color" content="#0e0e0f">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="icon" type="image/png" href="/icone-192.png">
 <link rel="stylesheet" href="painel.css">

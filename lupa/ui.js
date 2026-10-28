@@ -29,7 +29,8 @@ const PADRAO = {
     premio: true, diaria: true, guerra: true, vilemaw: true, covil: true, reinicio: true, lendario: true }
 };
 // mesma cor de --borda-forte do CSS (o atributo style não enxerga as variáveis do :root)
-const COR_BORDA_FORTE = '#3a4150';
+const COR_BORDA_FORTE = '#3d3d42';
+const ROTULO_RARIDADE = { basico: 'Básico', epico: 'Épico', lendario: 'Lendário', mitico: 'Mítico' };
 const PAUSA = 15 * 60e3, BALDE = 5 * 60e3;
 
 // Mescla o config salvo com os padrões (inclusive os objetos aninhados).
@@ -308,19 +309,35 @@ function desenharFicha(e, ctx, opts = {}) {
 }
 
 // ---------- barra de XP do nível ----------
-// Nível atual → próximo, barra e "~N min no ritmo atual" (XP que falta ÷ XP/h da sessão atual).
-function barraXp(e, ctx) {
+// Ritmo da última hora: os baldes de 5 min já fechados dos últimos 60 min da sessão (o que ainda enche fica de fora). A média
+// da sessão inteira mente quando um bônus de XP acabou no meio dela; com menos de 3 baldes, é ela que vale.
+function ritmoRecente(sessao, campo = 'xp', agora = Date.now()) {
+  if (!sessao) return null;
+  const bs = (sessao.baldes || []).filter((b) => b.t + BALDE <= agora && b.t + BALDE > agora - 3600e3);
+  if (bs.length >= 3) return bs.reduce((t, b) => t + (b[campo] || 0), 0) / ((bs.length * BALDE) / 3600e3);
+  return porHora(sessao[campo], sessao.seg);
+}
+const prazoTexto = (min) => (min >= 60 ? `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min` : `${min} min`);
+// quanto falta para o próximo nível e a que horas ele chega no ritmo da última hora (sem caça ativa: sem previsão)
+function previsaoNivel(e, ctx) {
   const x = e?.xpNivel;
   if (!x || !x.total) return null;
   const falta = Math.max(0, x.total - x.atual), pct = Math.min(100, (100 * x.atual) / x.total);
   const sessao = ctx?.cacadas?.[e.nome]?.sessoes?.at(-1);
   const ativa = sessao && Date.now() - (sessao.ultimoAbate || sessao.fim) < PAUSA;
-  const xph = ativa ? porHora(ctx.semBonus ? sessao.xpBase : sessao.xp, sessao.seg) : null;
+  const xph = ativa ? ritmoRecente(sessao, ctx.semBonus ? 'xpBase' : 'xp') : null;
+  const min = xph > 0 ? Math.max(1, Math.round((falta / xph) * 60)) : null;
+  return { pct, falta, xph, min, ate: min != null ? Date.now() + min * 60e3 : null };
+}
+
+// Nível atual → próximo, barra e "sobe às HH:MM" (XP que falta ÷ XP/h da última hora).
+function barraXp(e, ctx) {
+  const p = previsaoNivel(e, ctx);
+  if (!p) return null;
+  const { falta, pct, min } = p;
   const nivel = parseInt(e.nivel, 10);
   const rotulo = isNaN(nivel) ? 'Próximo nível' : `Nível ${nivel} → ${nivel + 1}`;
-  const min = xph > 0 ? Math.max(1, Math.round((falta / xph) * 60)) : 0;
-  const prazo = min >= 60 ? `~${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min` : `~${min} min`;
-  const resto = xph > 0 ? `faltam ${curto(falta)} XP · ${prazo} no ritmo atual` : `faltam ${curto(falta)} XP`;
+  const resto = min != null ? `faltam ${curto(falta)} XP · sobe às ${hora(p.ate)} (em ${prazoTexto(min)}) no ritmo da última hora` : `faltam ${curto(falta)} XP`;
   return h('div', { class: 'xp', role: 'group', 'aria-label': `${rotulo}: ${resto}` },
     h('div', { class: 'xp-linha' }, h('span', null, rotulo), h('span', { class: 'num fraco' }, `${Math.floor(pct)}%`)),
     h('div', { class: 'progresso', role: 'progressbar', 'aria-valuemin': '0', 'aria-valuemax': '100', 'aria-valuenow': String(Math.floor(pct)) }, h('i', { style: `width:${pct}%` })),
@@ -703,7 +720,18 @@ function desenharFeed(eventos, ctx, { limite = 30, filtro = 'tudo' } = {}) {
   return h('ul', { class: 'feed' }, lista.map((v) => h('li', { class: 'feed-item ' + (v.tipo || '') },
     v.item ? imagem(v.item, ctx, { tam: 32, raridade: v.raridade }) : h('span', { class: 'feed-ico' }, icone(ICONE_EVENTO[v.tipo] || 'info', 20)),
     h('span', { class: 'feed-texto' },
-      h('span', { class: 'feed-titulo' }, v.titulo || v.tipo),
-      v.texto ? h('span', { class: 'feed-sub' }, v.texto) : null),
+      h('span', { class: 'feed-titulo' }, v.item || v.titulo || v.tipo),
+      v.item ? h('span', { class: 'feed-sub' }, raridadeDe(v), origemDrop(v) ? ` · ${origemDrop(v)}` : null)
+        : v.texto ? h('span', { class: 'feed-sub' }, v.texto) : null),
     h('span', { class: 'feed-hora num fraco' }, hora(v.ts)))));
 }
+// "Lendário · qualidade B", com o ponto na cor da raridade do jogo (a qualidade "?" ainda está sendo sorteada pelo servidor)
+function raridadeDe(v) {
+  const q = v.qual === '?' ? 'qualidade sendo avaliada' : v.qual ? `qualidade ${v.qual}` : null;
+  const r = ROTULO_RARIDADE[v.raridade] || (v.tipo === 'lendario' ? 'Lendário' : null);
+  return h('span', { class: 'raridade' },
+    r ? h('span', { class: 'raridade-ponto', style: `background:${COR_RARIDADE[v.raridade] || COR_RARIDADE.lendario}`, 'aria-hidden': 'true' }) : null,
+    [r, q].filter(Boolean).join(' · ') || 'Drop');
+}
+// de onde veio ("Loot de lobo gigante"); "Caiu na caçada" e o "Lendário!" do título não dizem nada a mais
+const origemDrop = (v) => (v.tipo === 'drop' && v.texto && !/^Caiu na caça/.test(v.texto) ? v.texto : '');

@@ -71,8 +71,8 @@
 .ativ { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 8px 12px; align-items: center; }
 .ativ-horas { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 2px; }
 .ativ-horas span { height: 22px; border-radius: 3px; box-sizing: border-box; }
-.ativ-horas .cacando { background: #5cc8b8; }
-.ativ-horas .parcial { background: linear-gradient(to top, #5cc8b8 50%, #1d212c 50%); border: 1px solid #5cc8b8; }
+.ativ-horas .cacando { background: var(--verde); }
+.ativ-horas .parcial { background: linear-gradient(to top, var(--verde) 50%, var(--cartao) 50%); border: 1px solid var(--verde); }
 .ativ-horas .parado { background: var(--fundo); border: 1.5px solid var(--laranja); }
 .ativ-horas .semdados { background: var(--cartao-2); }
 .ativ-eixo { display: flex; justify-content: space-between; color: var(--fraco); font: 12px var(--mono); }
@@ -138,7 +138,7 @@ details > summary { cursor: pointer; color: var(--fraco); min-height: 32px; disp
 .alerta-linha .item-texto .fraco { font-size: 12.5px; }
 .alerta-linha .rot { display: block; font-size: 12px; color: var(--fraco); }
 .alerta-linha.pausado > :not(.nuvem-bts) { opacity: .55; }
-.etiqueta.abaixo { margin-left: 8px; color: var(--verde); background: #1d3a35; }
+.etiqueta.abaixo { margin-left: 8px; color: var(--verde); background: var(--ok-fundo); }
 .alerta-form { display: grid; grid-template-columns: minmax(180px, 2.2fr) repeat(3, minmax(110px, 1fr)) minmax(110px, 1fr) minmax(80px, .7fr) auto; gap: 8px; align-items: end; padding-top: 4px; }
 .alerta-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--fraco); min-width: 0; }
 .alerta-form input, .alerta-form select { height: 40px; padding: 0 10px; background: var(--cartao-2); border: 1px solid var(--borda); border-radius: 8px; color: var(--texto); font: inherit; min-width: 0; }

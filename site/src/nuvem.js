@@ -57,7 +57,8 @@ async function lerSelos() {
   const ultimo = {};      // o último pulso da última hora de cada personagem (uns 60 por personagem)
   for (const p of pul.data || []) ultimo[p.personagem] ||= p;
   const agora = Date.now();
-  return est.data.map((e) => {
+  // só quem leu nas últimas 6 h (a mesma janela da Agora): um personagem esquecido não ocupa a barra
+  return est.data.filter((e) => agora - Date.parse(e.lido_em) < 6 * 3600e3).map((e) => {
     const lido = Date.parse(e.lido_em), p = ultimo[e.personagem], pulsoEm = p ? Date.parse(p.em) : 0;
     const fresco = agora - lido < LIMITE_LEITURA;
     const estado = !fresco ? 'sem leitura' : p && p.cacando && agora - pulsoEm < 10 * 60e3 ? 'caçando' : 'parado';
@@ -70,7 +71,7 @@ function desenharSelos(lista) {
   el.replaceChildren(...lista.map((x) => h('span', {
     class: 'status site-selo ' + (x.estado === 'caçando' ? 'ok' : x.estado === 'sem leitura' ? 'velho' : ''),
     title: `${x.nome}: último dado às ${dataHora(x.lido)} (${x.estado})`
-  }, h('span', { class: 'site-selo-nome' }, x.nome), h('b', null, x.estado))));
+  }, h('span', { class: 'site-selo-nome' }, LUPA_PLANOS[x.nome]?.campeao || x.nome), h('b', null, x.estado))));
 }
 function vigiarSelos() {
   const rodar = () => { if (!document.hidden) lerSelos().then(desenharSelos).catch(() => {}); };
@@ -321,7 +322,7 @@ function sparkline(pontos, { larg = 320, alt = 64, fmt = precoTxt, rotulo = 'His
   const svg = s('svg', { viewBox: `0 0 ${larg} ${alt}`, class: 'sparkline', role: 'img', 'aria-label': `${rotulo}: de ${fmt(vmin)} a ${fmt(vmax)}, ${pts.length} leituras` },
     s('polygon', { points: `${X(t0)},${alt - 4} ${linha} ${X(t1)},${alt - 4}`, class: 'spark-area' }),
     s('polyline', { points: linha, class: 'spark-linha', fill: 'none' }),
-    ponto(pMin, '#8fd9cc'), ponto(pMax, '#f5a66b'),
+    ponto(pMin, 'var(--verde)'), ponto(pMax, 'var(--laranja)'),
     ...pts.map((p) => s('circle', { cx: X(p.ts).toFixed(1), cy: Y(p.v).toFixed(1), r: 6, fill: 'transparent' }, s('title', null, `${dataHora(p.ts)} · ${fmt(p.v)}`))));
   return h('div', { class: 'spark' }, svg,
     h('div', { class: 'spark-legenda num' }, h('span', null, dataHora(t0)), h('span', null, `mín ${fmt(vmin)} · máx ${fmt(vmax)}`), h('span', null, dataHora(t1))));
