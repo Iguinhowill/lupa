@@ -9,7 +9,8 @@ var LUPA_PLANOS = {
     atributo: 'Força',
     itens: { tipo: 'hidra' },
     semCarta: 'Crítico',
-    zonas: [{ ate: 29, nome: 'Rio', extra: 'com as Grandes Expedições do Capitão' }, { de: 30, nome: 'Fosso do Dragão' }]
+    // as zonas do roteiro do Aphelios (corrigido em 28/10/2026: o Covil do Barão já rende mais do 36 em diante)
+    zonas: [{ de: 20, ate: 30, nome: 'Campo Vermelho' }, { de: 31, ate: 35, nome: 'Fosso do Dragão' }, { de: 36, ate: 49, nome: 'Covil do Barão' }, { de: 50, nome: 'Covil do Dragão Ancião' }]
   },
   'Iguinhowill': {
     campeao: 'Yasuo',

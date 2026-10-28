@@ -252,7 +252,7 @@ function guardarJanela() {
 
 function criarJanela() {
   // o fundo da janela aparece no filete de 1 px entre as metades do lado a lado
-  janela = new BaseWindow({ ...limitesIniciais(), minWidth: 960, minHeight: 600, title: 'Lupa', backgroundColor: '#2a303d', icon: ICONE, show: false });
+  janela = new BaseWindow({ ...limitesIniciais(), minWidth: 960, minHeight: 600, title: 'Lupa', backgroundColor: '#0e0e0f', icon: ICONE, show: false });
   if (pref.janela?.maximizada) janela.maximize();
   casca = new WebContentsView({ webPreferences: prefs(path.join(__dirname, 'preload-casca.js')) });
   casca.setBackgroundColor('#00000000');      // transparente: com o menu de ajustes aberto a casca cobre a janela toda
@@ -380,7 +380,7 @@ function ativar(id) {
 
 function abrirMini() {
   if (mini && !mini.isDestroyed()) { mini.show(); mini.focus(); return; }
-  mini = new BrowserWindow({ width: 380, height: 620, alwaysOnTop: true, autoHideMenuBar: true, title: 'Lupa · mini', icon: ICONE, backgroundColor: '#161922', webPreferences: prefs(path.join(__dirname, 'preload-lupa.js')) });
+  mini = new BrowserWindow({ width: 380, height: 760, alwaysOnTop: true, autoHideMenuBar: true, title: 'Lupa · mini', icon: ICONE, backgroundColor: '#0e0e0f', webPreferences: prefs(path.join(__dirname, 'preload-lupa.js')) });
   mini.loadFile(path.join(LUPA, 'central.html'), { hash: 'mini' });
   mini.on('closed', () => { mini = null; });
 }

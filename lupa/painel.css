@@ -1,36 +1,56 @@
+/* Paleta (remake de 28/10/2026): grafite neutro, sem azul-marinho. A cor fica nos dados: cada personagem tem a sua
+   (--p1 a --p4, sempre a mesma em todas as telas) e o verde, o âmbar e o vermelho só dizem bom, atenção e problema.
+   A seleção e o destaque são de tinta clara, não de cor. Os nomes antigos (--ouro, --pronta-*) seguem valendo, agora
+   apontando para esses papéis, para as telas que ainda não foram refeitas. */
+@font-face {
+  font-family: "IBM Plex Sans";
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+  src: url(fontes/ibm-plex-sans.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
 :root {
-  --fundo: #161922;
-  --cartao: #1d212c;
-  --cartao-2: #252a36;
-  --borda: #2a303d;
-  --texto: #e7e9ee;
-  --fraco: #a3aab7;
-  --ouro: #e0b05a;
-  --ouro-claro: #f3d08a;
-  --verde: #8fd9cc;
-  --laranja: #f5a66b;
-  --alerta-fundo: #3a2416;
-  --alerta-borda: #7a4524;
-  --alerta-texto: #ffd9bf;
-  --pronta-fundo: #2e2716;
-  --pronta-borda: #7a6230;
-  --borda-forte: #3a4150;
-  --selecionado: #2b3140;
-  --cinza: #6b7385;
-  --texto-2: #c9ced8;
-  --ouro-escuro: #b98b3a;
-  --verde-borda: #2f5f58;
-  --perigo: #ff9b8a;
-  --npc: #b9d7ff;
-  --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --fundo: #0e0e0f;
+  --cartao: #161617;
+  --cartao-2: #1f1f21;
+  --borda: #2a2a2d;
+  --texto: #f2f2f2;
+  --fraco: #b4b4b4;
+  --meta: #949494;
+  --ouro: #e6e6e6;
+  --ouro-claro: #f2f2f2;
+  --verde: #3fc07a;
+  --laranja: #f0b43a;
+  --alerta-fundo: #2b2310;
+  --alerta-borda: #4d3d12;
+  --alerta-texto: #f3d9a0;
+  --pronta-fundo: #1f1f21;
+  --pronta-borda: #3d3d42;
+  --borda-forte: #3d3d42;
+  --selecionado: #26262a;
+  --cinza: #6b6e73;
+  --texto-2: #d4d4d6;
+  --ouro-escuro: #2f8f5b;      /* o nome é antigo: hoje é o verde da chave ligada */
+  --verde-borda: #1f4a30;
+  --perigo: #ef6a7d;
+  --npc: #8ab4f8;
+  --ok-fundo: #172a1d;
+  --perigo-fundo: #2c1a20;
+  --fundo-barra: #2a2a2d;      /* o fundo das barras de progresso (a casca do app tem um --trilho, que é outra coisa) */
+  --p1: #3987e5;
+  --p2: #d95926;
+  --p3: #199e70;
+  --p4: #c98500;
+  --mono: "IBM Plex Sans", system-ui, "Segoe UI", sans-serif;      /* o nome é antigo: os números usam a letra do texto, tabulares */
   color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--fundo); color: var(--texto); font: 14px/1.4 system-ui, "Segoe UI", sans-serif; }
+body { margin: 0; background: var(--fundo); color: var(--texto); font: 14px/1.45 "IBM Plex Sans", system-ui, "Segoe UI", sans-serif; font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
 button { font: inherit; color: inherit; }
 .ico { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
-.num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.num { font-variant-numeric: tabular-nums; }
 .fraco { color: var(--fraco); }
 
 .cabeca { position: sticky; top: 0; z-index: 2; background: var(--fundo); }
@@ -48,7 +68,7 @@ button { font: inherit; color: inherit; }
 
 .personagens { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 10px; }
 .chip { min-height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--borda); background: transparent; color: var(--fraco); cursor: pointer; }
-.chip[aria-pressed="true"] { color: var(--ouro-claro); border-color: var(--pronta-borda); background: var(--pronta-fundo); }
+.chip[aria-pressed="true"] { color: var(--fundo); border-color: var(--texto); background: var(--texto); }
 
 .abas { display: flex; padding: 0 8px; border-bottom: 1px solid var(--borda); }
 .abas button { flex: 1 1 0; min-width: 0; height: 44px; padding: 0 4px; display: flex; align-items: center; justify-content: center; gap: 6px; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--fraco); font-weight: 600; cursor: pointer; }
@@ -58,7 +78,7 @@ button { font: inherit; color: inherit; }
 .conteudo { padding: 14px 16px 18px; display: flex; flex-direction: column; gap: 18px; }
 .pilha { display: flex; flex-direction: column; gap: 18px; }
 .secao { display: flex; flex-direction: column; gap: 6px; }
-.rotulo { margin: 0 0 2px; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--fraco); font-weight: 600; }
+.rotulo { margin: 0 0 2px; font-size: 13px; color: var(--fraco); font-weight: 600; }
 .cartao { padding: 12px; background: var(--cartao); border: 1px solid var(--borda); border-radius: 8px; display: flex; flex-direction: column; gap: 10px; }
 .vazio { margin: 0; padding: 14px; border: 1px dashed var(--borda); border-radius: 8px; color: var(--fraco); }
 .nota { margin: 0; font-size: 13px; color: var(--fraco); }
@@ -89,7 +109,7 @@ button { font: inherit; color: inherit; }
 
 .stat { padding: 6px 10px; background: var(--cartao); border: 1px solid var(--borda); border-radius: 8px; display: flex; flex-direction: column; min-width: 0; }
 .stat .rot { font-size: 12px; color: var(--fraco); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.stat .val { font-family: var(--mono); font-size: 15px; font-weight: 600; }
+.stat .val { font-size: 15px; font-weight: 500; }
 .stat.grande { padding: 10px; }
 .stat.grande .val { font-size: 19px; }
 .stat .val.ouro { color: var(--ouro-claro); }
@@ -103,7 +123,7 @@ button { font: inherit; color: inherit; }
 
 .segmento { display: flex; gap: 4px; padding: 4px; background: var(--cartao); border: 1px solid var(--borda); border-radius: 8px; }
 .segmento button { flex: 1 1 0; height: 40px; border: 0; border-radius: 6px; background: transparent; color: var(--fraco); font-weight: 600; cursor: pointer; }
-.segmento button[aria-pressed="true"] { background: var(--selecionado); color: var(--ouro-claro); }
+.segmento button[aria-pressed="true"] { background: var(--texto); color: var(--fundo); }
 
 .grafico svg { display: block; width: 100%; height: 80px; }
 .grafico .linha { fill: none; stroke: var(--ouro); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
@@ -121,7 +141,7 @@ button { font: inherit; color: inherit; }
 .alerta { display: flex; gap: 10px; align-items: flex-start; padding: 12px; border-radius: 8px; border: 1px solid; font-size: 14px; }
 .alerta.fora { background: var(--alerta-fundo); border-color: var(--alerta-borda); color: var(--alerta-texto); }
 .alerta.fora .ico { color: var(--laranja); }
-.alerta.pronta { background: var(--pronta-fundo); border-color: var(--pronta-borda); color: var(--ouro-claro); }
+.alerta.pronta { background: var(--ok-fundo); border-color: var(--verde-borda); color: var(--verde); }
 
 .progresso { height: 10px; border-radius: 5px; background: var(--borda); overflow: hidden; }
 .progresso i { display: block; height: 100%; background: var(--ouro); }
@@ -270,3 +290,6 @@ button { font: inherit; color: inherit; }
 }
 .timer .valor.longo { white-space: normal; text-align: right; max-width: 58%; font-size: 12.5px; overflow-wrap: anywhere; }
 .timer .meio b.perigo { color: var(--perigo); }
+/* raridade do drop: o ponto na cor do jogo e o nome escrito ao lado (a cor nunca sozinha) */
+.raridade { display: inline-flex; align-items: center; gap: 5px; }
+.raridade-ponto { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex: none; }
