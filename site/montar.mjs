@@ -17,7 +17,7 @@ for (const f of ['ui.js', 'plano.js', 'central.js', 'painel.css', 'central.css']
 cpSync(join(lupa, 'fontes'), join(dist, 'fontes'), { recursive: true });
 
 // as páginas simples têm o mesmo esqueleto: muda o título, o script e se usa o plano.js
-const PAGINAS = [['relatorio', 'Relatório', ['dados-jogo.js']], ['guia', 'Guia', ['plano.js']], ['farm', 'Farm', ['dados-jogo.js']], ['loja', 'Loja', []], ['calcular', 'Calcular', ['dados-jogo.js', 'calculos.js']]];
+const PAGINAS = [['relatorio', 'Relatório', ['dados-jogo.js']], ['guia', 'Guia', ['plano.js']], ['farm', 'Farm', ['dados-jogo.js']], ['loja', 'Loja', []], ['calcular', 'Calcular', ['dados-jogo.js', 'calculos.js']], ['arsenal', 'Arsenal', ['dados-jogo.js', 'calculos.js']]];
 for (const [nome, titulo, extras] of PAGINAS) {
   const scripts = ['supabase.js', 'config.js', ...extras, 'ui.js', 'nuvem.js', nome + '.js'].map((s) => `<script src="${s}"></script>`).join('\n');
   writeFileSync(join(dist, nome + '.html'), `<!doctype html>

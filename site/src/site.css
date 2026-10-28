@@ -322,3 +322,29 @@ body { font-variant-numeric: tabular-nums; }
 .site-pagina .calc-corpo .comp-atrib .filtro { flex: none; max-width: none; min-width: 0; }
 @media (min-width: 1100px) { .comp-res .grade-tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } .comp-res .grade-tiles > .stat:nth-child(5):last-child { grid-column: span 2; } }
 @media (max-width: 640px) { .comp-atrib { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Arsenal das Lendas: veredito por cópia (a cor só diz se vale; o texto diz o quê), patamares por coleção e o simulador */
+.etiqueta.vale { color: var(--verde); background: var(--ok-fundo); }
+.etiqueta.caro { color: var(--laranja); }
+.etiqueta.muito-caro { color: var(--perigo); }
+.etiqueta-pilha { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+.etiqueta-pilha .fraco { font-size: 12px; }
+.st-tabela small.bloco { display: block; font-size: 12px; }
+.st-tabela tr.fraca td { color: var(--fraco); }
+.st-tabela tr.fraca .item-nome { color: var(--texto); }
+.cx-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 12px; }
+.cx-col { padding: 12px 14px; border: 1px solid var(--borda); border-radius: 10px; background: var(--cartao-2); display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cx-col-cab { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.cx-col-txt { margin: 0; font-size: 13.5px; }
+.cx-faltas { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
+.cx-falta { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0 8px; align-items: center; font-size: 13px; }
+.cx-falta.tem .cx-onde { color: var(--verde); }
+.cx-onde { grid-column: 2; font-size: 12px; }
+.cx-falta > .img-caixa { grid-row: span 2; }
+.sim-copias { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.sim-copia { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.sim-copia input.sim-n { width: 64px; }
+.sim-copia input, .sim-copia select { height: 36px; padding: 0 8px; background: var(--cartao-2); border: 1px solid var(--borda); border-radius: 8px; color: var(--texto); font: inherit; }
+.sim-copia input:focus-visible, .sim-copia select:focus-visible { outline: 2px solid var(--ouro); outline-offset: 1px; }
+.sim-c { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; }
+.sim-c input { height: auto; }
