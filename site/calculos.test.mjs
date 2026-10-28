@@ -131,3 +131,110 @@ test('estimarFarm com a calibração gravada: Yasuo e Aphelios calibrados; o err
   }
   assert.equal(C.estimarFarm(J.fichaDaBuild({ ...bYasuo(), campeao: 'taric' }), 'taric', 'dragao', 30, {}).calibrado, false);
 });
+
+// ---------- Arsenal das Lendas ----------
+const ATQ = J.CODEX.itens.lendario.ataque, EPI = J.CODEX.itens.epico.ataque;
+const perto = (a, b, tol = 1e-9) => Math.abs(a - b) <= tol;
+
+test('Arsenal: as tabelas batem com o que a capa do jogo mostra (máximo e 1 estrela na coleção de ataque)', () => {
+  assert.equal(ATQ.length, 18);
+  assert.ok(perto(J.BONUS_MAX_CODEX.dano, 0.13264, 1e-6) && perto(J.BONUS_MAX_CODEX.defesa, 0.05402, 1e-6) && perto(J.BONUS_MAX_CODEX.va, 0.0481, 1e-6));
+  const b = J.bonusCodex(Object.fromEntries(ATQ.map((id) => [id, 1])));
+  assert.ok(perto(b.dano, 0.0112, 1e-6), String(b.dano));      // 18 x 0,04% + o patamar de 0,4%
+});
+
+test('Arsenal: a cópia que vale mais por último sai mais barato (5 C e 1 SS no mesmo lendário)', () => {
+  const id = ATQ[0], r = C.registrarCopias(id, 0, [id + '~SS', ...Array(5).fill(id + '~C')]);
+  assert.deepEqual(r.passos.map((s) => s.pts), [1, 1, 1, 1, 1, 20]);
+  assert.equal(r.taxa, 20e3 + 30e3 + 30e3 + 45e3 + 45e3 + 45e3);      // 215 mil (com a SS primeiro seriam 620 mil)
+  assert.equal(r.p, 25);
+  assert.equal(r.passos.at(-1).kPara, 5);
+});
+
+test('Arsenal: item cheio pula a cópia e o que passa do máximo se perde', () => {
+  const id = ATQ[1], max = J.maxPontosCodex('lendario');
+  const r = C.registrarCopias(id, max - 1, [id + '~SS', id + '~C']);
+  assert.equal(r.passos[0].pts, 1); assert.equal(r.passos[0].para, max); assert.equal(r.passos[0].perdidos, 0);
+  assert.equal(r.passos[1].pulada, true); assert.equal(r.passos[1].taxa, 0); assert.equal(r.taxa, 350e3);
+  const r2 = C.registrarCopias(id, max - 5, [id + '~SS']);
+  assert.equal(r2.passos[0].perdidos, 15);
+});
+
+test('Arsenal: pontos por cópia (comprado vale metade, refino do +3 em diante multiplica) e o que não entra', () => {
+  const id = ATQ[0];
+  assert.equal(J.pontosCopia(id + '~C'), 1); assert.equal(J.pontosCopia(id + '~B'), 1.5); assert.equal(J.pontosCopia(id + '!~A'), 1);
+  assert.equal(J.pontosCopia(id + '+2~SS'), 20); assert.equal(J.pontosCopia(id + '+5~S'), 12); assert.equal(J.pontosCopia(id + '!+7~C'), 2);
+  assert.ok(J.motivoCodex(id + '#ataque2~B')); assert.ok(J.motivoCodex(id + '~?')); assert.equal(J.motivoCodex(id + '+4~B'), null);
+});
+
+test('Arsenal: progresso pela leitura da janela (estrelas exatas, barra arredondada, pontos exatos do item escolhido)', () => {
+  const [a, b, c, d] = ATQ;
+  const { prog, aprox } = C.progressoCodex({ itens: { [a]: { k: 3, pct: 50 }, [b]: { k: 3, pct: 51, de: 2.55, ate: 5 }, [c]: { k: 10, pct: 100 }, [d]: { k: 2, pct: 100 }, x: { k: 1 } } });
+  assert.equal(prog[a], 8.5);                       // 6 pontos até a 3ª + metade dos 5 da 4ª
+  assert.equal(prog[b], 8.55);                      // o exato vale mais que a barra
+  assert.equal(prog[c], J.maxPontosCodex('lendario'));
+  assert.equal(prog[d], 5.99);                      // a barra cheia (arredondada) não fecha a estrela
+  assert.equal(J.estrelasCodex('lendario', prog[d]), 2);
+  assert.ok(aprox.has(a) && !aprox.has(b) && !('x' in prog));
+  // o "de N" do detalhe não é o tamanho da estrela: era o do item anterior, vale a barra
+  const r2 = C.progressoCodex({ itens: { [a]: { k: 3, pct: 40, de: 0.5, ate: 2 } } });
+  assert.equal(r2.prog[a], 8); assert.ok(r2.aprox.has(a));
+  // mesma estrela, mas a barra do cartão não bate com o detalhe: também era o do item anterior
+  const r3 = C.progressoCodex({ itens: { [a]: { k: 3, pct: 10, de: 4.5, ate: 5 } } });
+  assert.equal(r3.prog[a], 6.5); assert.ok(r3.aprox.has(a));
+});
+
+test('Arsenal: leitura completa só quando a soma das estrelas bate com a aba do jogo', () => {
+  const itens = Object.fromEntries(ATQ.map((id) => [id, { k: 1, pct: 0 }]));
+  const l = C.leituraCodex({ itens, totais: { lendario: { n: 18, max: 490 }, epico: { n: 3, max: 400 } } });
+  assert.equal(l.lendario.ok, true); assert.equal(l.lendario.lidas, 18);
+  assert.equal(l.epico.ok, false); assert.equal(l.epico.lidas, 0);
+});
+
+test('Arsenal: patamar da coleção repartido pelos pontos que faltam', () => {
+  const p = C.patamares({}).find((x) => x.pg === 'lendario' && x.colecao === 'ataque');
+  assert.equal(p.prox.k, 1); assert.equal(p.faltam.length, 18); assert.equal(p.faltamPts, 18);
+  assert.ok(perto(p.porPonto, 0.004 / 18)); assert.equal(p.taxaC, 18 * 20e3); assert.ok(perto(p.bonusItens, 18 * 0.0004));
+  const e = C.patamares({}).find((x) => x.pg === 'epico' && x.colecao === 'ataque');
+  assert.equal(e.faltamPts, EPI.length * 2); assert.equal(e.taxaC, EPI.length * 2 * 2e3);      // 1ª estrela de épico: 2 pontos, 2 mil cada registro
+});
+
+test('Arsenal: plano da mochila (ordem por rendimento, sem passar na frente da cópia anterior do mesmo item)', () => {
+  const [a, b] = ATQ, venda = () => 1000;
+  const { linhas, depois } = C.planoMochila({ [b]: J.pontosAteEstrela('lendario', 4) }, [a + '~C', a + '~C', b + '~C', b + '#ataque2~B', a + '~?'], { venda });
+  assert.equal(linhas.length, 3);                                        // com carta e sem qualidade avaliada não entram
+  assert.deepEqual(linhas.map((l) => [l.id, l.passo]), [[a, 1], [a, 2], [b, 1]]);
+  const l0 = linhas[0];
+  assert.ok(perto(l0.bonusItem, 0.0004)); assert.ok(perto(l0.bonusPatamar, 0.004 / 17)); assert.equal(l0.taxa, 20e3); assert.equal(l0.custo, 21e3);
+  assert.ok(perto(l0.rende, ((0.0004 + 0.004 / 17) * 100) / 0.021));
+  assert.equal(linhas[2].bonusPatamar, 0);                               // b já passou da 1ª estrela
+  assert.equal(depois[a], 2);
+});
+
+test('Arsenal: a cópia que não compensa sai do plano e a grande seguinte é avaliada sem ela na frente', () => {
+  const id = ATQ[0], p3 = J.pontosAteEstrela('lendario', 3);
+  const copias = [id + '~C', id + '+4~A', id + '~SS'];
+  const sem = C.planoMochila({ [id]: p3 }, copias, { venda: () => 1000 });
+  assert.ok(sem.linhas.every((l) => l.recomendada));                     // sem limiar, todas entram
+  const { linhas, depois, taxa } = C.planoMochila({ [id]: p3 }, copias, { venda: () => 1000, limiar: 0.1 });
+  const c = linhas.find((l) => l.chave === id + '~C'), ss = linhas.find((l) => l.chave === id + '~SS');
+  assert.equal(c.recomendada, false); assert.ok(c.rende < 0.1);
+  assert.equal(ss.recomendada, true); assert.ok(ss.rende >= 0.1);
+  assert.equal(linhas.at(-1).chave, id + '~C');                          // a que fica de fora vai para o fim
+  const plano = linhas.filter((l) => l.recomendada);
+  assert.equal(depois[id], p3 + plano.reduce((s, l) => s + l.pts, 0));    // o C não avançou o item
+  assert.equal(taxa, plano.reduce((s, l) => s + l.taxa, 0));
+  assert.notEqual(plano[0].chave, id + '~C');
+  assert.equal(ss.de, p3 + J.pontosCopia(id + '+4~A'));                 // a SS vem logo depois da A+4, sem o C na frente
+  assert.equal(c.de, depois[id]);                                        // a que ficou de fora aparece avaliada depois do plano
+});
+
+test('Arsenal: custo de cada estrela com a mesma cópia', () => {
+  const t = C.tabelaEstrelas('lendario', ATQ[0] + '~C');
+  assert.deepEqual([t[0].copias, t[0].taxa], [1, 20e3]);
+  assert.deepEqual([t[1].copias, t[1].taxa], [3, 80e3]);
+  assert.equal(t[9].copias, 231);
+  const ss = C.tabelaEstrelas('lendario', ATQ[0] + '~SS');
+  assert.deepEqual(ss.slice(0, 5).map((x) => x.copias), [1, 1, 1, 1, 1]);
+  assert.equal(ss[4].taxa, 20e3);
+});

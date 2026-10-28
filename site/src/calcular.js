@@ -294,7 +294,8 @@ function graficoCurva(larg, nivel, alvo) {
   }
   const nomeCarta = (c) => `${CARTA_NOME[c.replace(/[1-3]$/, '')] || c} ${CARTA_RARIDADE[c.slice(-1)] || ''}`.trim();
   const rotuloItem = (o) => `${JOGO.item(o.id)?.nome || o.id} +${o.refino} ${o.qual}${o.carta ? ' · ' + nomeCarta(o.carta) : ''}`;
-  const fichaDe = (camp, nivel, b, ranks, bonus) => JOGO.fichaDaBuild({ campeao: camp, nivel, atrib: b.atrib, itens: b.itens.filter((i) => i.id && JOGO.item(i.id)).map((i) => JOGO.chaveItem(i)), ranks, bonus });
+  // o Arsenal das Lendas vale para a conta toda: entra igual nas duas builds (o último bônus que a Lupa leu na janela da Guardiã)
+  const fichaDe = (camp, nivel, b, ranks, bonus) => JOGO.fichaDaBuild({ campeao: camp, nivel, atrib: b.atrib, itens: b.itens.filter((i) => i.id && JOGO.item(i.id)).map((i) => JOGO.chaveItem(i)), ranks, bonus, codex: estados[quem]?.codex?.bonus || undefined });
   // o que o jogo MOSTRA contra o que a conta dá. tol: diferença aceita (em unidades do próprio valor; a ficha arredonda o que mostra)
   function conferirComOJogo(f, st) {
     const lin = [], p = (rot, jogo, calc, tol, fmt) => { if (jogo != null && Number.isFinite(jogo)) lin.push({ rot, jogo, calc, fmt, dif: calc - jogo, ok: Math.abs(calc - jogo) <= tol }); };

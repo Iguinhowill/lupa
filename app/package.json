@@ -1,7 +1,7 @@
 {
   "name": "lupa",
   "productName": "Lupa",
-  "version": "0.13.1",
+  "version": "0.14.0",
   "description": "Lupa para LoL Idle: o jogo com as duas contas e o painel da Lupa numa janela só. Lê a tela; só clica no jogo quando você pede (Entregar e seguir, Alt+L). Mostra onde gastar o ouro simulando no motor do jogo.",
   "main": "main.js",
   "private": true,

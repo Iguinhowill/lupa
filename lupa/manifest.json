@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Lupa para LoL Idle",
-  "version": "0.9.2",
+  "version": "0.10.0",
   "description": "Painel de qualidade de vida para o LoL Idle. Só lê a tela: não clica e não joga. Se você entrar no Lupa Online, envia a leitura só para o seu banco.",
   "permissions": ["storage", "sidePanel", "notifications", "power", "alarms"],
   "host_permissions": ["https://ledowohvumzufzvvtnji.supabase.co/*"],

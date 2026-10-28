@@ -167,6 +167,130 @@ const CALC = (() => {
        tGrupo = RESPAWN + espera + kite + tLuta, abatesH = (3600 * nMedio) / tGrupo;
     return { calibrado, tAbate: tGrupo / nMedio, tLuta, periodoAtaque: per, velEfetiva: 1 / per, abatesH, xpH: abatesH * m.xp, ouroH: abatesH * m.ouro, dps: (nMedio * m.hp) / tLuta, vidaMonstro: m.hp, nivelMonstro: m.nivel, xpAbate: m.xp, ouroAbate: m.ouro, hab: hb };
   }
-  return { simularForja, xpHoraSessoes, xpHoraBaldes, horasAte, estimarFarm, habilidades };
+  // ---------- Arsenal das Lendas ----------
+  // Regras em dados-jogo.js (conferidas contra o codex.js do jogo). O que a Lupa lê da janela da Guardiã (estado.codex): por item,
+  // as estrelas (k), a barra até a próxima (pct, arredondada) e, do item que estava escolhido, os pontos exatos dentro da estrela (de).
+  const rd2 = (v) => Math.round(v * 100) / 100;
+  // progresso { id: pontos }: estrelas exatas; dentro da estrela, os pontos exatos ou a barra, sem nunca chegar à próxima estrela
+  function progressoCodex(cx) {
+    const prog = {}, aprox = new Set();
+    for (const [id, x] of Object.entries(cx?.itens || {})) {
+      const pg = J.paginaCodex(id), k = Number(x?.k);
+      if (!pg || !Number.isInteger(k) || k < 0) continue;
+      if (k >= 10) { prog[id] = J.maxPontosCodex(pg); continue; }
+      // o exato só vale se bater com o cartão do próprio item: o "de N" é o tamanho desta estrela e a barra (arredondada) é a mesma
+      // conta (o detalhe pode ainda ser o do item anterior)
+      const faixa = J.CODEX.paginas[pg].pontos[k];
+      const exato = Number.isFinite(x.de) && x.ate === faixa && Math.abs((100 * x.de) / faixa - (Number(x.pct) || 0)) <= 1;
+      const de = exato ? x.de : ((Number(x.pct) || 0) / 100) * faixa;
+      if (!exato && x.pct > 0) aprox.add(id);
+      prog[id] = rd2(J.pontosAteEstrela(pg, k) + Math.max(0, Math.min(faixa - 0.01, de)));
+    }
+    return { prog, aprox };
+  }
+  // a leitura de cada página está completa? soma das estrelas lidas contra o total que a aba do jogo mostra (★ n/max)
+  function leituraCodex(cx) {
+    const out = {};
+    for (const pg of Object.keys(J.CODEX.paginas)) {
+      const ids = Object.values(J.CODEX.itens[pg]).flat(), vistos = ids.filter((id) => cx?.itens?.[id]);
+      const lidas = vistos.reduce((s, id) => s + Math.min(10, Number(cx.itens[id].k) || 0), 0), total = cx?.totais?.[pg]?.n;
+      out[pg] = { itens: ids.length, vistos: vistos.length, lidas, total: Number.isFinite(total) ? total : null, ok: Number.isFinite(total) && lidas === total, em: cx?.paginas?.[pg]?.em || null };
+    }
+    return out;
+  }
+  // bônus "contínuo" de um item com p pontos: as estrelas cheias mais a fração da próxima (para comparar cópias que não fecham estrela)
+  function bonusContinuo(pg, p) {
+    const k = J.estrelasCodex(pg, p), b = J.bonusEstrelas(pg, k);
+    if (k >= 10) return b;
+    return b + ((p - J.pontosAteEstrela(pg, k)) / J.CODEX.paginas[pg].pontos[k]) * J.CODEX.paginas[pg].bonus[k];
+  }
+  // UM registro de uma cópia num item com p pontos. Igual ao servidor: item cheio pula a cópia; o que passa do máximo se perde; os
+  // pontos ficam arredondados em 2 casas a cada registro (registrarCodex do jogo)
+  function passoCodex(pg, p, chave) {
+    const pts = J.pontosCopia(chave), max = J.maxPontosCodex(pg);
+    if (p >= max - 1e-9) return { chave, pts, pulada: true, de: p, para: p, taxa: 0, kDe: 10, kPara: 10, perdidos: pts };
+    const para = Math.min(max, rd2(p + pts));
+    return { chave, pts, de: p, para, taxa: J.custoCodex(pg, p), kDe: J.estrelasCodex(pg, p), kPara: J.estrelasCodex(pg, para), perdidos: rd2(p + pts - para) };
+  }
+  const porPontos = (chaves) => [...chaves].sort((a, b) => J.pontosCopia(a) - J.pontosCopia(b));
+  // registra as cópias (chaves do jogo) de UM item, da que vale menos para a que vale mais: a taxa vai pela estrela em que o item
+  // está, então a cópia grande por último sai mais barato
+  function registrarCopias(id, p0, chaves) {
+    const pg = J.paginaCodex(id), passos = [];
+    let p = p0 || 0, taxa = 0;
+    for (const chave of porPontos(chaves)) { const s = passoCodex(pg, p, chave); passos.push(s); taxa += s.taxa; p = s.para; }
+    return { passos, taxa, p };
+  }
+  // o próximo patamar de cada coleção, repartido pelos pontos que faltam para ele: cada ponto que leva um item atrasado até a estrela
+  // do patamar "vale" bonus / pontos que faltam (o que passa da estrela do patamar não conta)
+  function patamares(prog) {
+    const out = [];
+    for (const pg of Object.keys(J.CODEX.paginas)) for (const c of J.CODEX.colecoes) {
+      const m = J.marcoColecao(pg, c.id, prog), lista = J.CODEX.itens[pg][c.id];
+      if (!m.prox) { out.push({ pg, colecao: c.id, bonus: c.bonus, min: m.min, ganho: m.ganho, prox: null, faltam: [], faltamPts: 0, porPonto: 0 }); continue; }
+      const alvo = J.pontosAteEstrela(pg, m.prox.k);
+      const faltam = lista.map((id) => ({ id, p: prog[id] || 0, falta: rd2(Math.max(0, alvo - (prog[id] || 0))) })).filter((x) => x.falta > 0);
+      const faltamPts = faltam.reduce((s, x) => s + x.falta, 0);
+      // taxa para fechar o patamar só com cópias C (1 ponto cada), item por item
+      const taxaC = faltam.reduce((s, x) => s + registrarCopias(x.id, x.p, Array(Math.ceil(x.falta - 1e-9)).fill(x.id + '~C')).taxa, 0);
+      const bonusItens = faltam.reduce((s, x) => s + J.bonusEstrelas(pg, m.prox.k) - J.bonusEstrelas(pg, J.estrelasCodex(pg, x.p)), 0);
+      out.push({ pg, colecao: c.id, bonus: c.bonus, min: m.min, ganho: m.ganho, prox: m.prox, alvo, faltam, faltamPts, porPonto: faltamPts ? m.prox.bonus / faltamPts : 0, taxaC, bonusItens });
+    }
+    return out;
+  }
+  // o plano da mochila: cada cópia registrável (motivoCodex nulo) com a taxa, o bônus que ela acrescenta (estrelas + a parte dela no
+  // próximo patamar da coleção) e quanto rende por milhão de ouro (taxa + o que o Lojista pagaria por ela; opts.venda(chave)).
+  // Dentro de cada item, da cópia que vale menos para a que vale mais: a que rende pelo menos opts.limiar entra no plano (recomendada)
+  // e o item avança; a que não rende fica de fora sem avançar o item, então a cópia grande seguinte é avaliada sem ela na frente (o
+  // rende não sobe quando o item avança, e uma cópia pulada continuaria abaixo do limiar se viesse depois). A que fica de fora aparece
+  // avaliada depois do plano do item (onde ela cairia se fosse registrada mesmo assim). depois = o progresso do plano.
+  function planoMochila(prog, chaves, opts = {}) {
+    const venda = opts.venda || (() => 0), limiar = opts.limiar ?? 0, pat = Object.fromEntries(patamares(prog).map((x) => [x.pg + '/' + x.colecao, x]));
+    const porItem = new Map();
+    for (const chave of chaves) if (!J.motivoCodex(chave)) { const id = String(chave).split(/[!+~#]/)[0]; (porItem.get(id) ?? porItem.set(id, []).get(id)).push(chave); }
+    const linhas = [], depois = { ...prog };
+    let taxa = 0;
+    for (const [id, lista] of porItem) {
+      const pg = J.paginaCodex(id), col = J.colecaoCodex(id), pm = pat[pg + '/' + col], doItem = [], fora = [];
+      const avaliar = (p, chave) => {
+        const s = passoCodex(pg, p, chave);
+        const bonusItem = s.pulada ? 0 : bonusContinuo(pg, s.para) - bonusContinuo(pg, s.de);
+        const rumo = pm?.prox ? Math.max(0, Math.min(s.para, pm.alvo) - Math.min(s.de, pm.alvo)) : 0;
+        const bonusPatamar = rumo * (pm?.porPonto || 0), v = venda(s.chave) || 0, custo = s.taxa + v;
+        const rende = custo > 0 ? ((bonusItem + bonusPatamar) * 100) / (custo / 1e6) : 0;      // % de bônus por milhão de ouro
+        return { ...s, id, pg, colecao: col, tipo: J.tipoBonusCodex(id), bonusItem, bonusPatamar, venda: v, custo, rende };
+      };
+      let p = prog[id] || 0, ordem = Infinity;
+      for (const chave of porPontos(lista)) {
+        const l = avaliar(p, chave);
+        if (l.pulada || l.rende < limiar) { fora.push(chave); continue; }
+        // na lista, uma cópia do plano nunca vem antes das que o mesmo item registra antes dela (ela depende delas)
+        ordem = Math.min(ordem, l.rende); p = l.para; taxa += l.taxa;
+        doItem.push({ ...l, recomendada: true, ordem });
+      }
+      for (const chave of fora) { const l = avaliar(p, chave); doItem.push({ ...l, recomendada: false, ordem: l.rende }); }
+      const plano = doItem.filter((l) => l.recomendada);
+      plano.forEach((l, n) => Object.assign(l, { passo: n + 1, deN: plano.length }));
+      linhas.push(...doItem);
+      depois[id] = p;
+    }
+    linhas.sort((a, b) => b.recomendada - a.recomendada || b.ordem - a.ordem || (a.id === b.id ? a.pts - b.pts : a.id < b.id ? -1 : 1));
+    return { linhas, depois, taxa };
+  }
+  // quanto custa cada estrela de uma página registrando sempre a mesma cópia (chave): por estrela, a cópia em que ela fecha, a taxa
+  // e o bônus acumulados até ali
+  function tabelaEstrelas(pg, chave) {
+    const pts = J.pontosCopia(chave), max = J.maxPontosCodex(pg), linhas = [];
+    let p = 0, copias = 0, taxa = 0;
+    for (let k = 1; k <= 10; k++) {
+      const alvo = J.pontosAteEstrela(pg, k);
+      while (p < alvo - 1e-9 && p < max - 1e-9) { taxa += J.custoCodex(pg, p); p = Math.min(max, rd2(p + pts)); copias++; }
+      linhas.push({ k, pontos: alvo, copias, taxa, bonus: J.bonusEstrelas(pg, k), bonusEstrela: J.CODEX.paginas[pg].bonus[k - 1] });
+    }
+    return linhas;
+  }
+
+  return { simularForja, xpHoraSessoes, xpHoraBaldes, horasAte, estimarFarm, habilidades,
+    progressoCodex, leituraCodex, bonusContinuo, registrarCopias, patamares, planoMochila, tabelaEstrelas };
 })();
 if (typeof module !== 'undefined') module.exports = CALC;

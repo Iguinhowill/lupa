@@ -6,7 +6,7 @@
 var LUPA_PLANOS = {};        // o mesmo formato do planos.js, lido da tabela planos
 var LUPA_NOTAS = {};         // notas do guia por personagem
 const SB = supabase.createClient(LUPA_CONFIG.url, LUPA_CONFIG.chave);
-const PAGINAS = [['agora.html', 'Agora'], ['relatorio.html', 'Relatório'], ['guia.html', 'Guia'], ['farm.html', 'Farm'], ['loja.html', 'Loja'], ['calcular.html', 'Calcular'], ['roteiros/', 'Roteiros']];
+const PAGINAS = [['agora.html', 'Agora'], ['relatorio.html', 'Relatório'], ['guia.html', 'Guia'], ['farm.html', 'Farm'], ['loja.html', 'Loja'], ['calcular.html', 'Calcular'], ['arsenal.html', 'Arsenal'], ['roteiros/', 'Roteiros']];
 const $id = (id) => document.getElementById(id);
 const iso = (ts) => new Date(ts).toISOString();
 const HORA = 3600e3, DIA = 24 * HORA;
@@ -248,6 +248,11 @@ const Nuvem = {
     const { data, error } = await SB.from('mercado_ultimos').select('chave,lido_em,ouro,gemas,n').in('chave', chaves).gte('lido_em', iso(Date.now() - 7 * DIA));
     if (error) throw error;
     return Object.fromEntries(data.map((x) => [x.chave, { ouro: x.ouro, gemas: x.gemas, n: x.n, em: Date.parse(x.lido_em) }]));
+  },
+  // o último preço de TODAS as versões vistas nos últimos 7 dias (uns 2 mil): o Arsenal procura qualquer versão de cada item
+  async mercadoUltimos() {
+    const d = await todas(() => SB.from('mercado_ultimos').select('chave,lido_em,ouro,gemas,n').gte('lido_em', iso(Date.now() - 7 * DIA)).order('chave'));
+    return d.map((x) => ({ chave: x.chave, ouro: x.ouro, gemas: x.gemas, n: x.n, em: Date.parse(x.lido_em) }));
   },
   async mercado(limite = 40) {
     const { data, error } = await SB.from('mercado_leituras').select('lido_em,completa,filtros,grupos,personagem').order('lido_em', { ascending: false }).limit(limite);

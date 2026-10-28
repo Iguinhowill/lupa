@@ -603,6 +603,63 @@
     chrome.storage.local.set({ 'mercado:menores': Object.fromEntries(manter) });
   }
 
+  // ---------- Arsenal das Lendas (janela da Guardiã do Arsenal, na Fonte) ----------
+  // Só com a janela aberta. A grade traz as estrelas de cada item (★ k/10) e a barra até a próxima (largura em %, arredondada); o
+  // item escolhido traz os pontos exatos ("2,5 de 5 pontos para a 4ª estrela"); as medalhas, o bônus da conta; as abas, o total de
+  // estrelas de cada página. A janela mostra uma página por vez e o filtro pode esconder itens, então o último visto de cada item
+  // fica guardado em `codex:<nome>` e vai junto no estado. Só lê a tela.
+  let codex = null, codexDe = '', codexJson = '', codexGravado = 0;
+  const assinaturaCx = (c) => (c ? JSON.stringify([c.itens, c.bonus, c.ganho, c.totais]) : '');      // o que conta como mudança
+  async function carregarCodex(n) {
+    const chave = 'codex:' + n, r = await chrome.storage.local.get(chave);
+    if (nome !== n) return;
+    codex = r[chave] || null; codexDe = n; codexJson = assinaturaCx(codex);
+  }
+  // "+1,124%" ou "1.124%" -> 0.01124 (o jogo escreve até 3 casas; abaixo de 100% não há separador de milhar)
+  const pctCx = (t) => { const m = String(t || '').match(/(\d+(?:[.,]\d+)?)\s*%/); return m ? parseFloat(m[1].replace(',', '.')) / 100 : null; };
+  const numCx = (t) => parseFloat(String(t).replace(',', '.'));
+  function lerCodex() {
+    const jan = $('#janela-codex');
+    if (!jan || jan.hidden || !nome || codexDe !== nome) return;
+    const pg = $('.cx-aba.ativa', jan)?.dataset.cxPagina;
+    const grade = $$('.cx-item[data-cx-item]', jan);
+    if (!pg || !grade.length) return;      // ainda carregando
+    const agora = Date.now(), velho = codex || {}, itens = { ...(velho.itens || {}) };
+    // os pontos exatos do item escolhido (só quando o cartão dele está na grade)
+    const sel = $('.cx-item.sel[data-cx-item]', jan)?.dataset.cxItem;
+    const exato = (() => {
+      const m = txt($('.cx-detalhe .cx-d-barra small', jan)).match(/^([\d.,]+)\D+([\d.,]+)/);
+      return sel && m ? { de: numCx(m[1]), ate: numCx(m[2]) } : null;
+    })();
+    for (const el of grade) {
+      const id = el.dataset.cxItem, completo = el.classList.contains('completo');
+      const k = completo ? 10 : +((txt($('.cx-nivel', el)).match(/(\d+)\s*\/\s*10/) || [])[1] ?? NaN);
+      const pct = completo ? 100 : parseFloat($('.cx-barra i', el)?.style.width);
+      if (!Number.isFinite(k) || !Number.isFinite(pct)) continue;
+      const x = { pg, k, pct };
+      if (id === sel && exato && !completo) Object.assign(x, exato);
+      // pontos exatos lidos antes continuam valendo enquanto a grade mostrar o mesmo
+      else if (itens[id]?.de != null && itens[id].k === k && itens[id].pct === pct) Object.assign(x, { de: itens[id].de, ate: itens[id].ate });
+      itens[id] = x;
+    }
+    // as medalhas: dano, vida e defesa, velocidade de ataque (nesta ordem); embaixo, o que isso dá no personagem ("+12 de dano de ataque")
+    const meds = $$('.cx-medalhas .cx-medalha .cx-med-txt', jan), med = meds.map((m) => pctCx(txt($('b', m))));
+    const ok = med.length === 3 && med.every((v) => v != null);
+    const bonus = ok ? { dano: med[0], defesa: med[1], va: med[2] } : velho.bonus || null;
+    const ganho = ok ? Object.fromEntries(['dano', 'defesa', 'va'].map((k, i) => [k, txt($('em', meds[i]))])) : velho.ganho || null;
+    const totais = { ...(velho.totais || {}) };
+    for (const a of $$('.cx-aba[data-cx-pagina]', jan)) { const m = txt($('small', a)).match(/(\d+)\s*\/\s*(\d+)/); if (m) totais[a.dataset.cxPagina] = { n: +m[1], max: +m[2] }; }
+    const filtro = $('.cx-filtros [data-cx-filtro].ativo', jan)?.dataset.cxFiltro || '';
+    const paginas = { ...(velho.paginas || {}), [pg]: { em: agora, filtro } };
+    // em: quando o Arsenal mudou pela última vez; visto: a última vez que a janela estava aberta
+    const novo = { itens, bonus, ganho, totais, paginas, em: velho.em || agora, visto: agora }, ass = assinaturaCx(novo);
+    // grava quando algo muda (e, com a janela parada aberta, no máximo a cada minuto para atualizar o "visto")
+    if (ass === codexJson && agora - codexGravado < 60e3) return;
+    if (ass !== codexJson) novo.em = agora;
+    codex = novo; codexJson = ass; codexGravado = agora;
+    chrome.storage.local.set({ ['codex:' + nome]: codex });
+  }
+
   let ultimoJson = '', ultimaEscrita = 0;
   function publicar() {
     if (!vivo()) { clearInterval(relogioLeitura); clearInterval(relogioCacada); clearInterval(relogioOla); observador?.disconnect(); obsLateral?.disconnect(); return; }
@@ -610,14 +667,18 @@
     const e = ler();
     if (!e) return;
     if (e.nome !== nome) {
-      nome = e.nome; cacada = null;
+      nome = e.nome; cacada = null; codex = null; codexDe = '';
       carregarCacada(nome).catch(() => (cacada = { sessoes: [] }));
+      const n = nome;
+      carregarCodex(n).catch(() => { if (nome === n) codexDe = n; });
     }
     nomesRaridade = new Map([...(e.ficha?.equip || []), ...(e.ficha?.mochila || [])].filter((i) => i.nome && i.raridade).map((i) => [i.nome, i.raridade]));
     tenta(capturarIcones);
     if (e.timers) tenta(() => conferirAvisos(e));
     tenta(gravarEventos);
     tenta(lerMercado);
+    tenta(lerCodex);
+    if (codexDe === e.nome && codex) e.codex = codex;      // o último Arsenal visto (a janela só existe aberta)
     base = true;
     const json = JSON.stringify(e);
     if (json === ultimoJson && Date.now() - ultimaEscrita < 15e3) return;

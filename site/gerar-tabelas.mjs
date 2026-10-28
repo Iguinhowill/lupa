@@ -60,6 +60,7 @@ try {
   };
   await seguir('motor.js');
   await seguir('novidades.js');
+  await seguir('codex.js');      // o Arsenal das Lendas (regras sem DOM; o motor não o importa)
   const motorSrc = feitos.get('motor.js');
   const sha = createHash('sha256').update(motorSrc).digest('hex');
   // "versão" do jogo: o id da novidade mais recente (ex.: 2026-10-26a); o motor não traz número de versão
@@ -71,6 +72,7 @@ try {
     const M = await import(${JSON.stringify(pathToFileURL(join(pasta, 'motor.js')).href)});
     const D = await import(${JSON.stringify(pathToFileURL(join(pasta, 'dados.js')).href)});
     const B = await import(${JSON.stringify(pathToFileURL(join(pasta, 'balanco.js')).href)});
+    const CX = await import(${JSON.stringify(pathToFileURL(join(pasta, 'codex.js')).href)});
     const zonas = [...M.LOCAIS, ...M.LOCAIS_FRELJORD].filter((l) => l.faixa && l.nm && l.monstros && !l.arena);
     const monstros = new Set(zonas.flatMap((l) => l.monstros.map((m) => m[0])));
     const r = (v) => +(+v).toFixed(6);
@@ -111,6 +113,10 @@ try {
       ITENS: Object.values(M.ITENS).map((i) => ({ id: i.id, nome: i.nome, preco: i.preco, raridade: M.raridade(i), espaco: i.espaco || null,
         e: Object.fromEntries(STATS_ITEM.map((x) => [x, num(i[x])]).filter(([, v]) => v)) })),
       ESPOLIOS: Object.fromEntries(Object.entries(M.ESPOLIOS).map(([id, e]) => [id, { nome: e.nome, valor: e.valor }])),
+      CODEX: { paginas: Object.fromEntries(CX.PAGINAS_CODEX.map((pg) => [pg, { pontos: CX.CODEX.paginas[pg].pontos, ouro: CX.CODEX.paginas[pg].ouro, bonus: CX.CODEX.paginas[pg].bonus.map(r), porDia: CX.CODEX.paginas[pg].porDia || 0 }])),
+        marcos: Object.fromEntries(CX.PAGINAS_CODEX.map((pg) => [pg, CX.CODEX.marcos[pg].map(([k, v]) => [k, r(v)])])),
+        qualidade: CX.CODEX.qualidade, comprado: CX.CODEX.comprado, refino: CX.CODEX.refino || [],
+        colecoes: CX.CODEX.colecoes.map((c) => ({ id: c.id, nome: c.nome, bonus: c.bonus })), itens: CX.ITENS_CODEX },
       dataDragon: D.DADOS.versao,
     }));
   `;
@@ -133,6 +139,13 @@ try {
   numeros(T.NIVEL_MIN_R, 5, 'NIVEL_MIN_R');
   const esp = Object.entries(T.ESPOLIOS || {});
   if (!esp.length || !esp.every(([id, e]) => /^[\w-]+$/.test(id) && typeof e.nome === 'string' && e.nome && Number.isFinite(e.valor) && e.valor >= 0)) throw new Error('ESPOLIOS: fora do formato');
+  const cx = T.CODEX;
+  if (!cx || Object.keys(cx.paginas || {}).join() !== 'lendario,epico') throw new Error('CODEX: esperava as páginas lendario e epico');
+  for (const [pg, r] of Object.entries(cx.paginas)) { for (const k of ['pontos', 'ouro', 'bonus']) numeros(r[k], 10, `CODEX.${pg}.${k}`); numeros([r.porDia], 1, `CODEX.${pg}.porDia`); }
+  for (const [pg, m] of Object.entries(cx.marcos || {})) if (!Array.isArray(m) || !m.every((x) => Array.isArray(x) && x.length === 2 && x.every(Number.isFinite))) throw new Error(`CODEX.marcos.${pg}: fora do formato`);
+  numeros(Object.values(cx.qualidade || {}), 5, 'CODEX.qualidade'); numeros([cx.comprado], 1, 'CODEX.comprado'); numeros(cx.refino, T.REFINO_MAX + 1, 'CODEX.refino');
+  if (!Array.isArray(cx.colecoes) || !cx.colecoes.every((c) => /^[a-z]+$/.test(c.id) && typeof c.nome === 'string' && ['dano', 'defesa', 'va'].includes(c.bonus))) throw new Error('CODEX.colecoes: fora do formato');
+  for (const pg of Object.keys(cx.paginas)) for (const c of cx.colecoes) if (!Array.isArray(cx.itens?.[pg]?.[c.id]) || !cx.itens[pg][c.id].every((id) => T.ITENS.some((i) => i.id === id))) throw new Error(`CODEX.itens.${pg}.${c.id}: fora do formato`);
 
   // 3) grava dados-jogo.js
   const j = (v) => JSON.stringify(v);
@@ -277,10 +290,13 @@ const JOGO = (() => {
   // Fago (+8%) e Dançarina Fantasma (+6% por acúmulo, até 5)
   const aceleracaoFixa = (C, nivel, tem) => 1 + (tem('3044') ? 0.08 : 0) + 0 + 0.06 * (tem('3046') ? 5 : 0) + C.vaNivel * nivel;
   // build = { campeao, nivel, atrib: { forca, vitalidade, resistencia, agilidade, foco }, itens: ["3031+4#ataque2~B" ou { id, refino, qual, carta }],
-  //           ranks: { E, W } (só o Darius e o Taric usam), bonus: { ad, vida, armadura, rm } (conquistas e mascote, em fração) }
+  //           ranks: { E, W } (só o Darius e o Taric usam), bonus: { ad, vida, armadura, rm } (conquistas e mascote, em fração),
+  //           codex: { dano, defesa, va } (o bônus do Arsenal das Lendas, em fração; vale para a conta toda) }
   function fichaDaBuild(build) {
     const C = CAMPEOES[build.campeao] || CAMPEOES.darius, b = C.stats, nivel = build.nivel, g = crescimento(nivel);
     const at = { forca: 0, vitalidade: 0, resistencia: 0, agilidade: 0, foco: 0, ...build.atrib }, ranks = build.ranks || {}, bc = { ad: 0, vida: 0, armadura: 0, rm: 0, ...build.bonus };
+    const cx = build.codex || {}, cxN = (v, k) => (Number.isFinite(+v) ? Math.max(0, Math.min(TETO_CODEX[k], +v)) : 0);
+    const cxD = cxN(cx.dano, 'dano'), cxF = cxN(cx.defesa, 'defesa'), cxV = cxN(cx.va, 'va');
     const chaves = (build.itens || []).map(chaveItem), itensOk = chaves.filter((x) => item(x));
     let ad = C.adBase + C.adNivel * g, vida = b.hp + b.hpperlevel * g, armadura = b.armor + b.armorperlevel * g, rm = b.spellblock + 3.5 * g, va = 0, rv = 0;
     const baseAd = ad, baseVida = vida, baseArmadura = armadura;
@@ -313,7 +329,8 @@ const JOGO = (() => {
     if (tem('3089')) ap *= 1.35;
     ad *= 1 + pct.adPct + cv.ataque; ap *= 1 + pct.apPct + cv.poder; armadura *= 1 + pct.armPct + wArm + cv.armadura; rm *= 1 + pct.rmPct + cv.rm;
     ad *= 1 + bc.ad; ap *= 1 + bc.ad; vida *= 1 + bc.vida; armadura *= 1 + bc.armadura; rm *= 1 + bc.rm;
-    const velAtaque = Math.min(VEL_ATAQUE_MAX, b.attackspeed * (1 + (b.attackspeedperlevel / 100) * g + va) * (1 + cv.velocidade));
+    ad *= 1 + cxD; ap *= 1 + cxD; vida *= 1 + cxF; armadura *= 1 + cxF; rm *= 1 + cxF;
+    const velAtaque = Math.min(VEL_ATAQUE_MAX, b.attackspeed * (1 + (b.attackspeedperlevel / 100) * g + va) * (1 + cv.velocidade) * (1 + cxV));
     const acel = aceleracaoFixa(C, nivel, tem), periodo = periodoAtaque(velAtaque, acel);
     return {
       ad, baseAd, bonusAd: ad - baseAd, vida, bonusVida: vida - baseVida, armadura, bonusArmadura: armadura - baseArmadura, rm, ap,
@@ -333,11 +350,57 @@ const JOGO = (() => {
   }
   // o dano do jogador cai contra monstro mais de "livre" níveis acima dele
   const fatorDanoJogador = (nivel, nivelMonstro) => { const d = Math.max(0, nivelMonstro - nivel - NIVEL_DIF.livre); return d ? Math.max(NIVEL_DIF.minDanoJogador, 1 - NIVEL_DIF.danoJogador * d) : 1; };
+
+  // ---------- Arsenal das Lendas (o "codex" do jogo): registrar lendários e épicos dá bônus permanente para a conta toda ----------
+  // As regras do codex.js do jogo: pontos e ouro de cada estrela, o bônus de cada estrela, os patamares das coleções (todos os itens
+  // dela com N estrelas) e quanto vale cada cópia. As funções são reescritas curtas que o gerador confere contra as do jogo.
+  const CODEX = ${j(T.CODEX)};
+  const TETO_CODEX = { dano: 0.15, defesa: 0.06, va: 0.06 };      // o motor limita o bônus do Arsenal a isto (atributos)
+  const CODEX_CUM = Object.fromEntries(Object.entries(CODEX.paginas).map(([pg, r]) => [pg, r.pontos.reduce((s, v, i) => (s.push((s[i - 1] || 0) + v), s), [])]));
+  const CODEX_DE = {};      // id -> { pagina, colecao }
+  for (const [pg, cols] of Object.entries(CODEX.itens)) for (const [c, lista] of Object.entries(cols)) for (const id of lista) CODEX_DE[id] = { pagina: pg, colecao: c };
+  const comprado = (x) => /^\\d+!/.test(String(x));      // a marca "!": veio de outro jogador (Mercado ou saco)
+  const paginaCodex = (x) => CODEX_DE[baseId(x)]?.pagina || null;
+  const colecaoCodex = (x) => CODEX_DE[baseId(x)]?.colecao || null;
+  const tipoBonusCodex = (x) => CODEX.colecoes.find((c) => c.id === colecaoCodex(x))?.bonus || null;
+  // pontos acumulados para ter k estrelas (k de 1 a 10); 0 para k = 0
+  const pontosAteEstrela = (pg, k) => (k > 0 ? CODEX_CUM[pg][Math.min(10, k) - 1] : 0);
+  const maxPontosCodex = (pg) => CODEX_CUM[pg][9];
+  function estrelasCodex(pg, pontos) { const c = CODEX_CUM[pg]; let k = 0; while (k < 10 && pontos >= c[k] - 1e-9) k++; return k; }
+  // ouro de UM registro: vai pela estrela em que o item está, não pelos pontos que a cópia traz
+  const custoCodex = (pg, pontos) => CODEX.paginas[pg].ouro[Math.min(9, estrelasCodex(pg, pontos))];
+  const pontosCopia = (x) => (CODEX.qualidade[qualDe(x)] || 1) * (comprado(x) ? CODEX.comprado : 1) * (CODEX.refino[refinoDe(x)] || 1);
+  // null se a cópia pode ser registrada; senão o motivo (o mesmo teste do jogo)
+  function motivoCodex(x) {
+    if (typeof x !== 'string' || !item(x)) return 'Esse item não existe.';
+    if (!paginaCodex(x)) return 'Só lendários e épicos entram no Arsenal (os míticos não).';
+    if (/~\\?$/.test(x)) return 'Espere a qualidade do item ser avaliada.';
+    if (cartaDe(x)) return 'Tire a carta do item antes de registrar.';
+    return null;
+  }
+  // o bônus que as primeiras k estrelas de um item dão
+  const bonusEstrelas = (pg, k) => CODEX.paginas[pg].bonus.slice(0, k).reduce((s, v) => s + v, 0);
+  // o patamar de uma coleção: a menor estrela entre os itens dela, o bônus dos patamares já ganhos e o próximo
+  function marcoColecao(pg, colecao, prog) {
+    const lista = CODEX.itens[pg][colecao], est = (id) => estrelasCodex(pg, Object.hasOwn(prog || {}, id) ? prog[id] : 0), min = Math.min(...lista.map(est));
+    const marcos = CODEX.marcos[pg], ganho = marcos.filter(([k]) => min >= k).reduce((s, [, v]) => s + v, 0), prox = marcos.find(([k]) => min < k) || null;
+    return { min, ganho, prox: prox && { k: prox[0], bonus: prox[1], faltam: lista.filter((id) => est(id) < prox[0]).length, total: lista.length } };
+  }
+  // bônus da conta pelo progresso { id: pontos } -> { dano, defesa, va } (frações): estrelas de cada item + patamares das coleções
+  function bonusCodex(prog) {
+    const b = { dano: 0, defesa: 0, va: 0 };
+    for (const [id, pontos] of Object.entries(prog || {})) { const pg = paginaCodex(id); if (pg) b[tipoBonusCodex(id)] += bonusEstrelas(pg, estrelasCodex(pg, pontos)); }
+    for (const pg of Object.keys(CODEX.paginas)) for (const c of CODEX.colecoes) b[c.bonus] += marcoColecao(pg, c.id, prog).ganho;
+    for (const k in b) b[k] = Math.round(b[k] * 1e6) / 1e6;
+    return b;
+  }
+  const BONUS_MAX_CODEX = bonusCodex(Object.fromEntries(Object.entries(CODEX_DE).map(([id, d]) => [id, maxPontosCodex(d.pagina)])));
   const FARM = ${j(FARM)};      // parâmetros do modelo de farm (calculos.js: estimarFarm), calibrados pelo gerador contra a simulação do motor
 
   return { meta, NIVEL_MAX, REFINO_MAX, BONUS_REFINO, BONUS_REFINO_EXTRA, multRefino, RITMO_REAL, CHANCE_REFINO, REGRESSAO_REFINO, PERSISTENCIA, VIP, DROP_CHEFE, ABATES_MIN_ZONA, TAREFA_TIPOS, QUALIDADES, ORDEM_QUAL,
     XP_NIVEL, BALANCO, MONSTROS, ZONAS, ITENS, ESPOLIOS, ZONA, CURVA, CAMPEOES, HABS, CARTA_VALOR, CARTA_TIRAR, RESET_OURO, CARTA_TIPOS,
-    KIT_HABS, BARRA, PONTOS_POR_NIVEL, NIVEL_PONTOS_HAB, rankMaximo, campeaoPelasHabs, NIVEL_DIF, TETO_VIDA_ITEM, RM_MONSTRO, VEL_ATAQUE_MAX, DT, FARM, fichaDaBuild, periodoAtaque, chaveItem, refinoDe, qualDe, cartaDe, fatorDanoJogador, ARMADURA_MONSTRO, xpParaNivel, xpEntre, fatorXp, porAbateZona, zonaIdeal, item, valorVenda, itemPorNome, espolioPorNome, valorEspolio, precoRefino, chanceRefino, chanceForja, recompensaTarefa };
+    KIT_HABS, BARRA, PONTOS_POR_NIVEL, NIVEL_PONTOS_HAB, rankMaximo, campeaoPelasHabs, NIVEL_DIF, TETO_VIDA_ITEM, RM_MONSTRO, VEL_ATAQUE_MAX, DT, FARM, fichaDaBuild, periodoAtaque, chaveItem, refinoDe, qualDe, cartaDe, fatorDanoJogador, ARMADURA_MONSTRO, xpParaNivel, xpEntre, fatorXp, porAbateZona, zonaIdeal, item, valorVenda, itemPorNome, espolioPorNome, valorEspolio, precoRefino, chanceRefino, chanceForja, recompensaTarefa,
+    CODEX, TETO_CODEX, BONUS_MAX_CODEX, comprado, paginaCodex, colecaoCodex, tipoBonusCodex, pontosAteEstrela, maxPontosCodex, estrelasCodex, custoCodex, pontosCopia, motivoCodex, bonusEstrelas, marcoColecao, bonusCodex };
 })();
 if (typeof module !== 'undefined') module.exports = JOGO;
 `; };
@@ -367,6 +430,32 @@ if (typeof module !== 'undefined') module.exports = JOGO;
     for (const it of J.ITENS) igual('itemPorNome ' + it.id, J.itemPorNome(M.ITENS[it.id].nome)?.id, it.id);
     for (let r = 0; r < 7; r++) for (const f of [0, 1, 50, 79, 80, 100, 119, 299, 799, 3499, 7999, 8000, 11999, 12000]) for (const vip of [false, true])
       igual('chanceForja ' + r + ',' + f + ',' + vip, J.chanceForja(r, f, vip), M.chanceForjaAgora({ vipAte: vip ? Date.now() + 1e9 : 0, persistencia: { forja: { [(r + 1) + ':basico']: f } } }, r, '1001'));
+    // Arsenal: cada cópia possível (todo item, comprado ou não, refino 0..7, com e sem carta, toda qualidade e a pendente) e progressos aleatórios
+    const CX = await import(${JSON.stringify(pathToFileURL(join(pasta, 'codex.js')).href)});
+    for (const pg of CX.PAGINAS_CODEX) for (const c of CX.CODEX.colecoes) igual('itens do Arsenal ' + pg + '/' + c.id, J.CODEX.itens[pg][c.id].join(), CX.ITENS_CODEX[pg][c.id].join());
+    for (const it of J.ITENS) for (const marca of ['', '!']) for (let r = 0; r <= 7; r++) for (const carta of ['', '#ataque2']) for (const q of ['', '~C', '~B', '~A', '~S', '~SS', '~?']) {
+      const x = it.id + marca + (r ? '+' + r : '') + carta + q;
+      igual('motivoCodex ' + x, J.motivoCodex(x) === null, CX.motivoCodex(x) === null);
+      if (!CX.motivoCodex(x)) { igual('pontosCopia ' + x, J.pontosCopia(x), CX.pontosCopia(x)); igual('paginaCodex ' + x, J.paginaCodex(x), CX.paginaCodex(x)); igual('colecaoCodex ' + x, J.colecaoCodex(x), CX.colecaoCodex(x)); }
+    }
+    for (const pg of CX.PAGINAS_CODEX) for (let p = 0; p <= CX.maxPontos(pg) + 2; p += 0.25) { igual('estrelasCodex ' + pg + p, J.estrelasCodex(pg, p), CX.estrelasCodex(pg, p)); igual('custoCodex ' + pg + p, J.custoCodex(pg, p), CX.custoCodex(pg, p)); }
+    let sem = 20261028;
+    const rnd = () => { sem = (sem + 0x6D2B79F5) | 0; let t = Math.imul(sem ^ (sem >>> 15), 1 | sem); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const idsCodex = CX.PAGINAS_CODEX.flatMap((pg) => Object.values(CX.ITENS_CODEX[pg]).flat());
+    for (let k = 0; k < 3000; k++) {
+      // às vezes a coleção inteira com o mínimo de um patamar, para cair nos patamares de verdade
+      const piso = rnd() < 0.5 ? [0, 1, 3, 5, 10][Math.floor(rnd() * 5)] : 0, prog = {};
+      for (const id of idsCodex) { const pg = CX.paginaCodex(id), base = piso ? J.pontosAteEstrela(pg, piso) : 0; if (piso || rnd() < 0.6) prog[id] = Math.min(CX.maxPontos(pg), base + Math.round(rnd() * rnd() * 60 * 4) / 4); }
+      const a = J.bonusCodex(prog), b = CX.bonusCodex(prog);
+      for (const t of ['dano', 'defesa', 'va']) igual('bonusCodex ' + t + ' ' + k, a[t], b[t]);
+      for (const pg of CX.PAGINAS_CODEX) for (const c of CX.CODEX.colecoes) {
+        const x = J.marcoColecao(pg, c.id, prog), y = CX.marcoColecao(pg, c.id, prog), rot = 'marcoColecao ' + k + ' ' + pg + '/' + c.id;
+        igual(rot + ' min', x.min, y.min); igual(rot + ' ganho', x.ganho, y.ganho);
+        igual(rot + ' prox', JSON.stringify(x.prox && [x.prox.k, x.prox.faltam, x.prox.total]), JSON.stringify(y.prox && [y.prox.k, y.prox.faltam, y.prox.total]));
+        if (x.prox && y.prox) igual(rot + ' prox.bonus', x.prox.bonus, y.prox.bonus);
+      }
+    }
+    for (const t of ['dano', 'defesa', 'va']) igual('BONUS_MAX_CODEX ' + t, J.BONUS_MAX_CODEX[t], CX.BONUS_MAX_CODEX[t]);
     console.log(JSON.stringify(erros.slice(0, 10)), erros.length);
   `;
   const v = spawnSync(process.execPath, ['--permission', `--allow-fs-read=${pasta}`, '--input-type=module', '-e', conferir], { encoding: 'utf8', maxBuffer: 64e6, cwd: pasta, env: ENV_FILHO });
@@ -394,10 +483,12 @@ if (typeof module !== 'undefined') module.exports = JOGO;
       const itens = Array.from({ length: int(7) }, () => { const id = pick(ids), q = pick(quals); return M.comItem(rnd() < 0.15 ? id + '!' : id, int(8), q, rnd() < 0.4 ? pick(cartas) : null); });
       const ranks = { Q: 1, W: int(11), E: int(11) };
       const conquistas = comBonus.filter(() => rnd() < 0.4).map((c) => c.id), mascote = pick(['krug', 'poro', 'dragao', null]), nivelM = int(21);
-      const estado = { campeao, nivel, atrib, itens, ranks, conquistas, mascote, mascotes: mascote ? { [mascote]: { nivel: nivelM } } : {} };
+      // o Arsenal: às vezes nenhum, às vezes passando do teto (o motor corta em 15% / 6% / 6%)
+      const codex = rnd() < 0.3 ? undefined : { dano: rnd() * 0.18, defesa: rnd() * 0.08, va: rnd() * 0.08 };
+      const estado = { campeao, nivel, atrib, itens, ranks, conquistas, mascote, mascotes: mascote ? { [mascote]: { nivel: nivelM } } : {}, codex };
       const bc = M.bonusMascote(estado), bonus = { ad: 0, vida: 0, armadura: bc.armadura, rm: bc.rm };
       for (const c of comBonus) if (conquistas.includes(c.id)) for (const [q, v] of Object.entries(c.bonus)) if (q in bonus) bonus[q] += v;
-      const a = M.atributos(estado), f = J.fichaDaBuild({ campeao, nivel, atrib, itens, ranks, bonus }), rot = campeao + ' nv' + nivel + ' ' + itens.join(',');
+      const a = M.atributos(estado), f = J.fichaDaBuild({ campeao, nivel, atrib, itens, ranks, bonus, codex }), rot = campeao + ' nv' + nivel + ' ' + itens.join(',') + (codex ? ' codex ' + JSON.stringify(codex) : '');
       for (const c of ['ad', 'baseAd', 'bonusAd', 'ap', 'vida', 'bonusVida', 'armadura', 'bonusArmadura', 'rm', 'penMagica', 'mana', 'danoHab', 'fluxoMult', 'regenMana', 'velAtaque', 'regen', 'esquiva',
         'reducaoRecarga', 'rouboVida', 'vampirismo', 'penArmadura', 'critico', 'danoCritico']) igual(c + ' [' + rot + ']', f[c], a[c]);
       for (const id of ids) if (f.tem(id) !== a.tem(id)) { erros.push('tem ' + id + ' [' + rot + ']'); break; }
@@ -426,7 +517,7 @@ if (typeof module !== 'undefined') module.exports = JOGO;
     }
     return { erros: erros.slice(0, 10), total: erros.length, contas };
   };
-  console.log('conferido: xpParaNivel, fatorXp, porAbateZona, zonaIdeal, rankMaximo, o campeão pelas habilidades, precoRefino, valorVenda, os espólios e a chance da forja batem com o motor.');
+  console.log('conferido: xpParaNivel, fatorXp, porAbateZona, zonaIdeal, rankMaximo, o campeão pelas habilidades, precoRefino, valorVenda, os espólios, a chance da forja e as regras do Arsenal batem com o jogo.');
   const rodarFilho = (corpo) => {
     const r = spawnSync(process.execPath, ['--permission', `--allow-fs-read=${pasta}`, '--input-type=module', '-e', corpo], { encoding: 'utf8', maxBuffer: 64e6, cwd: pasta, env: ENV_FILHO, timeout: 30 * 60e3 });
     if (r.status !== 0) throw new Error('o processo isolado falhou:\n' + (r.stderr || r.stdout).slice(0, 2000));
