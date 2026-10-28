@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Guia do Darius · Roteiros</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#161922">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="/icone-192.png">
+<link rel="stylesheet" href="/roteiros/fontes/fontes.css">
+<style>
+:root { color-scheme: light; }
+/* Layout: coluna única; o painel "Seu nível" responde pontos, barra, atributos e zona para o nível e os itens escolhidos. Depois, itens, ordem dos pontos, zonas, dicas e os números dos testes. Cores de Noxus: carmesim, aço e bronze. */
+:root {
+  --bg: #f2eeee;
+  --surface: #ffffff;
+  --surface-2: #f7f2f2;
+  --ink: #1f1517;
+  --muted: #6b5a5d;
+  --line: #e0d4d6;
+  --accent: #a0182c;
+  --accent-soft: #f6e1e4;
+  --aco: #45505c;
+  --aco-soft: #e6e9ed;
+  --bronze: #8a621d;
+  --bronze-soft: #f4ead6;
+  --f-display: "Big Shoulders Display", "Arial Narrow", "Roboto Condensed", Impact, sans-serif;
+  --f-body: "Source Sans 3", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --f-data: "JetBrains Mono", "Cascadia Mono", Consolas, "Courier New", monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #120d0f; --surface: #1c1518; --surface-2: #241b1f; --ink: #f1e8ea; --muted: #b09fa3; --line: #3a2c31;
+    --accent: #f0596c; --accent-soft: #3a1820; --aco: #a9b6c4; --aco-soft: #222a33; --bronze: #d8ad5f; --bronze-soft: #2c2314;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #120d0f; --surface: #1c1518; --surface-2: #241b1f; --ink: #f1e8ea; --muted: #b09fa3; --line: #3a2c31;
+  --accent: #f0596c; --accent-soft: #3a1820; --aco: #a9b6c4; --aco-soft: #222a33; --bronze: #d8ad5f; --bronze-soft: #2c2314;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--f-body);
+  font-size: 16.5px;
+  line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 64px;
+}
+.wrap { max-width: 760px; margin: 0 auto; display: grid; gap: 48px; }
+h1, h2 { font-family: var(--f-display); font-weight: 800; margin: 0; line-height: 1; text-wrap: balance; text-transform: uppercase; letter-spacing: 0.01em; }
+h1 { font-size: clamp(3rem, 11vw, 4.6rem); }
+h2 { font-size: 2rem; font-weight: 700; }
+p { margin: 0; }
+.rotulo { font-size: 0.76rem; font-weight: 700; letter-spacing: 0.13em; text-transform: uppercase; color: var(--muted); }
+kbd { font-family: var(--f-data); font-size: 0.88rem; background: var(--accent-soft); color: var(--accent); border-radius: 5px; padding: 1px 7px; }
+b { font-weight: 700; }
+
+/* topo */
+.topo { padding-top: 44px; display: grid; gap: 12px; }
+.topo h1 { position: relative; padding-bottom: 14px; }
+.topo h1::after { content: ""; position: absolute; left: 0; bottom: 0; width: 132px; height: 6px; background: var(--accent); clip-path: polygon(0 0, 100% 0, 88% 100%, 0 100%); }
+.topo .lead { font-size: 1.12rem; color: var(--muted); max-width: 56ch; }
+.runas { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 6px; }
+.runas span { border-top: 4px solid var(--c); padding-top: 4px; font-size: 0.82rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.runas span b { font-family: var(--f-data); font-weight: 500; color: var(--ink); margin-right: 4px; }
+.aviso { border-left: 4px solid var(--accent); background: var(--surface); border-radius: 0 10px 10px 0; padding: 10px 14px; font-size: 0.98rem; max-width: 64ch; }
+
+/* painel do nível */
+.painel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 22px; display: grid; gap: 22px; }
+.controle { display: grid; gap: 10px; }
+.controle .linha { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.passo-nv { display: flex; align-items: center; gap: 8px; }
+.passo-nv button {
+  width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface-2);
+  color: var(--ink); font-size: 1.3rem; line-height: 1; cursor: pointer;
+}
+.passo-nv button:hover { border-color: var(--accent); color: var(--accent); }
+.passo-nv output { font-family: var(--f-display); font-weight: 800; font-size: 2.8rem; min-width: 1.8em; text-align: center; line-height: 1; font-variant-numeric: tabular-nums; }
+input[type=range] { width: 100%; accent-color: var(--accent); }
+.itens-sel { display: flex; flex-wrap: wrap; gap: 6px; }
+.itens-sel label { flex: 1 1 140px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; cursor: pointer; font-size: 0.93rem; background: var(--surface-2); min-height: 44px; }
+.itens-sel label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.itens-sel input { accent-color: var(--accent); margin: 0; }
+.respostas { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 24px; }
+.coluna { display: grid; gap: 18px; align-content: start; min-width: 0; }
+.bloco { display: grid; gap: 8px; }
+
+.habs { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.hab { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; }
+.hab .nome { font-weight: 600; min-width: 0; }
+.hab .nome small { font-weight: 400; color: var(--muted); }
+.hab .rk { font-family: var(--f-data); font-size: 0.88rem; font-variant-numeric: tabular-nums; }
+.hab .trilho { grid-column: 2 / 4; display: grid; grid-template-columns: repeat(10, 1fr); gap: 3px; }
+.hab .trilho.cinco { grid-template-columns: repeat(5, 1fr); }
+.hab .trilho i { height: 6px; border-radius: 1px; background: var(--line); }
+.hab .trilho i.on { background: var(--accent); }
+.hab.chave .trilho i.on { background: var(--bronze); }
+.hab.fechada { opacity: 0.5; }
+.hab.fechada .rk { font-family: var(--f-body); font-size: 0.85rem; color: var(--muted); }
+.obs { font-size: 0.9rem; color: var(--muted); }
+
+.barra { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.tecla { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; display: flex; gap: 8px; align-items: center; min-width: 0; font-size: 0.93rem; line-height: 1.25; }
+.tecla.vazia { border-style: dashed; color: var(--muted); }
+.destaque { font-family: var(--f-display); font-weight: 700; font-size: 1.7rem; line-height: 1.1; text-transform: uppercase; }
+.zona-cartao { background: var(--aco-soft); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; }
+.zona-cartao .destaque { font-size: 1.45rem; }
+.proximo { background: var(--accent-soft); border-radius: 10px; padding: 10px 12px; font-size: 0.96rem; }
+.proximo.marco { background: var(--bronze-soft); }
+
+/* seções */
+section { display: grid; gap: 16px; }
+section > header { display: grid; gap: 6px; }
+section > header p { color: var(--muted); max-width: 60ch; }
+.lista { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.lista li { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.lista .slot { font-family: var(--f-data); font-size: 0.8rem; color: var(--muted); padding-top: 3px; }
+.lista .slot.forte { color: var(--accent); }
+.lista b { display: block; }
+.lista span.desc { color: var(--muted); font-size: 0.96rem; }
+.passos { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; counter-reset: passo; }
+.passos li { counter-increment: passo; display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 4px 12px; align-items: baseline; border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--surface); }
+.passos li::before { content: counter(passo); font-family: var(--f-display); font-weight: 800; font-size: 1.7rem; color: var(--accent); line-height: 1; grid-row: span 2; }
+.passos li.chave { border-color: var(--bronze); }
+.passos li.chave::before { color: var(--bronze); }
+.passos .tit { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; font-weight: 700; }
+.passos .det { color: var(--muted); font-size: 0.94rem; }
+.dicas { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.dicas li { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 12px; }
+.dicas li::before { content: ""; width: 8px; height: 8px; transform: rotate(45deg); background: var(--accent); margin-top: 8px; }
+.zonas-tab { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+th, td { text-align: left; padding: 9px 10px 9px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-size: 0.76rem; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+td.nv { font-family: var(--f-data); font-size: 0.85rem; white-space: nowrap; color: var(--muted); font-variant-numeric: tabular-nums; }
+td small { display: block; color: var(--muted); }
+details { border-top: 1px solid var(--line); padding-top: 14px; }
+summary { cursor: pointer; font-weight: 700; color: var(--accent); }
+details .dicas { margin-top: 14px; font-size: 0.96rem; }
+.fonte { margin-top: 14px; font-size: 0.9rem; color: var(--muted); }
+a { color: var(--accent); }
+button:focus-visible, input:focus-visible, summary:focus-visible, a:focus-visible, label:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (max-width: 640px) {
+  .respostas { grid-template-columns: 1fr; }
+  .painel { padding: 16px; }
+  .runas { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 380px) { .barra { grid-template-columns: 1fr; } }
+/* Roteiros: moldura do site (margem do body e o link de volta para a lista) */
+body { margin: 0; }
+.topo { padding-top: 12px; }
+.voltar { justify-self: start; display: inline-flex; align-items: center; min-height: 44px; color: var(--muted); text-decoration: none; font-size: 0.92rem; }
+.voltar:hover { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="topo">
+    <a class="voltar" href="/roteiros/">← Todos os roteiros</a>
+    <div class="rotulo">LoL Idle · A Mão de Noxus</div>
+    <h1>Guia do Darius</h1>
+    <p class="lead">O que equipar, onde colocar os pontos e onde caçar para farmar XP o mais rápido possível. Escolha seu nível e seus itens e veja como deixar o personagem.</p>
+    <div class="runas" aria-hidden="true">
+      <span style="--c: var(--bronze)"><b>Q</b>Dizimar</span>
+      <span style="--c: var(--accent)"><b>R</b>Guilhotina</span>
+      <span style="--c: var(--accent)"><b>G</b>Grito de Guerra</span>
+      <span style="--c: var(--aco)"><b>F</b>Banho de Sangue</span>
+    </div>
+    <p class="aviso"><b>O ponto mais importante:</b> com a build completa, vá para o <b style="display:inline">Covil do Barão no nível 34</b>, sem esperar o 40. Do 36 ao 44 ele rende de 14% a 30% mais XP que o Fosso do Dragão, e o Darius não morreu lá em nenhum teste. Com só 2 a 4 lendários, espere o 36: antes disso o Barão mata.</p>
+  </header>
+
+  <section class="painel" aria-label="Como deixar o personagem no seu nível">
+    <div class="controle">
+      <div class="linha">
+        <label class="rotulo" for="nivel">Seu nível</label>
+        <div class="passo-nv">
+          <button type="button" id="menos" aria-label="Diminuir o nível">−</button>
+          <output id="nivelTxt" for="nivel">36</output>
+          <button type="button" id="mais" aria-label="Aumentar o nível">+</button>
+        </div>
+      </div>
+      <input type="range" id="nivel" min="1" max="100" value="36">
+      <div class="rotulo" id="itensRot">Seus itens</div>
+      <div class="itens-sel" role="radiogroup" aria-labelledby="itensRot">
+        <label><input type="radio" name="itens" id="itens-completa" value="completa" checked> A build: 5 lendários</label>
+        <label><input type="radio" name="itens" id="itens-meia" value="meia"> 2 a 4 lendários</label>
+        <label><input type="radio" name="itens" id="itens-epicos" value="epicos"> Só épicos (ou nada)</label>
+      </div>
+    </div>
+    <div class="respostas">
+      <div class="coluna">
+        <div class="bloco">
+          <div class="rotulo">Pontos de habilidade</div>
+          <ul class="habs" id="habs"></ul>
+          <p class="obs">As outras ficam sem pontos: Ataque Mutilador (W), Avanço Noxiano (A), Vontade do General (D), Pisotear (T), Estandarte (B) e Ruptura (M).</p>
+        </div>
+      </div>
+      <div class="coluna">
+        <div class="bloco">
+          <div class="rotulo">Barra de combate</div>
+          <div class="barra" id="barra"></div>
+        </div>
+        <div class="bloco">
+          <div class="rotulo">Onde caçar</div>
+          <div class="zona-cartao"><p class="destaque" id="zona">Covil do Barão</p><p class="obs" id="zonaObs"></p></div>
+        </div>
+        <div class="bloco">
+          <div class="rotulo">Atributos</div>
+          <p class="destaque" id="atrib">Força 105</p>
+          <p class="obs">Tudo em Força. Nada em Agilidade, Vitalidade, Resistência ou Foco.</p>
+        </div>
+        <p class="proximo" id="proximo"></p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <header>
+      <div class="rotulo">Para farmar</div>
+      <h2>Itens</h2>
+      <p>Uma bota e quatro itens. É a mesma build que circula no Discord, e nos testes nenhuma troca de item ganhou dela.</p>
+    </header>
+    <ul class="lista">
+      <li><span class="slot">Bota</span><div><b>Grevas Bélicas</b><span class="desc">+6% de Dano de Ataque total, velocidade de ataque e roubo de vida. Ganhou de todas as outras botas, até de um Caminho Imortal S+5.</span></div></li>
+      <li><span class="slot">Item</span><div><b>Gume do Infinito</b><span class="desc">O maior Dano de Ataque da build e crítico; os críticos causam 40% a mais.</span></div></li>
+      <li><span class="slot">Item</span><div><b>Espada do Rei Destruído</b><span class="desc">Cada ataque tira 5% da vida atual do monstro. É com ela que o Fosso do Dragão passa a render mais que o Campo Vermelho.</span></div></li>
+      <li><span class="slot">Item</span><div><b>Dançarina Fantasma</b><span class="desc">Velocidade de ataque e crítico; cada ataque acelera mais 6%, até 5 vezes.</span></div></li>
+      <li><span class="slot">Item</span><div><b>Furacão de Runaan</b><span class="desc">Cada ataque acerta mais 2 monstros com 55% do dano. No Darius, que bate de perto, esses golpes extras também dão crítico.</span></div></li>
+    </ul>
+    <ul class="dicas">
+      <li><p><b>Ordem de compra:</b> a Dançarina e o Runaan primeiro (qualquer uma das duas; cada uma rende uns 40% sobre um item épico), depois a Espada do Rei Destruído, o Gume do Infinito e, por último, a Grevas Bélicas. A Grevas do Berserker segura bem até lá.</p></li>
+      <li><p><b>Mítico, no 50:</b> não vale para farmar. A Manamune no lugar de qualquer item rende de 2% a 13% menos, e o Coração de Aço de 6% a 22% menos.</p></li>
+      <li><p><b>Não valem:</b> Hidra Raivosa, Força da Trindade, Quebrapassos e Lembranças do Lorde Dominik chegam perto, mas perdem de 2% a 7%. Sedenta por Sangue, Hidra Titânica, Cutelo Negro, Dança da Morte e Malmortius perdem mais.</p></li>
+    </ul>
+    <div class="bloco">
+      <div class="rotulo">Cartas</div>
+      <ul class="dicas">
+        <li><p><b>Ataque</b> em todos os itens. A Lendária rende de 3% a 4% mais que a Rara; a Básica, de 2% a 5% menos.</p></li>
+        <li><p><b>Crítico</b> não faz nada: a build já tem 100% de chance de crítico. Velocidade, Roubo de Vida e Recarga também perdem de 3% a 6%.</p></li>
+        <li><p><b>Vampirismo Universal</b> só se ele estiver morrendo. Uma carta basta e custa até 1% do XP.</p></li>
+      </ul>
+    </div>
+  </section>
+
+  <section>
+    <header>
+      <div class="rotulo">Do nível 1 ao 50</div>
+      <h2>Ordem dos pontos</h2>
+      <p>O jogo limita quantos pontos cada habilidade aceita em cada nível; quando a da vez está no limite, o ponto vai na próxima da lista. O painel acima mostra onde vai cada ponto.</p>
+    </header>
+    <ol class="passos">
+      <li class="chave"><span class="tit"><kbd>Q</kbd> Dizimar, sempre que puder</span><span class="det">Chega a 10 no nível 19. Sem itens, é ela que mantém o Darius vivo: cura por monstro atingido e acerta todos em volta.</span></li>
+      <li><span class="tit"><kbd>E</kbd> Apreender, 1 ponto no nível 2</span><span class="det">Puxa os monstros que estão chegando e dá penetração de armadura. Entra na barra.</span></li>
+      <li><span class="tit"><kbd>R</kbd> Guilhotina de Noxus, cada vez que libera</span><span class="det">Nos níveis 6, 11, 16, 25 e 35.</span></li>
+      <li><span class="tit"><kbd>G</kbd> Grito de Guerra e <kbd>E</kbd> Apreender, juntas</span><span class="det">1 ponto no Grito no nível 8 para entrar na barra; depois as duas se revezam: Grito no 10 no nível 34, Apreender no 10 no 36.</span></li>
+      <li><span class="tit"><kbd>F</kbd> Banho de Sangue</span><span class="det">1 ponto no nível 23: entra na barra no lugar do Apreender (a penetração de armadura do E é passiva e continua valendo fora da barra). Do 37 ao 45, até 10.</span></li>
+      <li><span class="tit"><kbd>N</kbd> Domínio de Noxus</span><span class="det">Do 46 ao 50, os 5 pontos. Entra na barra no lugar do Banho de Sangue.</span></li>
+    </ol>
+    <p class="obs">Barra: <kbd>Q</kbd> <kbd>E</kbd> <kbd>R</kbd> <kbd>G</kbd> até o 22; <kbd>Q</kbd> <kbd>R</kbd> <kbd>G</kbd> <kbd>F</kbd> do 23 ao 45; <kbd>Q</kbd> <kbd>R</kbd> <kbd>G</kbd> <kbd>N</kbd> do 46 em diante. Os "Q W E R" que aparecem embaixo da barra no jogo são as teclas, não as habilidades.</p>
+  </section>
+
+  <section>
+    <header>
+      <div class="rotulo">Onde caçar</div>
+      <h2>Zonas</h2>
+      <p>Os monstros nascem perto do seu nível, presos à faixa da zona. Até 4 níveis acima de você, eles não ficam mais fortes; acima disso, batem mais e apanham menos.</p>
+    </header>
+    <div class="zonas-tab">
+      <table>
+        <thead><tr><th>Nível</th><th>Com a build</th><th>Com 2 a 4 lendários</th><th>Só épicos</th></tr></thead>
+        <tbody>
+          <tr><td class="nv">1–11</td><td colspan="3">Rota Inferior</td></tr>
+          <tr><td class="nv">12–17</td><td colspan="3">Rota Superior <small>A Toca dos Lobos empata, mas mata mais.</small></td></tr>
+          <tr><td class="nv">18–23</td><td>Campo Vermelho</td><td>Campo Vermelho</td><td>Toca dos Lobos</td></tr>
+          <tr><td class="nv">24–27</td><td>Fosso do Dragão</td><td>Campo Vermelho</td><td>Lobos até o 25, Campo Azul no 26</td></tr>
+          <tr><td class="nv">28–33</td><td>Fosso do Dragão</td><td>Fosso do Dragão</td><td>Campo Azul; Vermelho do 30 <small>O Rio mata.</small></td></tr>
+          <tr><td class="nv">34–35</td><td>Covil do Barão</td><td>Fosso do Dragão</td><td>Campo Vermelho</td></tr>
+          <tr><td class="nv">36–49</td><td colspan="2">Covil do Barão</td><td>Campo Vermelho</td></tr>
+          <tr><td class="nv">50–74</td><td colspan="3">Covil do Dragão Ancião <small>Libera no 50.</small></td></tr>
+          <tr><td class="nv">75–84</td><td colspan="3">Base Inimiga <small>Libera no 75.</small></td></tr>
+          <tr><td class="nv">85–100</td><td colspan="3">Nexus Inimigo <small>Libera no 85.</small></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="obs">"Só épicos" vale até chegarem os lendários; do 50 em diante a tabela supõe a build. Do Rio em diante, cada grupo tem 1,5% de chance de ser um chefe (Arauto, Dragão Infernal, Barão), e eles entram nos testes.</p>
+  </section>
+
+  <section>
+    <header>
+      <div class="rotulo">Para upar mais rápido</div>
+      <h2>Dicas</h2>
+    </header>
+    <ul class="dicas">
+      <li><p>Tenha sempre uma tarefa do Capitão ativa na zona onde você caça: o prêmio soma uns 40% ao XP dos monstros. Ela só conta no campo dela.</p></li>
+      <li><p>Morrer custa 10% do XP do nível, e o Darius fica parado na Fonte até você mandar caçar de novo. Morreu mais de uma vez na mesma zona? Volte uma zona e suba de novo dois níveis depois.</p></li>
+      <li><p>Usa a build do Discord, com Ataque Mutilador (W) no 10 e sem Dizimar (Q)? Os itens e o tudo em Força estão certos. Trocar o W pela Q rende de 3% a 5,5% mais do 30 ao 47. O reset de habilidades custa 25 mil de ouro por nível no Mestre da Legião (1 milhão no 40) ou 150 💎 na loja.</p></li>
+      <li><p>Do 40 em diante, cada nível leva dias de caça (do 49 para o 50 são 259 milhões de XP, umas 200 horas no Barão). O bônus de XP da Loja (+20% por 1 hora) e os eventos rendem mais que qualquer troca de item nessa fase.</p></li>
+    </ul>
+  </section>
+
+  <details>
+    <summary>Por que assim: números dos testes</summary>
+    <ul class="dicas">
+      <li><p><b>Zonas, com a build:</b> Campo Vermelho rende de 2% a 6% mais que o Azul e de 8% a 22% mais que o Rio (níveis 18 a 22). O Fosso empata com o Vermelho no 24 e rende de 2% a 10% mais do 26 ao 32. O Barão rende de 8% a 11% mais que o Fosso no 34, de 14% a 18% do 36 ao 42 e 30% no 44; no 32 ainda perde de 6% a 21%. O Ancião empata com o Barão no 50 e rende 48% mais no 55. Base Inimiga sobre o Ancião: +4% no 75, +8% no 78. Nexus sobre a Base: +4% no 85, +7% no 88. Nenhuma morte nessas zonas.</p></li>
+      <li><p><b>Barão com só 3 lendários</b> (Rei, Runaan e Dançarina +3 B, o resto épico): 199 mortes por hora no 30 e 8 no 32; empata com o Fosso no 34 e rende 13% mais no 36.</p></li>
+      <li><p><b>Ordem dos pontos:</b> sem itens, Dizimar (Q) primeiro rende de 6% a 22% mais que qualquer outra ordem testada, do 7 ao 17; Grito de Guerra antes da Q perde de 9% a 32%. Com a build, as ordens que mantêm Q, E, G e R empatam (até 2% de diferença). A do Discord (W, E e G no 10, sem Q) rende de 3% a 5,5% menos do 30 ao 47 e, sem itens, morre de 18 a 53 vezes por hora.</p></li>
+      <li><p><b>Barra:</b> testadas todas as combinações de 4 habilidades nos níveis 20, 25, 30, 37, 45 e 50. As 5 ou 6 melhores ficam a 1% uma da outra. Em média, o Grito na barra rende até 4% e a Guilhotina até 3%; Ataque Mutilador (W), Avanço Noxiano (A) e Estandarte (B) na barra rendem menos. No 4º espaço, Banho de Sangue, Pisotear, Avanço Noxiano e Ruptura empatam; o Estandarte perde de 2% a 3%. Apreender na barra depois do 23, no lugar do Banho de Sangue, empata ou perde até 2%.</p></li>
+      <li><p><b>Atributos:</b> tudo em Força ganha ou empata. Agilidade anda em degraus (a velocidade de ataque rende em saltos): conforme o equipamento, de −4% a +5%, sem regra; com a build +5 A, nunca ganhou mais que 1%. Vitalidade e Resistência, até 3% menos, e não mudaram as mortes (zero em todos os testes). Foco até 30 pontos empata.</p></li>
+      <li><p><b>Itens:</b> trocando um item por vez nos níveis 30, 45 e 60, nenhuma troca ganhou. As mais perto: Força da Trindade, Hidra Raivosa e Quebrapassos no lugar do Rei, de 4% a 5% menos no 30; Lembranças do Lorde Dominik no lugar do Gume, de 2% a 8% menos. Botas: Grevas do Berserker de 2% a 7% menos, Caminho Imortal de 5% a 10% menos (S+5 contra a Grevas A+5, de 5% a 6%), Grevas Vorazes de 5% a 8% menos. Manamune no lugar do Rei, de 2% a 5% menos; Coração de Aço, de 6% a 12%.</p></li>
+      <li><p><b>Cartas:</b> Ataque Lendária em todas, de 3% a 4% mais que Rara. Velocidade, Crítico, Roubo de Vida e Recarga, de 3% a 6% menos que Ataque Rara (Crítico rende o mesmo que nenhuma carta). Uma de Vampirismo no lugar de uma de Ataque, até 1% menos.</p></li>
+      <li><p><b>Conferência com o Discord:</b> o pessoal fala em "6 mil de dano no Barão". O simulador dá 6,5 mil de dano por segundo para a build deles no nível 39, no Barão (6,8 mil com a ordem deste guia). Os itens e o tudo em Força batem com estes testes; a segunda build postada (Caminho Imortal S+5 no lugar da Grevas) rende de 6% a 7% menos.</p></li>
+    </ul>
+    <p class="fonte">Testes rodando o próprio motor do jogo (versão de 27/10/2026, baixada em 28/10) fora do navegador: de 6 a 10 rodadas de 1 a 2 horas de caça por teste, com itens +3 B e +5 A, de dia, sem poções, mascote, VIP ou bônus. Diferenças abaixo de 2% são empate. A simulação conta um pouco menos de abates que o jogo real (o mascote não entra), igual para todas as opções. Fontes: <a href="https://lolidle.com/wiki#campeoes" target="_blank" rel="noopener">wiki do LoL Idle</a> e o código do jogo.</p>
+  </details>
+</div>
+
+<script src="/roteiros/darius.js"></script>
+</body>
+</html>
