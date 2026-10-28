@@ -218,7 +218,7 @@ body { margin: 0; }
         <li><p><b>Ataque</b> é a carta padrão. A Lendária é a melhor que existe para ele.</p></li>
         <li><p><b>Velocidade de Ataque</b> só vale em grupo, até a velocidade da aba Atributos ficar entre 2,8 e 2,9. Com uma ou duas cartas e a ficha baixa, não muda nada. Se chegar a 3,0, a última carta sobra: troque por Ataque.</p></li>
         <li><p><b>Crítico</b> não serve. Depois do ajuste de 25/10, a carta de Ataque rende mais em qualquer mistura.</p></li>
-        <li><p><b>Vampirismo</b> não faz falta no Fosso: a Hidra já dá roubo de vida.</p></li>
+        <li><p><b>Vampirismo</b> não faz falta para farmar: a Hidra já dá roubo de vida.</p></li>
         <li><p>A carta rende igual em qualquer item. Deixe a melhor num item que não sai na troca do chefe, como a Dançarina.</p></li>
       </ul>
     </div>
@@ -247,8 +247,8 @@ body { margin: 0; }
     <ul class="lista">
       <li><span class="slot">1 a 19</span><div><b>A zona do seu nível</b><span class="desc">A faixa de nível de cada zona aparece no mapa.</span></div></li>
       <li><span class="slot">20 a 30</span><div><b>Campo Vermelho</b><span class="desc">Rende uns 12% mais que o Rio, e não tem chefe.</span></div></li>
-      <li><span class="slot">31 a 40</span><div><b>Fosso do Dragão</b><span class="desc">No 31 empata com o Campo Vermelho; do 34 em diante, rende de 13% a 14% mais que o Vermelho e o Rio.</span></div></li>
-      <li><span class="slot">41 a 49</span><div><b>Covil do Barão</b><span class="desc">+16% sobre o Fosso no 41 e +59% no 46.</span></div></li>
+      <li><span class="slot">31 a 35</span><div><b>Fosso do Dragão</b><span class="desc">No 31 empata com o Campo Vermelho; no 34, rende 13% mais que ele.</span></div></li>
+      <li><span class="slot">36 a 49</span><div><b>Covil do Barão</b><span class="desc">De 13% a 17% mais que o Fosso do 36 ao 42, uns 30% mais no 44 e uns 60% mais no 46, com os itens de +3 B a +5 A. Com tudo em +5, ele já ganha no 35. Até 28/10, este guia mandava esperar o 41.</span></div></li>
       <li><span class="slot">50+</span><div><b>Covil do Dragão Ancião</b><span class="desc">+8% sobre o Barão no 52.</span></div></li>
     </ul>
   </section>
@@ -276,10 +276,11 @@ body { margin: 0; }
       <li><p><b>Cartas</b> (Grevas +2, Gume e Rei +4, Hidra e Dançarina +5): com a velocidade em 2,98, trocar uma carta de Velocidade por Ataque dá +2%, e pôr a quarta de Velocidade dá −2%. Com itens +2/+3, a melhor mistura é 1 Ataque + 4 Velocidade: +10% a +11% dos níveis 30 a 35. Cinco cartas de Crítico: −5%.</p></li>
       <li><p><b>Por que a Velocidade vai em degraus:</b> o jogo calcula o combate em passos de 0,05 s, e o tiro só sai na virada de um passo. Velocidade a mais só rende quando faz o tiro sair um passo mais cedo.</p></li>
       <li><p><b>Atributos:</b> pontos novos em Força rendem de 0,1% a 2% mais do que em Agilidade nos níveis 32 e 35. Quem já tem Agilidade ganha 2% a 3% resetando tudo para Força, o que não paga os 25 mil de ouro por nível.</p></li>
-      <li><p><b>Zonas</b> (build do guia +3 B com cartas de Ataque, tudo em Força): Campo Vermelho contra Rio, +12% no 26 e no 29 e +14% no 31. Fosso contra Vermelho, +2% no 31 e +13% no 34; contra o Rio, +14% no 37. Barão contra Fosso, +16% no 41 e +59% no 46. Ancião contra Barão, +8% no 52. Nenhuma morte em nenhuma zona.</p></li>
+      <li><p><b>Zonas</b> (build do guia +3 B com cartas de Ataque, tudo em Força): Campo Vermelho contra Rio, +12% no 26 e no 29 e +14% no 31. Fosso contra Vermelho, +2% no 31 e +13% no 34; contra o Rio, +14% no 37. Ancião contra Barão, +8% no 52. Barão contra Fosso, testado de novo em 28/10 com os itens em +3 B, +5 B e +5 A: de −2% a −11% no 34, de empate a +7% no 35, de +13% a +17% do 36 ao 42, de +28% a +31% no 44 e de +60% a +66% no 46. O teste antigo só tinha comparado o 41 e o 46, que deram o mesmo de agora. Nenhuma morte em nenhuma zona.</p></li>
+      <li><p><b>Conferido no jogo</b> (28/10): um Aphelios com itens +5 A, no nível 38, fez de 2.800 a 3.030 abates por hora no Barão, sem nenhuma morte em 12 horas. A simulação deu 3.020.</p></li>
       <li><p>Ciclo das Armas (nível 38) e Noite Sem Fim (nível 45) ainda não foram testadas.</p></li>
     </ul>
-    <p class="fonte">Testes rodando o próprio motor do jogo fora do navegador, de 3 a 4 rodadas de 1 a 2 horas de caça por teste (no Fosso do Dragão, menos o teste de zonas). Diferenças abaixo de 2% são empate. A simulação conta uns 25% menos abates que o jogo real (o mascote não entra), igual para todas as opções. Fontes: <a href="https://lolidle.com/wiki#campeoes" target="_blank" rel="noopener">wiki do LoL Idle</a>, as novidades do jogo e o código do jogo, conferido de novo em 26/10/2026 (nada mudou no combate desde o ajuste de 25/10).</p>
+    <p class="fonte">Testes rodando o próprio motor do jogo fora do navegador, de 3 a 4 rodadas de 1 a 2 horas de caça por teste (no Fosso do Dragão, menos o teste de zonas); o teste do Barão de 28/10 usou 6 rodadas de 2 horas. Diferenças abaixo de 2% são empate. Fontes: <a href="https://lolidle.com/wiki#campeoes" target="_blank" rel="noopener">wiki do LoL Idle</a>, as novidades do jogo e o código do jogo, conferido de novo em 28/10/2026 (o combate contra monstros não mudou desde o ajuste de 25/10).</p>
   </details>
 
 </div>
