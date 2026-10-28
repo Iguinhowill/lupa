@@ -309,13 +309,15 @@ function desenharFicha(e, ctx, opts = {}) {
 }
 
 // ---------- barra de XP do nível ----------
-// Ritmo da última hora: os baldes de 5 min já fechados dos últimos 60 min da sessão (o que ainda enche fica de fora). A média
-// da sessão inteira mente quando um bônus de XP acabou no meio dela; com menos de 3 baldes, é ela que vale.
+// Ritmo da última hora de relógio: o que os baldes de 5 min já fechados somam nos últimos 60 min (ou desde o começo da
+// sessão, se ela é mais nova), dividido pelo tempo inteiro, pausas incluídas (balde só nasce com caçada). A média da sessão
+// inteira mente quando um bônus de XP acabou no meio dela; com menos de 15 min para medir, é ela que vale.
 function ritmoRecente(sessao, campo = 'xp', agora = Date.now()) {
   if (!sessao) return null;
-  const bs = (sessao.baldes || []).filter((b) => b.t + BALDE <= agora && b.t + BALDE > agora - 3600e3);
-  if (bs.length >= 3) return bs.reduce((t, b) => t + (b[campo] || 0), 0) / ((bs.length * BALDE) / 3600e3);
-  return porHora(sessao[campo], sessao.seg);
+  const fim = Math.floor(agora / BALDE) * BALDE, ini = Math.max(fim - 3600e3, Math.floor((sessao.ini || 0) / BALDE) * BALDE);
+  if (fim - ini < 15 * 60e3) return porHora(sessao[campo], sessao.seg);
+  const soma = (sessao.baldes || []).filter((b) => b.t >= ini && b.t + BALDE <= fim).reduce((t, b) => t + (b[campo] || 0), 0);
+  return soma / ((fim - ini) / 3600e3);
 }
 const prazoTexto = (min) => (min >= 60 ? `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')} min` : `${min} min`);
 // quanto falta para o próximo nível e a que horas ele chega no ritmo da última hora (sem caça ativa: sem previsão)
@@ -720,8 +722,8 @@ function desenharFeed(eventos, ctx, { limite = 30, filtro = 'tudo' } = {}) {
   return h('ul', { class: 'feed' }, lista.map((v) => h('li', { class: 'feed-item ' + (v.tipo || '') },
     v.item ? imagem(v.item, ctx, { tam: 32, raridade: v.raridade }) : h('span', { class: 'feed-ico' }, icone(ICONE_EVENTO[v.tipo] || 'info', 20)),
     h('span', { class: 'feed-texto' },
-      h('span', { class: 'feed-titulo' }, v.item || v.titulo || v.tipo),
-      v.item ? h('span', { class: 'feed-sub' }, raridadeDe(v), origemDrop(v) ? ` · ${origemDrop(v)}` : null)
+      h('span', { class: 'feed-titulo' }, ehDrop(v) ? v.item : (v.titulo || v.tipo)),
+      ehDrop(v) ? h('span', { class: 'feed-sub' }, raridadeDe(v), origemDrop(v) ? ` · ${origemDrop(v)}` : null)
         : v.texto ? h('span', { class: 'feed-sub' }, v.texto) : null),
     h('span', { class: 'feed-hora num fraco' }, hora(v.ts)))));
 }
@@ -735,3 +737,11 @@ function raridadeDe(v) {
 }
 // de onde veio ("Loot de lobo gigante"); "Caiu na caçada" e o "Lendário!" do título não dizem nada a mais
 const origemDrop = (v) => (v.tipo === 'drop' && v.texto && !/^Caiu na caça/.test(v.texto) ? v.texto : '');
+// só drop e lendário viram "item com raridade": o item que ficou no chão também traz o nome do item, mas é um aviso
+const ehDrop = (v) => !!v.item && TIPOS_DROP.includes(v.tipo);
+
+// a cor de cada personagem (painel.css, --p1 a --p4): a posição do nome na lista em ordem alfabética, igual em todas as telas
+function corPersonagem(nome, nomes) {
+  const i = [...nomes].sort((a, b) => a.localeCompare(b)).indexOf(nome);
+  return `var(--p${(Math.max(0, i) % 4) + 1})`;
+}

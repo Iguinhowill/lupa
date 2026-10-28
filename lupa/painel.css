@@ -31,18 +31,18 @@
   --selecionado: #26262a;
   --cinza: #6b6e73;
   --texto-2: #d4d4d6;
-  --ouro-escuro: #2f8f5b;
+  --ouro-escuro: #2f8f5b;      /* o nome é antigo: hoje é o verde da chave ligada */
   --verde-borda: #1f4a30;
   --perigo: #ef6a7d;
   --npc: #8ab4f8;
   --ok-fundo: #172a1d;
   --perigo-fundo: #2c1a20;
-  --trilho: #2a2a2d;
+  --fundo-barra: #2a2a2d;      /* o fundo das barras de progresso (a casca do app tem um --trilho, que é outra coisa) */
   --p1: #3987e5;
   --p2: #d95926;
   --p3: #199e70;
   --p4: #c98500;
-  --mono: "IBM Plex Sans", system-ui, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Sans", system-ui, "Segoe UI", sans-serif;      /* o nome é antigo: os números usam a letra do texto, tabulares */
   color-scheme: dark;
 }
 
@@ -68,7 +68,7 @@ button { font: inherit; color: inherit; }
 
 .personagens { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 16px 10px; }
 .chip { min-height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--borda); background: transparent; color: var(--fraco); cursor: pointer; }
-.chip[aria-pressed="true"] { color: var(--ouro-claro); border-color: var(--pronta-borda); background: var(--pronta-fundo); }
+.chip[aria-pressed="true"] { color: var(--fundo); border-color: var(--texto); background: var(--texto); }
 
 .abas { display: flex; padding: 0 8px; border-bottom: 1px solid var(--borda); }
 .abas button { flex: 1 1 0; min-width: 0; height: 44px; padding: 0 4px; display: flex; align-items: center; justify-content: center; gap: 6px; background: none; border: 0; border-bottom: 2px solid transparent; color: var(--fraco); font-weight: 600; cursor: pointer; }
@@ -123,7 +123,7 @@ button { font: inherit; color: inherit; }
 
 .segmento { display: flex; gap: 4px; padding: 4px; background: var(--cartao); border: 1px solid var(--borda); border-radius: 8px; }
 .segmento button { flex: 1 1 0; height: 40px; border: 0; border-radius: 6px; background: transparent; color: var(--fraco); font-weight: 600; cursor: pointer; }
-.segmento button[aria-pressed="true"] { background: var(--selecionado); color: var(--ouro-claro); }
+.segmento button[aria-pressed="true"] { background: var(--texto); color: var(--fundo); }
 
 .grafico svg { display: block; width: 100%; height: 80px; }
 .grafico .linha { fill: none; stroke: var(--ouro); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }

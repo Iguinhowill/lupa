@@ -14,8 +14,6 @@ function indicePorNome(precos) {
   return m;
 }
 
-// a mesma cor de cada personagem da Agora (painel.css, --p1 a --p4), na mesma ordem: a dos nomes
-const COR_LINHA = ['var(--p1)', 'var(--p2)', 'var(--p3)', 'var(--p4)'];
 const BALDE_MS = 5 * 60e3;
 
 // XP/h por faixa do dia (30 min ou 1 h): cada faixa soma os baldes de 5 min que caem nela. A faixa em andamento
@@ -233,7 +231,7 @@ function graficoXp(series, ini, agora, passo, larg) {
       nota(`Soma do que cada caçada guardou (cacadas.drops)${lojaMats ? `: ${curto(lojaMats)} no Lojista, pelo preço do jogo` : ''}. Não inclui o que o jogo deixa no chão pelos filtros.`));
 
     // Hoje: desde a meia-noite de Brasília, por personagem
-    const ini0 = inicioDoDia(agora), cor = (p) => COR_LINHA[nomes.indexOf(p) % COR_LINHA.length];
+    const ini0 = inicioDoDia(agora), cor = (p) => corPersonagem(p, Object.keys(d.estados));      // a mesma cor da Agora (ui.js)
     const hj = nomes.filter(doQuem).map((p) => hoje(p, ini0, agora));
     const tileProx = (x) => {
       const rot = x.nivel ? `Sobe para o nível ${x.nivel + 1}` : 'Próximo nível';

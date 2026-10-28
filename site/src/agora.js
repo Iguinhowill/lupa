@@ -4,6 +4,7 @@
 'use strict';
 
 globalThis.LUPA_LIMITE_VELHO = 4 * 60e3;      // a Lupa envia a cada minuto: só fica "sem leitura" depois de 4 min
+globalThis.LUPA_CAP_EVENTOS = 300;      // o banco tem 2 dias de eventos: guarda mais que os 80 da Lupa, para os lendários do dia
 globalThis.LUPA_TEXTO_VAZIO = 'Nenhuma leitura ainda. No PC de casa, entre no Lupa Online em Lupa → Ajustes.';
 
 (() => {
@@ -39,7 +40,7 @@ globalThis.LUPA_TEXTO_VAZIO = 'Nenhuma leitura ainda. No PC de casa, entre no Lu
     if (eventos) {
       const porNome = {};
       for (const ev of eventos) (porNome[ev.personagem] ||= []).push({ ts: ev.ts, tipo: ev.tipo, titulo: ev.titulo, texto: ev.texto, item: ev.item, qual: ev.qual, raridade: ev.raridade });
-      for (const [n, l] of Object.entries(porNome)) novo['eventos:' + n] = l.slice(-80);
+      for (const [n, l] of Object.entries(porNome)) novo['eventos:' + n] = l.slice(-LUPA_CAP_EVENTOS);
     }
     if (icones) { novo.icones = icones; comIcones = true; }
     // o Mercado da Ficha: o menor preço visto de cada item equipado ou na mochila (se a consulta falhar, a Ficha fica só com a Loja)

@@ -69,12 +69,14 @@
     return JOGO.CAMPEOES[id]?.nome || null;
   }
   const nomeComCampeao = (e) => [e.nome, campeaoDe(e)].filter(Boolean).join(' · ');
-  const chamar = (e) => campeaoDe(e) || e.nome;
-  // a cor de cada personagem segue o nome, na ordem dos nomes que esta Central conhece: não muda quando um para de ler
-  function corDe(nome) {
-    const i = Object.keys(estados).sort((a, b) => a.localeCompare(b)).indexOf(nome);
-    return `var(--p${(Math.max(0, i) % 4) + 1})`;
+  // como chamar o personagem nas listas: pelo campeão; dois com o mesmo campeão levam o nome junto
+  function chamar(e) {
+    const camp = campeaoDe(e);
+    if (!camp) return e.nome;
+    return Object.values(estados).filter((x) => campeaoDe(x) === camp).length > 1 ? `${camp} (${e.nome})` : camp;
   }
+  // a cor segue o nome, na ordem dos nomes que esta Central conhece: não muda quando um para de ler (a mesma do Relatório)
+  const corDe = (nome) => corPersonagem(nome, Object.keys(estados));
 
   // ---------- status ----------
   const segundos = (ms) => Math.max(0, Math.round(ms / 1000));
@@ -100,13 +102,20 @@
     const x = cacadas[e.nome]?.sessoes?.at(-1);
     return x && Date.now() - e.ts <= LIMITE_VELHO && Date.now() - (x.ultimoAbate || x.fim) < PAUSA ? x : null;
   };
-  // XP de hoje (desde 00:00 de Brasília): a soma dos baldes de 5 min de todas as sessões, sem contar duas vezes o mesmo
+  const inicioDoDia = () => { const ms = msAteViradaDia(); return ms == null ? Date.now() - 86400e3 : Date.now() + ms - 86400e3; };
+  // XP de hoje (desde 00:00 de Brasília): a soma dos baldes de 5 min das sessões. Duas sessões que se sobrepõem (duas Lupas
+  // lendo o mesmo personagem) têm os mesmos baldes: o de uma sessão que começou antes da outra acabar não conta de novo. O balde
+  // que o "Nova sessão" corta no meio fica nas duas, uma depois da outra, e as duas partes somam.
   function xpHoje(e, campo) {
-    const ms = msAteViradaDia();
-    const ini = ms == null ? Date.now() - 86400e3 : Date.now() + ms - 86400e3, vistos = new Set();
+    const ini = inicioDoDia(), dono = new Map();
     let soma = 0;
-    for (const s0 of cacadas[e.nome]?.sessoes || []) for (const b of s0.baldes || []) {
-      if (b.t >= ini && !vistos.has(b.t)) { vistos.add(b.t); soma += b[campo] || 0; }
+    const sessoes = [...(cacadas[e.nome]?.sessoes || [])].sort((a, b) => a.ini - b.ini);
+    for (const s0 of sessoes) for (const b of s0.baldes || []) {
+      if (b.t < ini) continue;
+      const antes = dono.get(b.t);
+      if (antes && s0.ini < antes.fim) continue;
+      dono.set(b.t, s0);
+      soma += b[campo] || 0;
     }
     return soma;
   }
@@ -153,17 +162,19 @@
         p ? barra(p.pct, cor, `Nível ${nivel}: ${pctTexto(p.pct)}`) : null,
         p ? h('span', { class: 'num fraco' }, pctTexto(p.pct)) : null)),
       cel('sobe', 'Sobe', ...(p?.ate ? [h('b', { class: 'num vg-v' }, hora(p.ate)), sub(`em ${prazoTexto(p.min)}`)]
-        : [h('span', { class: 'fraco' }, x ? 'medindo…' : 'parado'), sub(p ? `faltam ${curto(p.falta)}` : '')])),
+        : p ? [h('span', { class: 'fraco' }, x ? 'medindo…' : 'parado'), sub(`faltam ${curto(p.falta)}`)] : [traco()])),
       cel('xph dir', 'XP/h', x ? valor(ritmoRecente(x, campo)) : traco()),
       cel('ouro dir', 'Ouro/h', x ? valor(porHora(x.ouro, x.seg)) : traco()),
       cel('hoje dir', 'XP hoje', hoje ? valor(hoje) : traco()),
-      cel('tarefa', 'Tarefa', ...celulaTarefa(e.tarefa, st)),
+      cel('tarefa', 'Tarefa', ...celulaTarefa(e.tarefa, !!x)),
       cel('mochila dir', 'Mochila', m?.total ? h('span', { class: 'num vg-v' + (m.usados / m.total >= 0.9 ? ' vg-aviso' : '') }, String(m.usados), h('span', { class: 'vg-un' }, `/${m.total}`)) : traco()),
       cel('bonus dir', 'Bônus de XP', e.bonus?.xp ? h('span', { class: 'num' }, mult(e.bonus.xp)) : traco()));
   }
 
-  function celulaTarefa(t, st) {
-    if (!t) return [st.tom === 'aviso' ? h('span', { class: 'fraco' }, 'nenhuma') : pilula('aviso', 'Nenhuma ativa')];
+  // t === null: o jogo não mostra tarefa; undefined: a leitura dela falhou (aí não dá para dizer que não tem)
+  function celulaTarefa(t, cacando) {
+    if (t === undefined) return [traco()];
+    if (!t) return [cacando ? pilula('aviso', 'Nenhuma ativa') : h('span', { class: 'fraco' }, 'nenhuma')];
     if (t.pronta) return [pilula('ok', 'Pronta para entregar')];
     if (t.cacandoFora) return [pilula('aviso', 'Fora da zona'), sub(`a tarefa é em ${t.local}`)];
     if (t.qtd) return [h('span', { class: 'num' }, `${inteiro(t.feitos)}/${inteiro(t.qtd)}`),
@@ -180,11 +191,13 @@
         sub: globalThis.LUPA_API ? 'O jogo ou a Lupa parou no PC de casa.' : 'A aba do jogo fechou ou parou de ler.', quando: `há ${duracao(idade / 1000)}` });
       if (t?.pronta) itens.push({ tom: 'ok', ic: 'ok', cores: [cor], texto: `Tarefa do ${nome} pronta para entregar`, sub: t.dica || 'Na Fonte, fale com o Capitão da Legião.' });
       else if (t?.cacandoFora) itens.push({ tom: 'aviso', ic: 'alerta', cores: [cor], texto: `${nome} caça fora da zona da tarefa`, sub: `A tarefa é em ${t.local}; ${nome} está em ${t.zona}.` });
-      else if (!t && idade <= LIMITE_VELHO && e.zona && e.zona !== 'Fonte') itens.push({ tom: 'aviso', ic: 'relogio', cores: [cor], texto: `${nome} caça sem tarefa do Capitão`, sub: 'Pegue uma na Fonte: ela paga XP e ouro a mais em cima da caçada.' });
+      // só quando o jogo mostra que não há tarefa (null; undefined é leitura que falhou) e o personagem está mesmo caçando
+      else if (t === null && sessaoAtiva(e)) itens.push({ tom: 'aviso', ic: 'relogio', cores: [cor], texto: `${nome} caça sem tarefa do Capitão`, sub: 'Pegue uma na Fonte: ela paga XP e ouro a mais em cima da caçada.' });
       if (m?.total && m.usados / m.total >= 0.9) itens.push({ tom: 'aviso', ic: 'alerta', cores: [cor], texto: `Mochila do ${nome} em ${m.usados}/${m.total}`, sub: 'Venda ou desmanche antes que os itens fiquem no chão.' });
       const pts = (e.pontos?.habilidade || 0) + (e.pontos?.atributo || 0);
       if (pts > 0) itens.push({ tom: 'info', ic: 'proximo', cores: [cor], texto: `${nome} tem ${pts} ${pts === 1 ? 'ponto livre' : 'pontos livres'}`, sub: proximoDoPlano(e) });
-      for (const i of itensHoje(e)) if (i.tom === 'ouro') itens.push({ tom: 'info', ic: i.ic, cores: [cor], texto: `${nome}: ${i.texto}`, sub: i.sub });
+      // o prêmio e as diárias que o jogo mostrava: lidos antes da meia-noite, já não valem para hoje (como no cartão Hoje)
+      if (e.ts >= inicioDoDia()) for (const i of itensHoje(e)) if (i.tom === 'ouro') itens.push({ tom: 'info', ic: i.ic, cores: [cor], texto: `${nome}: ${i.texto}`, sub: i.sub });
       if (e.timers?.voto?.estado === 'pode') votoLivre.push(e);
     }
     if (votoLivre.length) itens.push({ tom: 'info', ic: 'info', cores: votoLivre.map((e) => corDe(e.nome)),
@@ -213,10 +226,11 @@
   // ---------- visão geral: bônus de XP lado a lado ----------
   function textoBonus(txt) {
     const [a, ...b] = String(txt).split('·').map((s0) => s0.trim());
-    return h('span', null, h('span', { class: 'num' }, a), b.length ? h('span', { class: 'vg-meta' }, ` · ${b.join(' · ')}`) : null);
+    return h('span', null, h('span', { class: 'num' }, a), b.length ? h('span', { class: 'vg-meta vg-prazo' }, ` · ${b.join(' · ')}`) : null);
   }
   function cartaoBonus(lista) {
-    const ev = lista.map((e) => e.timers?.evento).find(Boolean);
+    // o evento é do servidor, igual para todos: vale a leitura mais nova
+    const ev = [...lista].sort((a, b) => b.ts - a.ts)[0]?.timers?.evento;
     const linhas = [
       ['Total', (t, e) => (e.bonus?.xp ? h('span', { class: 'num' }, mult(e.bonus.xp)) : traco()), 'total'],
       ['Kick', (t) => (t.kick?.ativo ? textoBonus(t.kick.texto) : traco())],
@@ -233,7 +247,7 @@
         h('thead', null, h('tr', null, h('th', { scope: 'col' }, h('span', { class: 'so-leitor' }, 'Bônus')),
           lista.map((e) => h('th', { scope: 'col' }, h('span', { class: 'vg-mtz-quem' }, ponto(corDe(e.nome), true), chamar(e)))))),
         h('tbody', null, linhas.map(([rot, f, cls]) => h('tr', { class: cls || null }, h('th', { scope: 'row' }, rot),
-          lista.map((e) => h('td', null, e.timers ? f(e.timers, e) : traco()))))))));
+          lista.map((e) => h('td', null, f(e.timers || {}, e)))))))));
   }
 
   // ---------- visão geral: ao vivo, dos personagens juntos ----------
@@ -260,17 +274,19 @@
       .sort((a, b) => b.ts - a.ts).slice(0, 14);
   }
   function linhaFeed(v) {
-    const e = v.quem;
-    const tipo = v.item ? (ROTULO_RARIDADE[v.raridade] || (v.tipo === 'lendario' ? 'Lendário' : 'Drop')) : (ROTULO_TIPO[v.tipo] || 'Evento');
-    const qual = v.item && v.qual ? (v.qual === '?' ? ' · sendo avaliado' : ` · ${v.qual}`) : '';
+    const e = v.quem, drop = ehDrop(v);
+    const corRar = COR_RARIDADE[v.raridade] || (v.tipo === 'lendario' ? COR_RARIDADE.lendario : null);
+    const tipo = drop ? (ROTULO_RARIDADE[v.raridade] || (v.tipo === 'lendario' ? 'Lendário' : 'Drop')) : (ROTULO_TIPO[v.tipo] || 'Evento');
+    const qual = drop && v.qual ? (v.qual === '?' ? ' · sendo avaliado' : ` · ${v.qual}`) : '';
+    const detalhe = drop ? origemDrop(v) : v.texto;
     return h('li', { class: 'vg-ev ' + (v.tipo || '') },
       h('span', { class: 'vg-ev-hora num' }, hora(v.ts)),
       h('span', { class: 'vg-ev-quem' }, ponto(corDe(e.nome), true), chamar(e)),
-      h('span', { class: 'vg-ev-tipo' }, v.item ? h('span', { class: 'raridade-ponto', style: `background:${COR_RARIDADE[v.raridade] || COR_RARIDADE.lendario}`, 'aria-hidden': 'true' }) : null, tipo),
+      h('span', { class: 'vg-ev-tipo' }, drop && corRar ? h('span', { class: 'raridade-ponto', style: `background:${corRar}`, 'aria-hidden': 'true' }) : null, tipo),
       h('span', { class: 'vg-ev-txt' },
         v.item ? imagem(v.item, ctx, { tam: 24, raridade: v.raridade }) : null,
-        h('span', { class: 'vg-ev-nome' }, v.item ? [v.item, h('span', { class: 'vg-meta' }, qual)] : (v.titulo || v.tipo)),
-        (v.item ? origemDrop(v) : v.texto) ? h('span', { class: 'vg-meta vg-ev-sub' }, v.item ? origemDrop(v) : v.texto) : null));
+        h('span', { class: 'vg-ev-nome' }, drop ? [v.item, h('span', { class: 'vg-meta' }, qual)] : (v.titulo || v.tipo)),
+        detalhe ? h('span', { class: 'vg-meta vg-ev-sub' }, detalhe) : null));
   }
   function cartaoFeed(lista) {
     const itens = feedGeral(lista);
@@ -282,21 +298,35 @@
   }
 
   // ---------- visão geral: lendários de hoje ----------
-  const QUALS = ['SS', 'S', 'A', 'B', 'C', '?'];
-  const OPAC_QUAL = { SS: 1, S: 1, A: 1, B: 0.6, C: 0.34, '?': 0.18 };
+  // '?' = o servidor ainda está sorteando a qualidade; 'sem' = o evento veio sem qualidade (Lupa antiga)
+  const QUALS = ['SS', 'S', 'A', 'B', 'C', '?', 'sem'];
+  const OPAC_QUAL = { SS: 1, S: 1, A: 1, B: 0.6, C: 0.34, '?': 0.18, sem: 0.18 };
+  const NOME_QUAL = { '?': 'sendo avaliados', sem: 'sem qualidade' };
+  // a Lupa guarda só os últimos eventos de cada personagem (80; o site, LUPA_CAP_EVENTOS): se a fila de alguém já não chega à
+  // meia-noite, a conta vale a partir do evento mais antigo que sobrou, e o cabeçalho diz desde quando
+  const CAP_EVENTOS = globalThis.LUPA_CAP_EVENTOS || 80;
   function cartaoLendarios(lista) {
-    const ms = msAteViradaDia(), ini = ms == null ? Date.now() - 86400e3 : Date.now() + ms - 86400e3;
+    let desde = inicioDoDia();
+    for (const e of lista) {
+      const evs = eventos[e.nome] || [];
+      if (evs.length >= CAP_EVENTOS) desde = Math.max(desde, Math.min(...evs.map((v) => v.ts)));
+    }
     const linhas = lista.map((e) => {
       const por = {};
-      for (const v of eventos[e.nome] || []) if (v.tipo === 'lendario' && v.ts >= ini) { const q = QUALS.includes(v.qual) ? v.qual : '?'; por[q] = (por[q] || 0) + 1; }
+      for (const v of eventos[e.nome] || []) {
+        if (v.tipo !== 'lendario' || !v.item || v.ts < desde) continue;
+        const q = v.qual === '?' ? '?' : QUALS.includes(v.qual) ? v.qual : 'sem';
+        por[q] = (por[q] || 0) + 1;
+      }
       return { e, por, n: Object.values(por).reduce((t, x) => t + x, 0) };
     }).sort((a, b) => b.n - a.n);
     const total = linhas.reduce((t, l) => t + l.n, 0), max = Math.max(1, ...linhas.map((l) => l.n));
-    const textoQual = (por) => juntar(QUALS.filter((q) => por[q]).map((q) => `${por[q]} ${q === '?' ? 'sendo avaliados' : q}`));
+    const textoQual = (por) => juntar(QUALS.filter((q) => por[q]).map((q) => `${por[q]} ${NOME_QUAL[q] || q}`));
+    const doDia = desde <= inicioDoDia();
     return h('section', { class: 'vg-cartao', 'aria-labelledby': 'vg-t-lend' },
-      cabCartao('vg-t-lend', 'Lendários de hoje', 'desde 00:00'),
+      cabCartao('vg-t-lend', doDia ? 'Lendários de hoje' : 'Lendários recentes', doDia ? 'desde 00:00' : `desde ${hora(desde)}, o que a Lupa ainda guarda`),
       h('div', { class: 'vg-lend' },
-        h('div', { class: 'vg-lend-total' }, h('b', { class: 'num' }, String(total)), h('span', { class: 'fraco' }, total === 1 ? 'lendário hoje' : 'lendários hoje')),
+        h('div', { class: 'vg-lend-total' }, h('b', { class: 'num' }, String(total)), h('span', { class: 'fraco' }, (total === 1 ? 'lendário' : 'lendários') + (doDia ? ' hoje' : ` desde ${hora(desde)}`))),
         linhas.map(({ e, por, n }) => {
           const cor = corDe(e.nome);
           return h('div', { class: 'vg-lend-linha' },
@@ -325,6 +355,9 @@
     const partes = [];
     const sobem = lista.map((e) => ({ e, p: previsaoNivel(e, ctx) })).filter((x) => x.p?.ate && sessaoAtiva(x.e)).sort((a, b) => a.p.ate - b.p.ate).slice(0, 2);
     if (sobem.length) partes.push(sobem.map(({ e, p }) => `${chamar(e)} sobe para o ${parseInt(e.nivel, 10) + 1} às ${hora(p.ate)}`).join(' e ') + '.');
+    // quem caça sem previsão (ficha sem o XP do nível) também aparece, para a frase não dizer que ninguém caça
+    const semPrevisao = lista.filter((e) => sessaoAtiva(e) && !sobem.some((x) => x.e === e));
+    if (!sobem.length && semPrevisao.length) partes.push(`${juntar(semPrevisao.map(chamar))} ${semPrevisao.length === 1 ? 'está caçando' : 'estão caçando'}.`);
     const parados = lista.filter((e) => Date.now() - e.ts > LIMITE_VELHO);
     if (parados.length) partes.push(parados.map((e) => `${chamar(e)} está sem leitura desde ${hora(e.ts)}`).join('; ') + '.');
     return partes.join(' ') || 'Ninguém caçando agora.';
@@ -429,7 +462,6 @@
     const filtros = () => h('div', { class: 'c-filtros', role: 'group', 'aria-label': 'Filtro do feed' },
       [['tudo', 'Tudo'], ['drops', 'Drops'], ['alertas', 'Alertas']].map(([id, nome]) => h('button', { type: 'button', 'aria-pressed': String(filtro === id), onclick: () => { filtro = id; desenhar(); } }, nome)));
     const geral = !!e && ladoALado();
-    grade.classList.remove('c-lado');
     grade.classList.toggle('c-geral', geral);
     if (!e) grade.replaceChildren(vazio(TEXTO_VAZIO));
     else if (geral) grade.replaceChildren(...visaoGeral(naTabela()));
