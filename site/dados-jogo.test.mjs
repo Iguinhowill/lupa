@@ -74,6 +74,12 @@ test('fichaDaBuild: refino (+12% por nível) e qualidade multiplicam os bônus d
   assert.ok(Math.abs(com.criticoBruto - sem.criticoBruto - gume.critico * (m - 1) * J.CAMPEOES.yasuo.critMult) < 1e-9);
   assert.equal(Y(['3031']).ad, sem.ad, 'sem marca de qualidade vale B');
 });
+test('fichaDaBuild: o refino +7 ganha o bônus extra do jogo (×2,00 em vez de ×1,84, desde 28/10/2026)', () => {
+  assert.ok(Math.abs(J.multRefino(7) - 2) < 1e-9);
+  assert.ok(Math.abs(J.multRefino(4) - 1.48) < 1e-9);
+  const sem = Y(['3031~B']), com = Y(['3031+7~B']), gume = J.item('3031').e;
+  assert.ok(Math.abs(com.ad - sem.ad - gume.ad) < 1e-9, 'o +7 B dobra o dano do Gume');
+});
 test('fichaDaBuild: as cartas somam no mesmo multiplicador (2 cartas de Ataque Rara = +10%)', () => {
   const itens = ['3031+3~B', '3153+3~B'], sem = Y(itens).ad, com = Y(['3031+3#ataque2~B', '3153+3#ataque2~B']).ad;
   assert.ok(Math.abs(com / sem - (1 + 2 * J.CARTA_VALOR.ataque2)) < 1e-9);

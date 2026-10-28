@@ -4,9 +4,11 @@
 'use strict';
 
 const JOGO = (() => {
-  const meta = {"geradoEm":"2026-10-27T21:45:08.022Z","versaoJogo":"2026-10-27c","motorSha256":"fc67f84c649ceaa5f46da1cfe4b1a0defb928a5d405c5f4aa3a47dbdf8876429","dataDragon":"16.19.1","fonte":"https://lolidle.com/js/motor.js","erroComparador":{"n":236,"mediana":1.89,"p90":4.69,"max":20.72,"barra":{"n":59,"mediana":3.37,"p90":7.72,"max":10.18},"unidade":"pontos percentuais de abates/h (diferença entre a mudança relativa no modelo e no motor)","porCampeao":{"yasuo":{"n":120,"mediana":1.92,"p90":4.61,"max":20.72,"barra":{"n":30,"mediana":2.66,"p90":7.2,"max":8.8},"faixa":{"niveis":[24,45],"zonas":["azul","barao","dragao","rio","vermelho"]},"parametros":{"k":0.9,"aoe":0.2,"uG":1,"uW":1,"kite":1.75,"castEf":0.8}},"aphelios":{"n":116,"mediana":1.86,"p90":4.72,"max":10.92,"barra":{"n":29,"mediana":3.46,"p90":8.2,"max":10.18},"faixa":{"niveis":[24,45],"zonas":["azul","barao","dragao","rio","vermelho"]},"parametros":{"k":0.7,"aoe":0.25,"uG":1.4,"uW":0.4,"kite":7,"castEf":0.4}}},"limite":{"mediana":3.5,"p90":8},"simulacao":{"minutos":10,"sementes":2,"basesTreino":40,"basesTeste":30,"semChefes":true,"semFurioso":true,"motorSha256":"fc67f84c649ceaa5f46da1cfe4b1a0defb928a5d405c5f4aa3a47dbdf8876429"},"motorSha256":"fc67f84c649ceaa5f46da1cfe4b1a0defb928a5d405c5f4aa3a47dbdf8876429"}};
+  const meta = {"geradoEm":"2026-10-28T15:19:07.422Z","versaoJogo":"2026-10-28a","motorSha256":"6036c328222c887d7b2e51988d28712f25fe7395b47a79c3ad4858c8b4d5dcd1","dataDragon":"16.19.1","fonte":"https://lolidle.com/js/motor.js","erroComparador":{"n":236,"mediana":1.92,"p90":4.92,"max":20.72,"barra":{"n":59,"mediana":3.31,"p90":6.68,"max":8.8},"unidade":"pontos percentuais de abates/h (diferença entre a mudança relativa no modelo e no motor)","porCampeao":{"yasuo":{"n":120,"mediana":1.91,"p90":4.61,"max":20.72,"barra":{"n":30,"mediana":2.66,"p90":7.2,"max":8.8},"faixa":{"niveis":[24,45],"zonas":["azul","barao","dragao","rio","vermelho"]},"parametros":{"k":0.9,"aoe":0.2,"uG":1,"uW":1,"kite":1.75,"castEf":0.8}},"aphelios":{"n":116,"mediana":1.96,"p90":5.33,"max":8.08,"barra":{"n":29,"mediana":3.51,"p90":6.68,"max":8.26},"faixa":{"niveis":[24,45],"zonas":["azul","barao","dragao","rio","vermelho"]},"parametros":{"k":0.7,"aoe":0.2,"uG":1.2,"uW":0.2,"kite":7.75,"castEf":0.4}}},"limite":{"mediana":3.5,"p90":8},"simulacao":{"minutos":10,"sementes":2,"basesTreino":40,"basesTeste":30,"semChefes":true,"semFurioso":true,"motorSha256":"6036c328222c887d7b2e51988d28712f25fe7395b47a79c3ad4858c8b4d5dcd1"},"motorSha256":"6036c328222c887d7b2e51988d28712f25fe7395b47a79c3ad4858c8b4d5dcd1"}};
   const NIVEL_MAX = 100;
   const REFINO_MAX = 7, BONUS_REFINO = 0.12, RITMO_REAL = 1.5;
+  const BONUS_REFINO_EXTRA = {"7":0.16};      // o bônus extra de alguns refinos, do motor (BONUS_REFINO_EXTRA)
+  const multRefino = (ref) => 1 + BONUS_REFINO * ref + (BONUS_REFINO_EXTRA[ref] || 0);      // o multRefino do motor
   const CHANCE_REFINO = [0.3,0.12,0.02,0.008,0.003,0.0005,0.00006];            // chance de subir do refino i para i+1, sem VIP
   const REGRESSAO_REFINO = [0,0,0.04,0.015,0.006,0.0005,0.0001];      // chance de, ao falhar na tentativa de i para i+1, voltar para i-1
   const PERSISTENCIA = {"1":{},"2":{},"3":{"subir":80,"max":120},"4":{"subir":200,"max":300},"5":{"subir":530,"max":800},"6":{"subir":2300,"max":3500},"7":{"subir":8000,"max":12000}};        // por alvo (+1..+7): a partir de "subir" falhas a chance cresce até 100% na tentativa "max"
@@ -297,7 +299,7 @@ const JOGO = (() => {
     vida += 20 * at.vitalidade; armadura += 1.5 * at.resistencia; rm += 1 * at.resistencia; va += 0.008 * at.agilidade;
     const cv = Object.fromEntries(CARTA_TIPOS.map((t) => [t, 0]));
     for (const x of itensOk) {
-      const e = item(x).e, m = (1 + BONUS_REFINO * refinoDe(x)) * (QUALIDADES[qualDe(x)]?.mult || 1), v = (k) => (e[k] || 0) * m;
+      const e = item(x).e, m = multRefino(refinoDe(x)) * (QUALIDADES[qualDe(x)]?.mult || 1), v = (k) => (e[k] || 0) * m;
       ad += v('ad'); ap += v('ap'); manaItens += v('mana'); vida += v('vida'); armadura += v('armadura'); rm += v('rm'); va += v('va'); rv += v('rv'); critico += v('critico');
       regenItens += v('regen'); cdrItens += v('cdr');
       for (const p of PCT_ITEM) pct[p] += e[p] || 0;
@@ -340,9 +342,9 @@ const JOGO = (() => {
   }
   // o dano do jogador cai contra monstro mais de "livre" níveis acima dele
   const fatorDanoJogador = (nivel, nivelMonstro) => { const d = Math.max(0, nivelMonstro - nivel - NIVEL_DIF.livre); return d ? Math.max(NIVEL_DIF.minDanoJogador, 1 - NIVEL_DIF.danoJogador * d) : 1; };
-  const FARM = {"kHab":{"yasuo":0.9,"aphelios":0.7},"aoe":{"yasuo":0.2,"aphelios":0.25},"upt":{"yasuo":{"G":1,"W":1},"aphelios":{"G":1.4,"W":0.4}},"kiteGrupo":{"yasuo":1.75,"aphelios":7},"castEf":{"yasuo":0.8,"aphelios":0.4},"vaHab":{},"liberado":{"yasuo":true,"aphelios":true}};      // parâmetros do modelo de farm (calculos.js: estimarFarm), calibrados pelo gerador contra a simulação do motor
+  const FARM = {"kHab":{"yasuo":0.9,"aphelios":0.7},"aoe":{"yasuo":0.2,"aphelios":0.2},"upt":{"yasuo":{"G":1,"W":1},"aphelios":{"G":1.2,"W":0.2}},"kiteGrupo":{"yasuo":1.75,"aphelios":7.75},"castEf":{"yasuo":0.8,"aphelios":0.4},"vaHab":{},"liberado":{"yasuo":true,"aphelios":true}};      // parâmetros do modelo de farm (calculos.js: estimarFarm), calibrados pelo gerador contra a simulação do motor
 
-  return { meta, NIVEL_MAX, REFINO_MAX, BONUS_REFINO, RITMO_REAL, CHANCE_REFINO, REGRESSAO_REFINO, PERSISTENCIA, VIP, DROP_CHEFE, ABATES_MIN_ZONA, TAREFA_TIPOS, QUALIDADES, ORDEM_QUAL,
+  return { meta, NIVEL_MAX, REFINO_MAX, BONUS_REFINO, BONUS_REFINO_EXTRA, multRefino, RITMO_REAL, CHANCE_REFINO, REGRESSAO_REFINO, PERSISTENCIA, VIP, DROP_CHEFE, ABATES_MIN_ZONA, TAREFA_TIPOS, QUALIDADES, ORDEM_QUAL,
     XP_NIVEL, BALANCO, MONSTROS, ZONAS, ITENS, ESPOLIOS, ZONA, CURVA, CAMPEOES, HABS, CARTA_VALOR, CARTA_TIRAR, RESET_OURO, CARTA_TIPOS,
     KIT_HABS, BARRA, PONTOS_POR_NIVEL, NIVEL_PONTOS_HAB, rankMaximo, campeaoPelasHabs, NIVEL_DIF, TETO_VIDA_ITEM, RM_MONSTRO, VEL_ATAQUE_MAX, DT, FARM, fichaDaBuild, periodoAtaque, chaveItem, refinoDe, qualDe, cartaDe, fatorDanoJogador, ARMADURA_MONSTRO, xpParaNivel, xpEntre, fatorXp, porAbateZona, zonaIdeal, item, valorVenda, itemPorNome, espolioPorNome, valorEspolio, precoRefino, chanceRefino, chanceForja, recompensaTarefa };
 })();

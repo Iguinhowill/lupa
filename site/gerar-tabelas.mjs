@@ -98,7 +98,7 @@ try {
       CAMPEOES, HABS, CARTA_VALOR, CARTA_TIRAR, RESET_OURO: M.RESET_OURO, CARTA_TIPOS: M.ORDEM_TIPOS_CARTA,
       KIT_HABS, BARRA: M.BARRA, PONTOS_POR_NIVEL: M.PONTOS_POR_NIVEL, NIVEL_PONTOS_HAB: M.NIVEL_PONTOS_HAB, NIVEL_MIN_R: M.nivelMinimoR, VEL_ATAQUE_MAX: M.VEL_ATAQUE_MAX, NIVEL_DIF: M.NIVEL_DIF, TETO_VIDA_ITEM: M.TETO_VIDA_ITEM, RM_MONSTRO: M.RM_MONSTRO,
       FOCO_DANO_HAB: M.FOCO_DANO_HAB, FOCO_FLUXO: M.FOCO_FLUXO, FLUXO_MAX: M.FLUXO_MAX,
-      NIVEL_MAX: M.NIVEL_MAX, REFINO_MAX: M.REFINO_MAX, BONUS_REFINO: M.BONUS_REFINO,
+      NIVEL_MAX: M.NIVEL_MAX, REFINO_MAX: M.REFINO_MAX, BONUS_REFINO: M.BONUS_REFINO, BONUS_REFINO_EXTRA: M.BONUS_REFINO_EXTRA || {},
       CHANCE_REFINO: M.CHANCE_REFINO, REGRESSAO_REFINO: M.REGRESSAO_REFINO, PERSISTENCIA_FORJA: M.PERSISTENCIA.forja,
       PERSISTENCIA_PASSO: M.PERSISTENCIA_PASSO, PERSISTENCIA_TETO: M.PERSISTENCIA_TETO, PRECO_REFINO_ALTO: M.PRECO_REFINO_ALTO, PRECO_REFINO_TOPO: M.PRECO_REFINO_TOPO,
       VIP: M.VIP, DROP_CHEFE: M.DROP_CHEFE, ABATES_MIN_ZONA: M.ABATES_MIN_ZONA, TAREFA_TIPOS: M.TAREFA_TIPOS, RITMO_REAL: M.RITMO_REAL,
@@ -149,6 +149,8 @@ const JOGO = (() => {
   const meta = ${j(meta)};
   const NIVEL_MAX = ${num(T.NIVEL_MAX, 'NIVEL_MAX')};
   const REFINO_MAX = ${num(T.REFINO_MAX, 'REFINO_MAX')}, BONUS_REFINO = ${num(T.BONUS_REFINO, 'BONUS_REFINO')}, RITMO_REAL = ${num(T.RITMO_REAL, 'RITMO_REAL')};
+  const BONUS_REFINO_EXTRA = ${j(T.BONUS_REFINO_EXTRA)};      // o bônus extra de alguns refinos, do motor (BONUS_REFINO_EXTRA)
+  const multRefino = (ref) => 1 + BONUS_REFINO * ref + (BONUS_REFINO_EXTRA[ref] || 0);      // o multRefino do motor
   const CHANCE_REFINO = ${j(T.CHANCE_REFINO)};            // chance de subir do refino i para i+1, sem VIP
   const REGRESSAO_REFINO = ${j(T.REGRESSAO_REFINO)};      // chance de, ao falhar na tentativa de i para i+1, voltar para i-1
   const PERSISTENCIA = ${j(T.PERSISTENCIA_FORJA)};        // por alvo (+1..+7): a partir de "subir" falhas a chance cresce até 100% na tentativa "max"
@@ -288,7 +290,7 @@ const JOGO = (() => {
     vida += 20 * at.vitalidade; armadura += 1.5 * at.resistencia; rm += 1 * at.resistencia; va += 0.008 * at.agilidade;
     const cv = Object.fromEntries(CARTA_TIPOS.map((t) => [t, 0]));
     for (const x of itensOk) {
-      const e = item(x).e, m = (1 + BONUS_REFINO * refinoDe(x)) * (QUALIDADES[qualDe(x)]?.mult || 1), v = (k) => (e[k] || 0) * m;
+      const e = item(x).e, m = multRefino(refinoDe(x)) * (QUALIDADES[qualDe(x)]?.mult || 1), v = (k) => (e[k] || 0) * m;
       ad += v('ad'); ap += v('ap'); manaItens += v('mana'); vida += v('vida'); armadura += v('armadura'); rm += v('rm'); va += v('va'); rv += v('rv'); critico += v('critico');
       regenItens += v('regen'); cdrItens += v('cdr');
       for (const p of PCT_ITEM) pct[p] += e[p] || 0;
@@ -333,7 +335,7 @@ const JOGO = (() => {
   const fatorDanoJogador = (nivel, nivelMonstro) => { const d = Math.max(0, nivelMonstro - nivel - NIVEL_DIF.livre); return d ? Math.max(NIVEL_DIF.minDanoJogador, 1 - NIVEL_DIF.danoJogador * d) : 1; };
   const FARM = ${j(FARM)};      // parâmetros do modelo de farm (calculos.js: estimarFarm), calibrados pelo gerador contra a simulação do motor
 
-  return { meta, NIVEL_MAX, REFINO_MAX, BONUS_REFINO, RITMO_REAL, CHANCE_REFINO, REGRESSAO_REFINO, PERSISTENCIA, VIP, DROP_CHEFE, ABATES_MIN_ZONA, TAREFA_TIPOS, QUALIDADES, ORDEM_QUAL,
+  return { meta, NIVEL_MAX, REFINO_MAX, BONUS_REFINO, BONUS_REFINO_EXTRA, multRefino, RITMO_REAL, CHANCE_REFINO, REGRESSAO_REFINO, PERSISTENCIA, VIP, DROP_CHEFE, ABATES_MIN_ZONA, TAREFA_TIPOS, QUALIDADES, ORDEM_QUAL,
     XP_NIVEL, BALANCO, MONSTROS, ZONAS, ITENS, ESPOLIOS, ZONA, CURVA, CAMPEOES, HABS, CARTA_VALOR, CARTA_TIRAR, RESET_OURO, CARTA_TIPOS,
     KIT_HABS, BARRA, PONTOS_POR_NIVEL, NIVEL_PONTOS_HAB, rankMaximo, campeaoPelasHabs, NIVEL_DIF, TETO_VIDA_ITEM, RM_MONSTRO, VEL_ATAQUE_MAX, DT, FARM, fichaDaBuild, periodoAtaque, chaveItem, refinoDe, qualDe, cartaDe, fatorDanoJogador, ARMADURA_MONSTRO, xpParaNivel, xpEntre, fatorXp, porAbateZona, zonaIdeal, item, valorVenda, itemPorNome, espolioPorNome, valorEspolio, precoRefino, chanceRefino, chanceForja, recompensaTarefa };
 })();
