@@ -127,8 +127,8 @@
       if (m === 8) extra = " Coloque o Grito de Guerra no 4º espaço da barra.";
       if (m === 23) { extra = " Tire o Apreender da barra e coloque o Banho de Sangue no lugar: a penetração de armadura do E continua valendo."; el.proximo.className = "proximo marco"; }
       if (m === 46) { extra = " Troque o Banho de Sangue pelo Domínio de Noxus na barra."; el.proximo.className = "proximo marco"; }
-      if (m === 34 && itens === "completa") { extra += " E é a hora de ir para o Covil do Barão."; el.proximo.className = "proximo marco"; }
-      if (m === 36 && itens === "meia") { extra += " E é a hora de ir para o Covil do Barão."; el.proximo.className = "proximo marco"; }
+      var zNova = zona(m, itens)[0];      // a troca de zona sai da própria tabela de zonas
+      if (zNova !== z[0]) { extra += " E é a hora de ir para " + (/^(Rota|Toca|Base)/.test(zNova) ? "a " : "o ") + zNova + "."; el.proximo.className = "proximo marco"; }
       el.proximo.innerHTML = "<b>No nível " + m + ":</b> o ponto novo vai em " + HABS[sobe].nome + " (" + sobe + ")." + extra;
     }
   }
