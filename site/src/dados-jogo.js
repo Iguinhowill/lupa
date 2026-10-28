@@ -4,7 +4,7 @@
 'use strict';
 
 const JOGO = (() => {
-  const meta = {"geradoEm":"2026-10-28T15:19:07.422Z","versaoJogo":"2026-10-28a","motorSha256":"6036c328222c887d7b2e51988d28712f25fe7395b47a79c3ad4858c8b4d5dcd1","dataDragon":"16.19.1","fonte":"https://lolidle.com/js/motor.js","erroComparador":{"n":236,"mediana":1.92,"p90":4.92,"max":20.72,"barra":{"n":59,"mediana":3.31,"p90":6.68,"max":8.8},"unidade":"pontos percentuais de abates/h (diferença entre a mudança relativa no modelo e no motor)","porCampeao":{"yasuo":{"n":120,"mediana":1.91,"p90":4.61,"max":20.72,"barra":{"n":30,"mediana":2.66,"p90":7.2,"max":8.8},"faixa":{"niveis":[24,45],"zonas":["azul","barao","dragao","rio","vermelho"]},"parametros":{"k":0.9,"aoe":0.2,"uG":1,"uW":1,"kite":1.75,"castEf":0.8}},"aphelios":{"n":116,"mediana":1.96,"p90":5.33,"max":8.08,"barra":{"n":29,"mediana":3.51,"p90":6.68,"max":8.26},"faixa":{"niveis":[24,45],"zonas":["azul","barao","dragao","rio","vermelho"]},"parametros":{"k":0.7,"aoe":0.2,"uG":1.2,"uW":0.2,"kite":7.75,"castEf":0.4}}},"limite":{"mediana":3.5,"p90":8},"simulacao":{"minutos":10,"sementes":2,"basesTreino":40,"basesTeste":30,"semChefes":true,"semFurioso":true,"motorSha256":"6036c328222c887d7b2e51988d28712f25fe7395b47a79c3ad4858c8b4d5dcd1"},"motorSha256":"6036c328222c887d7b2e51988d28712f25fe7395b47a79c3ad4858c8b4d5dcd1"}};
+  const meta = {"geradoEm":"2026-10-28T18:13:53.708Z","versaoJogo":"2026-10-28c","motorSha256":"6036c328222c887d7b2e51988d28712f25fe7395b47a79c3ad4858c8b4d5dcd1","dataDragon":"16.19.1","fonte":"https://lolidle.com/js/motor.js","erroComparador":{"n":236,"mediana":1.92,"p90":4.92,"max":20.72,"barra":{"n":59,"mediana":3.31,"p90":6.68,"max":8.8},"unidade":"pontos percentuais de abates/h (diferença entre a mudança relativa no modelo e no motor)","porCampeao":{"yasuo":{"n":120,"mediana":1.91,"p90":4.61,"max":20.72,"barra":{"n":30,"mediana":2.66,"p90":7.2,"max":8.8},"faixa":{"niveis":[24,45],"zonas":["azul","barao","dragao","rio","vermelho"]},"parametros":{"k":0.9,"aoe":0.2,"uG":1,"uW":1,"kite":1.75,"castEf":0.8}},"aphelios":{"n":116,"mediana":1.96,"p90":5.33,"max":8.08,"barra":{"n":29,"mediana":3.51,"p90":6.68,"max":8.26},"faixa":{"niveis":[24,45],"zonas":["azul","barao","dragao","rio","vermelho"]},"parametros":{"k":0.7,"aoe":0.2,"uG":1.2,"uW":0.2,"kite":7.75,"castEf":0.4}}},"limite":{"mediana":3.5,"p90":8},"simulacao":{"minutos":10,"sementes":2,"basesTreino":40,"basesTeste":30,"semChefes":true,"semFurioso":true,"motorSha256":"6036c328222c887d7b2e51988d28712f25fe7395b47a79c3ad4858c8b4d5dcd1"},"motorSha256":"6036c328222c887d7b2e51988d28712f25fe7395b47a79c3ad4858c8b4d5dcd1"}};
   const NIVEL_MAX = 100;
   const REFINO_MAX = 7, BONUS_REFINO = 0.12, RITMO_REAL = 1.5;
   const BONUS_REFINO_EXTRA = {"7":0.16};      // o bônus extra de alguns refinos, do motor (BONUS_REFINO_EXTRA)
@@ -286,10 +286,13 @@ const JOGO = (() => {
   // Fago (+8%) e Dançarina Fantasma (+6% por acúmulo, até 5)
   const aceleracaoFixa = (C, nivel, tem) => 1 + (tem('3044') ? 0.08 : 0) + 0 + 0.06 * (tem('3046') ? 5 : 0) + C.vaNivel * nivel;
   // build = { campeao, nivel, atrib: { forca, vitalidade, resistencia, agilidade, foco }, itens: ["3031+4#ataque2~B" ou { id, refino, qual, carta }],
-  //           ranks: { E, W } (só o Darius e o Taric usam), bonus: { ad, vida, armadura, rm } (conquistas e mascote, em fração) }
+  //           ranks: { E, W } (só o Darius e o Taric usam), bonus: { ad, vida, armadura, rm } (conquistas e mascote, em fração),
+  //           codex: { dano, defesa, va } (o bônus do Arsenal das Lendas, em fração; vale para a conta toda) }
   function fichaDaBuild(build) {
     const C = CAMPEOES[build.campeao] || CAMPEOES.darius, b = C.stats, nivel = build.nivel, g = crescimento(nivel);
     const at = { forca: 0, vitalidade: 0, resistencia: 0, agilidade: 0, foco: 0, ...build.atrib }, ranks = build.ranks || {}, bc = { ad: 0, vida: 0, armadura: 0, rm: 0, ...build.bonus };
+    const cx = build.codex || {}, cxN = (v, k) => (Number.isFinite(+v) ? Math.max(0, Math.min(TETO_CODEX[k], +v)) : 0);
+    const cxD = cxN(cx.dano, 'dano'), cxF = cxN(cx.defesa, 'defesa'), cxV = cxN(cx.va, 'va');
     const chaves = (build.itens || []).map(chaveItem), itensOk = chaves.filter((x) => item(x));
     let ad = C.adBase + C.adNivel * g, vida = b.hp + b.hpperlevel * g, armadura = b.armor + b.armorperlevel * g, rm = b.spellblock + 3.5 * g, va = 0, rv = 0;
     const baseAd = ad, baseVida = vida, baseArmadura = armadura;
@@ -322,7 +325,8 @@ const JOGO = (() => {
     if (tem('3089')) ap *= 1.35;
     ad *= 1 + pct.adPct + cv.ataque; ap *= 1 + pct.apPct + cv.poder; armadura *= 1 + pct.armPct + wArm + cv.armadura; rm *= 1 + pct.rmPct + cv.rm;
     ad *= 1 + bc.ad; ap *= 1 + bc.ad; vida *= 1 + bc.vida; armadura *= 1 + bc.armadura; rm *= 1 + bc.rm;
-    const velAtaque = Math.min(VEL_ATAQUE_MAX, b.attackspeed * (1 + (b.attackspeedperlevel / 100) * g + va) * (1 + cv.velocidade));
+    ad *= 1 + cxD; ap *= 1 + cxD; vida *= 1 + cxF; armadura *= 1 + cxF; rm *= 1 + cxF;
+    const velAtaque = Math.min(VEL_ATAQUE_MAX, b.attackspeed * (1 + (b.attackspeedperlevel / 100) * g + va) * (1 + cv.velocidade) * (1 + cxV));
     const acel = aceleracaoFixa(C, nivel, tem), periodo = periodoAtaque(velAtaque, acel);
     return {
       ad, baseAd, bonusAd: ad - baseAd, vida, bonusVida: vida - baseVida, armadura, bonusArmadura: armadura - baseArmadura, rm, ap,
@@ -342,10 +346,56 @@ const JOGO = (() => {
   }
   // o dano do jogador cai contra monstro mais de "livre" níveis acima dele
   const fatorDanoJogador = (nivel, nivelMonstro) => { const d = Math.max(0, nivelMonstro - nivel - NIVEL_DIF.livre); return d ? Math.max(NIVEL_DIF.minDanoJogador, 1 - NIVEL_DIF.danoJogador * d) : 1; };
+
+  // ---------- Arsenal das Lendas (o "codex" do jogo): registrar lendários e épicos dá bônus permanente para a conta toda ----------
+  // As regras do codex.js do jogo: pontos e ouro de cada estrela, o bônus de cada estrela, os patamares das coleções (todos os itens
+  // dela com N estrelas) e quanto vale cada cópia. As funções são reescritas curtas que o gerador confere contra as do jogo.
+  const CODEX = {"paginas":{"lendario":{"pontos":[1,2,3,5,8,13,21,34,55,89],"ouro":[20000,30000,45000,65000,90000,120000,160000,210000,270000,350000],"bonus":[0.0004,0.00025,0.00015,0.00012,0.00012,0.00012,0.00012,0.00012,0.00012,0.00012],"porDia":0},"epico":{"pontos":[2,4,6,10,16,26,42,68,110,178],"ouro":[2000,3000,4500,6500,9000,12000,16000,21000,27000,35000],"bonus":[0.00015,0.0001,0.00006,0.00005,0.00005,0.00005,0.00005,0.00005,0.00005,0.00005],"porDia":0}},"marcos":{"lendario":[[1,0.004],[3,0.004],[5,0.006],[10,0.008]],"epico":[[1,0.002],[3,0.002],[5,0.002],[10,0.004]]},"qualidade":{"C":1,"B":1.5,"A":2,"S":6,"SS":20},"comprado":0.5,"refino":[1,1,1,1.25,1.5,2,3,4],"colecoes":[{"id":"ataque","nome":"Armas de Ataque","bonus":"dano"},{"id":"magia","nome":"Artefatos de Magia","bonus":"dano"},{"id":"defesa","nome":"Muralha","bonus":"defesa"},{"id":"botas","nome":"Passos","bonus":"va"}],"itens":{"lendario":{"ataque":["3046","3085","3071","3156","6610","6673","663056","3026","3153","2501","3036","3074","3748","6333","6631","3078","3072","3031"],"magia":["3116","6655","3165","3003","3100","3152","3102","3135","4629","6653","4633","664644","4645","3157","3089"],"defesa":["3075","3065","3068","3143","3190","3742","8020","3083","3053"],"botas":["3170","3171","3173","3174","3168","3175","3172"]},"epico":{"ataque":["3144","1043","1053","3133","2019","3044","2021","3051","3077","3086","6670","3035"],"magia":["3916","3108","2508","3113","3145","4630","3802","3147","2420","4632"],"defesa":["1031","3066","3067","3076","3801","1011","3024","3057","3105","3211","3140"],"botas":["3158","3008","3009","3006","3020","3047","3111"]}}};
+  const TETO_CODEX = { dano: 0.15, defesa: 0.06, va: 0.06 };      // o motor limita o bônus do Arsenal a isto (atributos)
+  const CODEX_CUM = Object.fromEntries(Object.entries(CODEX.paginas).map(([pg, r]) => [pg, r.pontos.reduce((s, v, i) => (s.push((s[i - 1] || 0) + v), s), [])]));
+  const CODEX_DE = {};      // id -> { pagina, colecao }
+  for (const [pg, cols] of Object.entries(CODEX.itens)) for (const [c, lista] of Object.entries(cols)) for (const id of lista) CODEX_DE[id] = { pagina: pg, colecao: c };
+  const comprado = (x) => /^\d+!/.test(String(x));      // a marca "!": veio de outro jogador (Mercado ou saco)
+  const paginaCodex = (x) => CODEX_DE[baseId(x)]?.pagina || null;
+  const colecaoCodex = (x) => CODEX_DE[baseId(x)]?.colecao || null;
+  const tipoBonusCodex = (x) => CODEX.colecoes.find((c) => c.id === colecaoCodex(x))?.bonus || null;
+  // pontos acumulados para ter k estrelas (k de 1 a 10); 0 para k = 0
+  const pontosAteEstrela = (pg, k) => (k > 0 ? CODEX_CUM[pg][Math.min(10, k) - 1] : 0);
+  const maxPontosCodex = (pg) => CODEX_CUM[pg][9];
+  function estrelasCodex(pg, pontos) { const c = CODEX_CUM[pg]; let k = 0; while (k < 10 && pontos >= c[k] - 1e-9) k++; return k; }
+  // ouro de UM registro: vai pela estrela em que o item está, não pelos pontos que a cópia traz
+  const custoCodex = (pg, pontos) => CODEX.paginas[pg].ouro[Math.min(9, estrelasCodex(pg, pontos))];
+  const pontosCopia = (x) => (CODEX.qualidade[qualDe(x)] || 1) * (comprado(x) ? CODEX.comprado : 1) * (CODEX.refino[refinoDe(x)] || 1);
+  // null se a cópia pode ser registrada; senão o motivo (o mesmo teste do jogo)
+  function motivoCodex(x) {
+    if (typeof x !== 'string' || !item(x)) return 'Esse item não existe.';
+    if (!paginaCodex(x)) return 'Só lendários e épicos entram no Arsenal (os míticos não).';
+    if (/~\?$/.test(x)) return 'Espere a qualidade do item ser avaliada.';
+    if (cartaDe(x)) return 'Tire a carta do item antes de registrar.';
+    return null;
+  }
+  // o bônus que as primeiras k estrelas de um item dão
+  const bonusEstrelas = (pg, k) => CODEX.paginas[pg].bonus.slice(0, k).reduce((s, v) => s + v, 0);
+  // o patamar de uma coleção: a menor estrela entre os itens dela, o bônus dos patamares já ganhos e o próximo
+  function marcoColecao(pg, colecao, prog) {
+    const lista = CODEX.itens[pg][colecao], est = (id) => estrelasCodex(pg, Object.hasOwn(prog || {}, id) ? prog[id] : 0), min = Math.min(...lista.map(est));
+    const marcos = CODEX.marcos[pg], ganho = marcos.filter(([k]) => min >= k).reduce((s, [, v]) => s + v, 0), prox = marcos.find(([k]) => min < k) || null;
+    return { min, ganho, prox: prox && { k: prox[0], bonus: prox[1], faltam: lista.filter((id) => est(id) < prox[0]).length, total: lista.length } };
+  }
+  // bônus da conta pelo progresso { id: pontos } -> { dano, defesa, va } (frações): estrelas de cada item + patamares das coleções
+  function bonusCodex(prog) {
+    const b = { dano: 0, defesa: 0, va: 0 };
+    for (const [id, pontos] of Object.entries(prog || {})) { const pg = paginaCodex(id); if (pg) b[tipoBonusCodex(id)] += bonusEstrelas(pg, estrelasCodex(pg, pontos)); }
+    for (const pg of Object.keys(CODEX.paginas)) for (const c of CODEX.colecoes) b[c.bonus] += marcoColecao(pg, c.id, prog).ganho;
+    for (const k in b) b[k] = Math.round(b[k] * 1e6) / 1e6;
+    return b;
+  }
+  const BONUS_MAX_CODEX = bonusCodex(Object.fromEntries(Object.entries(CODEX_DE).map(([id, d]) => [id, maxPontosCodex(d.pagina)])));
   const FARM = {"kHab":{"yasuo":0.9,"aphelios":0.7},"aoe":{"yasuo":0.2,"aphelios":0.2},"upt":{"yasuo":{"G":1,"W":1},"aphelios":{"G":1.2,"W":0.2}},"kiteGrupo":{"yasuo":1.75,"aphelios":7.75},"castEf":{"yasuo":0.8,"aphelios":0.4},"vaHab":{},"liberado":{"yasuo":true,"aphelios":true}};      // parâmetros do modelo de farm (calculos.js: estimarFarm), calibrados pelo gerador contra a simulação do motor
 
   return { meta, NIVEL_MAX, REFINO_MAX, BONUS_REFINO, BONUS_REFINO_EXTRA, multRefino, RITMO_REAL, CHANCE_REFINO, REGRESSAO_REFINO, PERSISTENCIA, VIP, DROP_CHEFE, ABATES_MIN_ZONA, TAREFA_TIPOS, QUALIDADES, ORDEM_QUAL,
     XP_NIVEL, BALANCO, MONSTROS, ZONAS, ITENS, ESPOLIOS, ZONA, CURVA, CAMPEOES, HABS, CARTA_VALOR, CARTA_TIRAR, RESET_OURO, CARTA_TIPOS,
-    KIT_HABS, BARRA, PONTOS_POR_NIVEL, NIVEL_PONTOS_HAB, rankMaximo, campeaoPelasHabs, NIVEL_DIF, TETO_VIDA_ITEM, RM_MONSTRO, VEL_ATAQUE_MAX, DT, FARM, fichaDaBuild, periodoAtaque, chaveItem, refinoDe, qualDe, cartaDe, fatorDanoJogador, ARMADURA_MONSTRO, xpParaNivel, xpEntre, fatorXp, porAbateZona, zonaIdeal, item, valorVenda, itemPorNome, espolioPorNome, valorEspolio, precoRefino, chanceRefino, chanceForja, recompensaTarefa };
+    KIT_HABS, BARRA, PONTOS_POR_NIVEL, NIVEL_PONTOS_HAB, rankMaximo, campeaoPelasHabs, NIVEL_DIF, TETO_VIDA_ITEM, RM_MONSTRO, VEL_ATAQUE_MAX, DT, FARM, fichaDaBuild, periodoAtaque, chaveItem, refinoDe, qualDe, cartaDe, fatorDanoJogador, ARMADURA_MONSTRO, xpParaNivel, xpEntre, fatorXp, porAbateZona, zonaIdeal, item, valorVenda, itemPorNome, espolioPorNome, valorEspolio, precoRefino, chanceRefino, chanceForja, recompensaTarefa,
+    CODEX, TETO_CODEX, BONUS_MAX_CODEX, comprado, paginaCodex, colecaoCodex, tipoBonusCodex, pontosAteEstrela, maxPontosCodex, estrelasCodex, custoCodex, pontosCopia, motivoCodex, bonusEstrelas, marcoColecao, bonusCodex };
 })();
 if (typeof module !== 'undefined') module.exports = JOGO;

@@ -140,3 +140,12 @@ test('espólios: valor por unidade, busca pelo nome e itens pelo nome', () => {
   for (const it of J.ITENS) assert.equal(J.itemPorNome(it.nome).id, it.id, it.nome);
   assert.equal(J.itemPorNome('Escama de Dragão'), null);
 });
+
+test('fichaDaBuild: o Arsenal multiplica dano, vida e defesa e a velocidade de ataque, com o teto do motor', () => {
+  const sem = J.fichaDaBuild({ campeao: 'yasuo', nivel: 30, itens: ['3031~B'] });
+  const com = J.fichaDaBuild({ campeao: 'yasuo', nivel: 30, itens: ['3031~B'], codex: { dano: 0.05, defesa: 0.02, va: 0.01 } });
+  assert.ok(Math.abs(com.ad - sem.ad * 1.05) < 1e-9 && Math.abs(com.vida - sem.vida * 1.02) < 1e-9 && Math.abs(com.armadura - sem.armadura * 1.02) < 1e-9 && Math.abs(com.rm - sem.rm * 1.02) < 1e-9);
+  assert.ok(Math.abs(com.velAtaque - sem.velAtaque * 1.01) < 1e-9);
+  const teto = J.fichaDaBuild({ campeao: 'yasuo', nivel: 30, itens: ['3031~B'], codex: { dano: 0.5, defesa: -1, va: 'x' } });
+  assert.ok(Math.abs(teto.ad - sem.ad * 1.15) < 1e-9 && teto.vida === sem.vida && teto.velAtaque === sem.velAtaque);
+});
