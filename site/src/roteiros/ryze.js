@@ -29,11 +29,12 @@
   }
   function barra(n) { return n >= 8 ? ["Q", "W", "E", "G"] : ["Q", "W", "E", null]; }
 
-  // recarga da Lucidez Escarlate: 15% × (1 + 12% por refino) × qualidade; o Foco dá 0,4% por ponto, até 30% (75 pontos)
+  // recarga da Lucidez Escarlate: 15% × refino × qualidade, o refino valendo 1 + 12% por nível (desde 28/10/2026 o +7 ganha
+  // 16% a mais: ×2,00); o Foco dá 0,4% por ponto, até 30% (75 pontos)
   var QUAL = { C: 0.9, B: 1, A: 1.15, S: 1.35, SS: 1.7 };
   function focoNecessario(sel) {
     if (sel === "sem") return 75;
-    var p = sel.split("|"), cdr = 0.15 * (1 + 0.12 * Number(p[0])) * QUAL[p[1]];
+    var p = sel.split("|"), r = Number(p[0]), cdr = 0.15 * (1 + 0.12 * r + (r === 7 ? 0.16 : 0)) * QUAL[p[1]];
     return Math.min(75, Math.max(0, Math.ceil((0.40 - cdr) / 0.004 - 1e-9)));
   }
 

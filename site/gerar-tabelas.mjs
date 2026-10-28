@@ -149,7 +149,7 @@ const JOGO = (() => {
   const meta = ${j(meta)};
   const NIVEL_MAX = ${num(T.NIVEL_MAX, 'NIVEL_MAX')};
   const REFINO_MAX = ${num(T.REFINO_MAX, 'REFINO_MAX')}, BONUS_REFINO = ${num(T.BONUS_REFINO, 'BONUS_REFINO')}, RITMO_REAL = ${num(T.RITMO_REAL, 'RITMO_REAL')};
-  const BONUS_REFINO_EXTRA = ${j(T.BONUS_REFINO_EXTRA)};      // o refino que ganha um pouco mais (28/10/2026: o +7 vale ×2,00 em vez de ×1,84)
+  const BONUS_REFINO_EXTRA = ${j(T.BONUS_REFINO_EXTRA)};      // o bônus extra de alguns refinos, do motor (BONUS_REFINO_EXTRA)
   const multRefino = (ref) => 1 + BONUS_REFINO * ref + (BONUS_REFINO_EXTRA[ref] || 0);      // o multRefino do motor
   const CHANCE_REFINO = ${j(T.CHANCE_REFINO)};            // chance de subir do refino i para i+1, sem VIP
   const REGRESSAO_REFINO = ${j(T.REGRESSAO_REFINO)};      // chance de, ao falhar na tentativa de i para i+1, voltar para i-1
