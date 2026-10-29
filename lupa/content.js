@@ -660,6 +660,49 @@
     chrome.storage.local.set({ ['codex:' + nome]: codex });
   }
 
+  // ---------- Ranking (janela K) ----------
+  // Só com a janela aberta e sem busca pelo nome nem "Só a minha guilda" (aí a lista não é o ranking inteiro). Por ranking (nível,
+  // Poder ou abates) e filtro de campeão, guarda a última lista vista em `ranking:<nome>`: o pódio, quem está logo acima e logo
+  // abaixo e o próprio personagem. O jogo só mostra o NÍVEL dos outros (o XP não aparece), então a Lupa marca cada subida que vê
+  // entre a última leitura no nível de antes e a primeira no novo (`subidas`). A tabela só muda quando o jogo a carrega de novo
+  // (abrir a janela, trocar o filtro), e é isso que conta como leitura. Só lê a tela.
+  const RK_ACIMA = 5, RK_ABAIXO = 3, RK_NOMES = 80, RK_SUBIDAS = 4;
+  let ranking = null, rankingDe = '', rankingTabela = null;
+  const n3 = (l) => [l.nivel, l.poder, l.abates].every(Number.isFinite);
+  async function carregarRankingLupa(n) {
+    const chave = 'ranking:' + n, r = await chrome.storage.local.get(chave);
+    if (nome !== n) return;
+    ranking = r[chave] || null; rankingDe = n;
+  }
+  function lerRanking() {
+    const jan = $('#janela-ranking'), tabela = $('#ranking table');
+    if (!jan || jan.hidden || !tabela || tabela === rankingTabela || !nome || rankingDe !== nome) return;
+    if ($('#rk-busca')?.value.trim() || $('#rk-guilda')?.checked) return;
+    const tipo = $('#ranking-filtros .rk-tipo.ativo')?.dataset.rkTipo, camp = $('#ranking-filtros .rk-camp.ativo')?.dataset.rkCamp;
+    if (!tipo || camp == null) return;
+    const todas = $$('tbody tr', tabela).filter((tr) => $('.rk-nome', tr)).map((tr) => {
+      const n = $$('td.num', tr).map((td) => Math.round(numero(txt(td))));      // "262.1k" daria 262100,00000000003
+      return { pos: +(txt($('td.pos', tr)).match(/\d+/) || [])[0] || 0, nome: $('.rk-nome', tr).dataset.perfil || '', nivel: n[0], poder: n[1], abates: n[2], eu: tr.classList.contains('eu') };
+    }).filter((l) => l.pos && l.nome && n3(l));
+    if (!todas.length) return;
+    rankingTabela = tabela;
+    const eu = todas.find((l) => l.eu);
+    const linhas = todas.filter((l) => l.pos <= 3 || l.eu || (eu && l.pos >= eu.pos - RK_ACIMA && l.pos <= eu.pos + RK_ABAIXO)).map(({ eu: _, ...l }) => l);
+    const agora = Date.now(), velho = ranking || {};
+    const niveis = { ...(velho.niveis || {}) }, subidas = { ...(velho.subidas || {}) };
+    for (const l of linhas) {
+      if (l.nome === nome) continue;
+      const antes = niveis[l.nome];
+      if (antes && l.nivel > antes.nivel) subidas[l.nome] = [...(subidas[l.nome] || []), { de: antes.nivel, para: l.nivel, antes: antes.em, depois: agora }].slice(-RK_SUBIDAS);
+      if (!antes || l.nivel >= antes.nivel) niveis[l.nome] = { nivel: l.nivel, em: agora };
+    }
+    // fica quem foi visto por último (no máximo RK_NOMES), e as subidas só de quem ficou
+    const manter = Object.entries(niveis).sort((a, b) => b[1].em - a[1].em).slice(0, RK_NOMES);
+    const vistas = { ...(velho.vistas || {}), [tipo + '|' + camp]: { tipo, camp, em: agora, total: numero(txt($('#ranking .rk-total'))) || null, eu: eu ? { pos: eu.pos, nivel: eu.nivel, poder: eu.poder, abates: eu.abates } : null, linhas } };
+    ranking = { vistas, niveis: Object.fromEntries(manter), subidas: Object.fromEntries(Object.entries(subidas).filter(([k]) => manter.some(([m]) => m === k))) };
+    chrome.storage.local.set({ ['ranking:' + nome]: ranking });
+  }
+
   let ultimoJson = '', ultimaEscrita = 0;
   function publicar() {
     if (!vivo()) { clearInterval(relogioLeitura); clearInterval(relogioCacada); clearInterval(relogioOla); observador?.disconnect(); obsLateral?.disconnect(); return; }
@@ -667,10 +710,11 @@
     const e = ler();
     if (!e) return;
     if (e.nome !== nome) {
-      nome = e.nome; cacada = null; codex = null; codexDe = '';
+      nome = e.nome; cacada = null; codex = null; codexDe = ''; ranking = null; rankingDe = ''; rankingTabela = null;
       carregarCacada(nome).catch(() => (cacada = { sessoes: [] }));
       const n = nome;
       carregarCodex(n).catch(() => { if (nome === n) codexDe = n; });
+      carregarRankingLupa(n).catch(() => { if (nome === n) rankingDe = n; });
     }
     nomesRaridade = new Map([...(e.ficha?.equip || []), ...(e.ficha?.mochila || [])].filter((i) => i.nome && i.raridade).map((i) => [i.nome, i.raridade]));
     tenta(capturarIcones);
@@ -679,6 +723,8 @@
     tenta(lerMercado);
     tenta(lerCodex);
     if (codexDe === e.nome && codex) e.codex = codex;      // o último Arsenal visto (a janela só existe aberta)
+    tenta(lerRanking);
+    if (rankingDe === e.nome && ranking) e.ranking = ranking;      // as últimas listas do Ranking (K) e as subidas vistas
     base = true;
     const json = JSON.stringify(e);
     if (json === ultimoJson && Date.now() - ultimaEscrita < 15e3) return;
