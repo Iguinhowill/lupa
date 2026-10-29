@@ -348,8 +348,68 @@ function barraXp(e, ctx) {
     h('span', { class: 'xp-resto' }, resto));
 }
 
+// ---------- Ranking ----------
+// O que a Lupa leu da janela Ranking (K) do jogo (e.ranking, ver content.js). O jogo só mostra o nível dos outros, então a distância
+// vai até o COMEÇO do nível de quem está na frente (no mesmo nível, só se sabe que ele tem mais XP). O ritmo de um rival sai de duas
+// subidas seguidas que a Lupa viu: o XP entre elas dividido pelo tempo, com a folga das leituras dos dois lados.
+const NOME_RANKING = { nivel: 'Nível', abates: 'Abates', poder: 'Poder' };
+const nomeCampeao = (c) => (!c ? 'todos os campeões' : (typeof JOGO !== 'undefined' && JOGO.CAMPEOES?.[c]?.nome) || c.charAt(0).toUpperCase() + c.slice(1));
+// XP para sair do começo do nível `de` e chegar ao começo do `ate` (null sem as tabelas)
+function xpEntre(de, ate) {
+  if (typeof JOGO === 'undefined' || !JOGO.XP_NIVEL) return null;
+  let t = 0;
+  for (let n = de; n < ate; n++) { const x = JOGO.XP_NIVEL[n - 1]; if (x == null) return null; t += x; }
+  return t;
+}
+// XP/h de um rival pelas duas últimas subidas seguidas: { min, max } (max null quando as leituras dos dois lados se encostam)
+function ritmoRival(subs) {
+  for (let k = (subs || []).length - 1; k > 0; k--) {
+    const a = subs[k - 1], b = subs[k], xp = b.de === a.para ? xpEntre(b.de, b.para) : null;
+    const longo = (b.depois - a.antes) / 3600e3, justo = (b.antes - a.depois) / 3600e3;
+    if (xp && longo > 0) return { min: xp / longo, max: justo > 0 ? xp / justo : null };
+  }
+  return null;
+}
+function cartaoRanking(e, ctx) {
+  const vistas = Object.values(e.ranking?.vistas || {}).sort((a, b) => b.em - a.em);
+  // a tabela é a do ranking de nível visto por último em que o personagem aparece (olhar o ranking de outro campeão não a troca);
+  // as posições, as do mesmo filtro de campeão
+  const v = vistas.find((x) => x.tipo === 'nivel' && x.eu) || vistas.find((x) => x.eu) || vistas[0];
+  if (!v) return null;
+  const posicoes = Object.keys(NOME_RANKING).map((t) => vistas.find((x) => x.tipo === t && x.camp === v.camp)).filter((x) => x?.eu);
+  const meu = parseInt(e.nivel, 10), x = e.xpNivel, xph = previsaoNivel(e, ctx)?.xph, eu = v.eu;
+  // quem está na frente: quanto falta para chegar ao começo do nível dele e em quanto tempo no ritmo da última hora
+  const ate = (l) => {
+    if (!eu || l.pos >= eu.pos || !Number.isFinite(meu)) return '';
+    if (l.nivel === meu) return 'mesmo nível';
+    if (l.nivel < meu) return 'já passou';
+    const falta = x?.total ? x.total - x.atual + (xpEntre(meu + 1, l.nivel) ?? NaN) : NaN;
+    if (!Number.isFinite(falta)) return '';
+    return xph > 0 ? prazoTexto(Math.max(1, Math.round((falta / xph) * 60))) : `${curto(falta)} XP`;
+  };
+  const linhas = [...(v.linhas || [])].sort((a, b) => a.pos - b.pos);
+  const subidas = e.ranking.subidas || {};
+  const ritmos = linhas.filter((l) => eu && l.pos < eu.pos && subidas[l.nome]?.length).map((l) => {
+    const s = subidas[l.nome].at(-1), r = ritmoRival(subidas[l.nome]);
+    // com leituras espaçadas a faixa fica larga demais; aí só o piso diz alguma coisa
+    const vel = !r ? '' : r.max && r.max <= 1.5 * r.min ? ` · ${curto(r.min)} a ${curto(r.max)} XP/h` : ` · pelo menos ${curto(r.min)} XP/h`;
+    return `${l.nome} subiu para o ${s.para} entre ${dataHora(s.antes)} e ${dataHora(s.depois)}${vel}`;
+  });
+  return secao(`Ranking · ${nomeCampeao(v.camp)}`,
+    posicoes.length ? h('div', { class: 'grade-3' }, posicoes.map((p) => stat(NOME_RANKING[p.tipo], `${p.eu.pos}º${p.total ? ` de ${inteiro(p.total)}` : ''}`, p.tipo === v.tipo ? 'destaque' : ''))) : null,
+    v.tipo === 'nivel' && linhas.length ? h('div', { class: 'tabela' },
+      ['Personagem', 'Nível', 'Abates', 'Você chega'].map((c) => h('span', { class: 'cab' }, c)),
+      linhas.map((l, k) => {
+        const pulo = k && l.pos > linhas[k - 1].pos + 1 ? h('span', { class: 'nota tabela-nota' }, '…') : null;
+        return [pulo, h('span', { class: 'forte', title: l.nome }, `${l.pos}º ${l.nome === e.nome ? 'Você' : l.nome}`), h('span', { class: 'num' }, l.nivel), h('span', { class: 'num' }, curto(l.abates)), h('span', null, ate(l))];
+      })) : null,
+    ritmos.length ? h('ul', { class: 'lista-simples' }, ritmos.map((t) => h('li', null, t))) : null,
+    nota(`Lido ${haQuanto(Date.now() - v.em)} (${dataHora(v.em)}). O jogo não mostra o XP dos outros: "Você chega" é até o começo do nível deles, no seu ritmo da última hora. `
+      + 'Para atualizar, abra o Ranking (K) no jogo por alguns segundos.'));
+}
+
 // ---------- Caçada ----------
-const zonaPrincipal = (sessao) => Object.entries(sessao.zonas || {}).sort((a, b) => b[1].seg - a[1].seg)[0]?.[0] || '';
+const zonaPrincipal =(sessao) => Object.entries(sessao.zonas || {}).sort((a, b) => b[1].seg - a[1].seg)[0]?.[0] || '';
 
 let serieGrafico = 'xp';   // 'xp' | 'abates': qual série o gráfico da caçada mostra (uma de cada vez, sem dois eixos)
 function grafico(sessao, campoXp, ativa, ctx) {
@@ -428,6 +488,7 @@ function desenharCacada(e, ctx) {
       zonas.map(([nome, z]) => { const mz = nome === melhor ? ' melhor' : ''; return [h('span', { class: 'forte' + mz, title: mz ? `${nome} · melhor XP/h` : nome }, mz ? '★ ' : '', nome), h('span', { class: mz.trim() }, duracao(z.seg)),
         h('span', { class: 'num' + mz }, ouTraco(porHora(z.abates, z.seg), inteiro)), h('span', { class: 'num' + mz }, ouTraco(porHora(z[campo], z.seg)))]; }),
       melhor ? h('span', { class: 'nota tabela-nota' }, '★ melhor XP/h entre as zonas desta sessão') : null)) : null,
+    cartaoRanking(e, ctx),
     drops.length ? secao(`O que caiu nesta sessão${vd.total > 0 ? ` · ${curto(vd.total)} no Lojista` : ''}`,
       h('ul', { class: 'lista-simples' }, drops.map((d) => h('li', { class: 'com-img' }, imagem(d.n.replace(/\s\[[A-Z+]+\]$/, '').replace(/\s\+\d+$/, ''), ctx, { tam: 24 }),
         h('span', { class: 'drop-nome' }, `${inteiro(d.q)}× ${d.n}`), d.v != null ? h('span', { class: 'num drop-valor' }, curto(d.v * d.q)) : null))),
