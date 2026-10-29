@@ -107,6 +107,12 @@ de cada linha. Espólio vale o preço do jogo; item comum conta como qualidade B
 que cai na caçada entra nos drops da sessão já com a qualidade sorteada. O CSV ganha `drops_no_lojista`. No site, o Relatório
 mostra os espólios no Lojista (total e por material).
 
+**Ranking:** com a janela Ranking (K) aberta, sem busca pelo nome nem "Só a minha guilda", a Lupa guarda em `ranking:<nome>`
+a última lista de cada ranking (nível, Poder, abates) e filtro de campeão: o pódio, os 5 logo acima, os 3 logo abaixo e o
+personagem. O jogo só mostra o nível dos outros, então cada leitura também marca quem subiu de nível desde a anterior
+(`subidas`). Na aba Caçada, o cartão **Ranking** mostra as posições, quem está na frente e em quanto tempo você chega ao
+nível de cada um no ritmo da última hora; com duas subidas seguidas de um rival, o ritmo mínimo dele. Só lê a tela.
+
 **Alertas de preço** (liberados pelo Brunox em 26/10/2026: só avisar, nunca comprar): a lista "Quero comprar" fica na
 Loja do site (item, qualidade e refino mínimos, só sem carta, preço máximo em ouro ou 💠). Deixe o Mercado aberto em
 casa na aba Comprar, sem filtro: a cada atualização do jogo a Lupa confere a lista e grava um aviso quando a oferta
