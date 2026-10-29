@@ -668,7 +668,8 @@
   // (abrir a janela, trocar o filtro), e é isso que conta como leitura. Só lê a tela.
   const RK_ACIMA = 5, RK_ABAIXO = 3, RK_NOMES = 80, RK_SUBIDAS = 4;
   let ranking = null, rankingDe = '', rankingTabela = null;
-  const n3 = (l) => [l.nivel, l.poder, l.abates].every(Number.isFinite);
+  // numero() devolve 0 para célula ilegível: nível 0 não existe, então a linha fica de fora
+  const n3 = (l) => [l.nivel, l.poder, l.abates].every(Number.isFinite) && l.nivel > 0;
   async function carregarRankingLupa(n) {
     const chave = 'ranking:' + n, r = await chrome.storage.local.get(chave);
     if (nome !== n) return;
@@ -677,15 +678,16 @@
   function lerRanking() {
     const jan = $('#janela-ranking'), tabela = $('#ranking table');
     if (!jan || jan.hidden || !tabela || tabela === rankingTabela || !nome || rankingDe !== nome) return;
+    // a tabela vale pelo que estava na tela quando ela apareceu: a de uma busca continua lá uns 350 ms depois de apagar o texto
+    rankingTabela = tabela;
     if ($('#rk-busca')?.value.trim() || $('#rk-guilda')?.checked) return;
     const tipo = $('#ranking-filtros .rk-tipo.ativo')?.dataset.rkTipo, camp = $('#ranking-filtros .rk-camp.ativo')?.dataset.rkCamp;
     if (!tipo || camp == null) return;
     const todas = $$('tbody tr', tabela).filter((tr) => $('.rk-nome', tr)).map((tr) => {
       const n = $$('td.num', tr).map((td) => Math.round(numero(txt(td))));      // "262.1k" daria 262100,00000000003
-      return { pos: +(txt($('td.pos', tr)).match(/\d+/) || [])[0] || 0, nome: $('.rk-nome', tr).dataset.perfil || '', nivel: n[0], poder: n[1], abates: n[2], eu: tr.classList.contains('eu') };
+      return { pos: +txt($('td.pos', tr)).replace(/\D/g, '') || 0, nome: $('.rk-nome', tr).dataset.perfil || '', nivel: n[0], poder: n[1], abates: n[2], eu: tr.classList.contains('eu') };
     }).filter((l) => l.pos && l.nome && n3(l));
     if (!todas.length) return;
-    rankingTabela = tabela;
     const eu = todas.find((l) => l.eu);
     const linhas = todas.filter((l) => l.pos <= 3 || l.eu || (eu && l.pos >= eu.pos - RK_ACIMA && l.pos <= eu.pos + RK_ABAIXO)).map(({ eu: _, ...l }) => l);
     const agora = Date.now(), velho = ranking || {};
@@ -696,10 +698,13 @@
       if (antes && l.nivel > antes.nivel) subidas[l.nome] = [...(subidas[l.nome] || []), { de: antes.nivel, para: l.nivel, antes: antes.em, depois: agora }].slice(-RK_SUBIDAS);
       if (!antes || l.nivel >= antes.nivel) niveis[l.nome] = { nivel: l.nivel, em: agora };
     }
-    // fica quem foi visto por último (no máximo RK_NOMES), e as subidas só de quem ficou
-    const manter = Object.entries(niveis).sort((a, b) => b[1].em - a[1].em).slice(0, RK_NOMES);
     const vistas = { ...(velho.vistas || {}), [tipo + '|' + camp]: { tipo, camp, em: agora, total: numero(txt($('#ranking .rk-total'))) || null, eu: eu ? { pos: eu.pos, nivel: eu.nivel, poder: eu.poder, abates: eu.abates } : null, linhas } };
-    ranking = { vistas, niveis: Object.fromEntries(manter), subidas: Object.fromEntries(Object.entries(subidas).filter(([k]) => manter.some(([m]) => m === k))) };
+    // ficam os rivais das listas em que o personagem aparece (é deles o cartão) e, dos outros, os vistos por último (até RK_NOMES);
+    // as subidas, só de quem ficou
+    const proprios = new Set(Object.values(vistas).filter((x) => x.eu).flatMap((x) => x.linhas.map((l) => l.nome)));
+    const recentes = new Set(Object.entries(niveis).sort((a, b) => b[1].em - a[1].em).slice(0, RK_NOMES).map(([k]) => k));
+    const fica = (k) => proprios.has(k) || recentes.has(k);
+    ranking = { vistas, niveis: Object.fromEntries(Object.entries(niveis).filter(([k]) => fica(k))), subidas: Object.fromEntries(Object.entries(subidas).filter(([k]) => fica(k))) };
     chrome.storage.local.set({ ['ranking:' + nome]: ranking });
   }
 

@@ -372,9 +372,9 @@ function ritmoRival(subs) {
 }
 function cartaoRanking(e, ctx) {
   const vistas = Object.values(e.ranking?.vistas || {}).sort((a, b) => b.em - a.em);
-  // a tabela é a do ranking de nível visto por último em que o personagem aparece (olhar o ranking de outro campeão não a troca);
-  // as posições, as do mesmo filtro de campeão
-  const v = vistas.find((x) => x.tipo === 'nivel' && x.eu) || vistas.find((x) => x.eu) || vistas[0];
+  // a tabela é a do ranking de nível em que o personagem está mais perto do topo (o jogo abre em "Todos", e o filtro do campeão
+  // dele é o que interessa; o de outro campeão, sem ele, nem conta); as posições, as do mesmo filtro de campeão
+  const v = vistas.filter((x) => x.tipo === 'nivel' && x.eu).sort((a, b) => a.eu.pos - b.eu.pos)[0] || vistas.find((x) => x.eu) || vistas[0];
   if (!v) return null;
   const posicoes = Object.keys(NOME_RANKING).map((t) => vistas.find((x) => x.tipo === t && x.camp === v.camp)).filter((x) => x?.eu);
   const meu = parseInt(e.nivel, 10), x = e.xpNivel, xph = previsaoNivel(e, ctx)?.xph, eu = v.eu;
@@ -385,7 +385,10 @@ function cartaoRanking(e, ctx) {
     if (l.nivel < meu) return 'já passou';
     const falta = x?.total ? x.total - x.atual + (xpEntre(meu + 1, l.nivel) ?? NaN) : NaN;
     if (!Number.isFinite(falta)) return '';
-    return xph > 0 ? prazoTexto(Math.max(1, Math.round((falta / xph) * 60))) : `${curto(falta)} XP`;
+    if (!(xph > 0)) return `${curto(falta)} XP`;
+    const min = Math.max(1, Math.round((falta / xph) * 60));
+    // do pódio do ranking geral a conta passa de semanas: acima de 2 dias, em dias e horas
+    return min >= 48 * 60 ? `${Math.floor(min / 1440)} d ${Math.floor((min % 1440) / 60)} h` : prazoTexto(min);
   };
   const linhas = [...(v.linhas || [])].sort((a, b) => a.pos - b.pos);
   const subidas = e.ranking.subidas || {};
@@ -409,7 +412,7 @@ function cartaoRanking(e, ctx) {
 }
 
 // ---------- Caçada ----------
-const zonaPrincipal =(sessao) => Object.entries(sessao.zonas || {}).sort((a, b) => b[1].seg - a[1].seg)[0]?.[0] || '';
+const zonaPrincipal = (sessao) => Object.entries(sessao.zonas || {}).sort((a, b) => b[1].seg - a[1].seg)[0]?.[0] || '';
 
 let serieGrafico = 'xp';   // 'xp' | 'abates': qual série o gráfico da caçada mostra (uma de cada vez, sem dois eixos)
 function grafico(sessao, campoXp, ativa, ctx) {
