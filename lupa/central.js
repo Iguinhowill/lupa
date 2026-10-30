@@ -442,8 +442,9 @@
     pendente = true;
     if (apertado.central || apertado.pip) return;   // não troca o botão debaixo do dedo no meio do clique
     requestAnimationFrame(() => { if (pendente) { pendente = false; desenhar(); } });
-    // aba escondida não roda o requestAnimationFrame até voltar à vista; a mini continua por cima e é desenhada já
-    if (DOC.hidden && pip) desenharPip(atual());
+    // aba escondida não roda o requestAnimationFrame até voltar à vista; a mini continua por cima e é desenhada no quadro
+    // dela (depois do clique, como acima: o soltar do dedo também chama o agendar)
+    if (DOC.hidden && pip) pip.requestAnimationFrame(() => desenharPip(atual()));
   }
 
   function coluna(titulo, ...filhos) {
