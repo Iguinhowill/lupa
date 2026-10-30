@@ -44,8 +44,9 @@ function tecla(k) {
 // ---------- missões automáticas ----------
 // fresco: a leitura da Lupa precisa ser recente; semUso: espera a pessoa parar de digitar e de clicar no app (o foco vai para
 // o jogo da ação, um B ou M digitado no meio viraria atalho do jogo, e o personagem sairia do que ela está fazendo);
-// espera: nova olhada depois de uma tentativa que nem começou (janela coberta, leitura atrasada); pausa: depois de uma falha; falhas: com tantas na mesma tarefa, o automático para até
-// a próxima (ou até o jogador apertar o botão); depoisOk: a leitura ainda mostra a tarefa entregue como pronta por uns segundos
+// espera: nova olhada depois de uma tentativa que nem começou (janela coberta, leitura atrasada); pausa: depois de uma
+// falha; falhas: com tantas na mesma tarefa, o automático para até a próxima (ou até o jogador apertar o botão); depoisOk:
+// a leitura ainda mostra a tarefa entregue como pronta por uns segundos
 const AUTO = { fresco: 30e3, semUso: 10e3, espera: 30e3, pausa: 5 * 60e3, falhas: 3, depoisOk: 60e3 };
 // Por que a conta não tenta agora (null = pode). `est` é o último estado:<nome>, `reg` o registro das tentativas dessa tarefa
 // ({ falhas, proxima }), `aVista` se a aba dela está na tela (aba ativa ou lado a lado), `ultimoUso` a última tecla ou clique

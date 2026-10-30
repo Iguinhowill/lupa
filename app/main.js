@@ -600,6 +600,7 @@ let ultimoUso = 0, autoAntes = false;      // ultimoUso: a última tecla ou cliq
 // as entradas que o próprio app manda (o input-event dispara dentro do sendInputEvent): essas não contam como uso
 let mandando = false;
 function mandar(wc, ev) { mandando = true; try { wc.sendInputEvent(ev); } finally { mandando = false; } }
+if (!app.isPackaged) globalThis.lupaTeste = { ultimoUso: () => ultimoUso };      // só para o teste:acao
 const autoLigado = () => !!armazem.get('config').config?.autoTarefa;
 // a espera das missões automáticas no painel (estado 'espera'); a mesma frase não é regravada a cada olhada
 function avisarAuto(nome, texto) {
@@ -642,7 +643,7 @@ function ligarAtalhos(wc) {
   wc.on('before-input-event', (e, input) => {
     const acao = atalhoDe(input);
     if (!acao) return;
-    if (input.type === 'keyDown') ultimoUso = Date.now();      // o atalho não chega à página (nem ao input-event), mas é uso
+    ultimoUso = Date.now();      // o atalho (só keyDown) não chega à página nem ao input-event, mas é uso
     e.preventDefault();
     if (input.isAutoRepeat && !acao.startsWith('zoom')) return;
     executarAtalho(acao);

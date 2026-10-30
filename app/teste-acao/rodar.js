@@ -87,6 +87,9 @@ app.whenReady().then(async () => {
       await espera(300);
     }
     out.zoom = jogo.getZoomFactor();
+    // o Ctrl+= é uma tecla da pessoa (atalho do app): conta como uso para as missões automáticas
+    out.usoDepoisDoZoom = Date.now() - globalThis.lupaTeste.ultimoUso();
+    conferir(out.usoDepoisDoZoom < 5000, '0) o atalho do app não contou como uso: ' + out.usoDepoisDoZoom);
     await jogo.executeJavaScript('window.__cliqueFalso()');      // um clique como o de um bot: a proteção do jogo falso pega
     await painel.executeJavaScript(`[...document.querySelectorAll('#abas button')].find((b) => /Tarefa/.test(b.textContent)).click()`);
     await espera(1000);
@@ -179,7 +182,11 @@ app.whenReady().then(async () => {
     await painel.executeJavaScript(`chrome.storage.local.set({ 'cacada:Teste 1': { sessoes: [{ ini: Date.now() - 3e6, fim: Date.now(), zonas: { 'Toca dos Lobos': { seg: 1800, abates: 1500, xp: 900000 } } }] } })`);
     await espera(5500);
     const antes6 = (await jogo.executeJavaScript('window.__d')).passos.length;
+    const uso6 = globalThis.lupaTeste.ultimoUso();
     const r6 = await entregar(painel, Date.now(), true);
+    // os cliques que o próprio app mandou nessa entrega não contam como uso da pessoa
+    out.usoMudouNaEntrega6 = globalThis.lupaTeste.ultimoUso() !== uso6;
+    conferir(!out.usoMudouNaEntrega6, '6) os cliques do próprio app contaram como uso da pessoa');
     out.cenario6 = { a: r6.a, passos: (await jogo.executeJavaScript('window.__d')).passos.slice(antes6).join(' → ') };
     conferir(r6.a?.estado === 'ok' && /no seu ritmo/.test(r6.a.texto || ''), '6) a escolha pelo seu ritmo não terminou bem: ' + r6.a?.texto);
     conferir(/aceitou:0/.test(out.cenario6.passos) && /chegou:Toca dos Lobos/.test(out.cenario6.passos), '6) não foi para a zona medida: ' + out.cenario6.passos);

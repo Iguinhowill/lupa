@@ -171,9 +171,11 @@ com a mesma autorização, as mesmas entradas de verdade e a mesma regra de uma 
 - Só com a tarefa pronta numa leitura de até 30 s, na conta que está na tela (aba ativa ou lado a lado) e com a janela aberta
   e não minimizada. O app não troca de aba nem traz a janela para a frente: para as duas contas, o Lado a lado.
 - Espera 10 s sem a pessoa digitar ou clicar no app (evento `input-event` de todas as views, inclusive a da ação, e os
-  atalhos do app; as entradas que o próprio app manda, marcadas em volta de cada `sendInputEvent`, não contam): o foco vai para o jogo da ação, um B ou M digitado no chat no meio viraria atalho do
-  jogo, e o personagem sairia do que ela está fazendo. Não tenta com a mochila cheia (o Capitão recusa a entrega): o painel
-  diz que espera espaço. Não pede a uma aba carregando ou caída (o preload ainda não ouve o pedido).
+  atalhos do app; as entradas que o próprio app manda, marcadas em volta de cada `sendInputEvent`, não contam): o foco vai
+  para o jogo da ação, um B ou M digitado no chat no meio viraria atalho do jogo, e o personagem sairia do que ela está
+  fazendo. Não tenta com a mochila cheia (o Capitão recusa a entrega): o painel diz que espera espaço. Não pede com a
+  página principal carregando ou caída (o preload ainda não ouve o pedido). Fora do pacote, `globalThis.lupaTeste.ultimoUso()`
+  deixa o `teste:acao` conferir isso.
 - O `acao-jogo.js` confere a tela antes da primeira entrada e, se não dá, nem começa (`Espera`, resultado `espera`, nova
   olhada em 30 s, sem contar como falha): a tarefa ainda não aparece pronta na tela (a leitura estava atrasada), a página está
   escondida (janela coberta) ou a coluna do jogo está escondida com a janela sem foco no Windows (as teclas B e M só chegam
