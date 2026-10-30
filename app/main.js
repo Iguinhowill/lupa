@@ -3,7 +3,9 @@
 // painel da Lupa à direita e a Central. Faz o papel do service worker da extensão: guarda os dados (armazem.js), roda
 // o envio.js da Lupa num vm com um `chrome` equivalente, mostra os avisos e segura o PC acordado. Lê a tela e nunca fala
 // com o servidor do jogo. Liberado pelo Brunox em 26/10/2026. Clica ou aperta tecla no jogo só em duas ações que o jogador
-// pede (o botão "Entregar e seguir" e o Alt+L), liberadas por ele em 27/10/2026: ver acoes.js e ARQUITETURA.md.
+// pede (o botão "Entregar e seguir" e o Alt+L), liberadas por ele em 27/10/2026, e nas missões automáticas (a opção da aba
+// Ajustes faz o mesmo "Entregar e seguir" quando a tarefa fica pronta; teste pedido por ele em 29/10/2026): ver acoes.js e
+// ARQUITETURA.md.
 // O "Onde gastar o ouro" roda o combate do motor público do jogo numa página escondida e sem rede (simulador.js, gastar.js).
 'use strict';
 
@@ -19,7 +21,8 @@ const { DA_CONTA, DO_GOOGLE, permitido: permitidoNo } = require('./regras');
 const Layout = require('./layout');
 const { alertasDe, notasEmTexto } = require('./alertas');
 const { atalhoDe, LISTA: ATALHOS } = require('./atalhos');
-// as ações que o jogador pede (entregar a tarefa, a setinha da coluna): autorização e entradas, puro (acoes.test.js)
+// as ações que o jogador pede (entregar a tarefa, a setinha da coluna): autorização, entradas e quando as missões
+// automáticas podem tentar, puro (acoes.test.js)
 const Acoes = require('./acoes');
 // Onde gastar o ouro: as opções e o resumo (puro, gastar.test.js) e o simulador (o motor do jogo numa página isolada)
 const Gastar = require('./gastar');
@@ -179,9 +182,13 @@ function criarJogo(a) {
   // a página recarregou ou caiu no meio de uma entrega: a autorização some na hora. O motivo vai para o painel só quando a
   // página velha já saiu (did-navigate, ou did-fail-load se a recarga falhou): até lá ela ainda roda e gravaria um passo por
   // cima ("rodando" de novo). Navegação cancelada: a página velha continua e grava o próprio erro (o clique dela é recusado)
-  let recarregou = null;
-  const avisarRecarga = () => { if (recarregou) avisarFimDaAcao(recarregou, 'A página do jogo recarregou no meio. Aperte de novo.'); recarregou = null; };
-  wc.on('did-start-navigation', (d) => { if (d.isMainFrame && !d.isSameDocument && encerrarAcao(a) === 'tarefa') recarregou = pref.nomes[a.id]; });
+  let recarregou = null;      // { nome, auto }: de quem era a entrega que a recarga cortou
+  const avisarRecarga = () => { if (recarregou) avisarFimDaAcao(recarregou.nome, 'A página do jogo recarregou no meio. Aperte de novo.', recarregou.auto); recarregou = null; };
+  wc.on('did-start-navigation', (d) => {
+    if (!d.isMainFrame || d.isSameDocument) return;
+    const auto = acaoAtual?.aba === a.id && !!acaoAtual.auto;
+    if (encerrarAcao(a) === 'tarefa') recarregou = { nome: pref.nomes[a.id], auto };
+  });
   wc.on('did-navigate', avisarRecarga);
   wc.on('did-fail-load', (_e, _cod, _desc, _url, principal) => { if (principal) avisarRecarga(); });
   wc.on('did-stop-loading', () => { recarregou = null; });
@@ -527,16 +534,25 @@ function atualizarSelo() {
 // O pedido (botão do painel ou Alt+L) autoriza UMA aba por pouco tempo (Acoes.REGRAS), e só uma ação por vez entre as contas:
 // no lado a lado, duas juntas disputariam o foco entre o apertar e o soltar do mouse. O preload do jogo (acao-jogo.js) pede
 // cada clique ou tecla e o main manda uma entrada de verdade (sendInputEvent), só na aba que está à vista.
-let acaoAtual = null;      // { aba, tipo, ate, resta, devolver }: a ação em andamento (devolver: ver tomarFoco)
+let acaoAtual = null;      // { aba, tipo, ate, resta, devolver, auto, comecou }: a ação em andamento (devolver: ver tomarFoco)
 const emAndamento = () => !!acaoAtual && Date.now() <= acaoAtual.ate;
-// recusa (false) se já tem uma ação em andamento: um segundo pedido não troca nem renova a autorização da primeira
-function pedirAcao(a, tipo) {
-  if (!a?.view || a.tipo !== 'jogo' || emAndamento()) return false;
-  acaoAtual = { aba: a.id, ...Acoes.autorizacao(tipo), devolver: null };
-  a.view.webContents.send('acao:iniciar', { tipo });
+// recusa (false) se já tem uma ação em andamento: um segundo pedido não troca nem renova a autorização da primeira.
+// `auto`: pedido pelas missões automáticas, não pelo botão (o preload confere a tela antes e, se não der, nem começa).
+// A página confirma que recebeu (acao:comecou); sem isso em 5 s (carregando, caída, sem o preload), a autorização some,
+// senão ficaria presa os 4 min recusando o botão das duas contas
+function pedirAcao(a, tipo, auto = false) {
+  const wc = a?.view?.webContents;
+  if (!wc || a.tipo !== 'jogo' || emAndamento() || wc.isLoadingMainFrame() || wc.isCrashed()) return false;
+  const aut = { aba: a.id, ...Acoes.autorizacao(tipo), devolver: null, auto, comecou: false };
+  acaoAtual = aut;
+  wc.send('acao:iniciar', { tipo, auto, foco: !!janela?.isFocused() });
+  setTimeout(() => {
+    if (acaoAtual !== aut || aut.comecou) return;
+    encerrarAcao(a, auto ? null : 'A página do jogo não respondeu (ainda carregando?). Aperte de novo.', false, auto ? 'espera' : 'erro');
+  }, 5000);
   return true;
 }
-const avisarFimDaAcao = (nome, motivo) => { if (nome) armazem.set({ ['acao:' + nome]: { tipo: 'tarefa', estado: 'erro', texto: motivo, em: Date.now() } }); };
+const avisarFimDaAcao = (nome, motivo, auto = false) => { if (nome) armazem.set({ ['acao:' + nome]: { tipo: 'tarefa', estado: 'erro', texto: motivo, auto, em: Date.now() } }); };
 // Antes de cada entrada a view da ação ganha o foco (sem ele o Chromium descarta o apertar do mouse, e a tecla vai para quem
 // o tem). Quem tinha o foco logo antes (o painel do botão, ou a outra metade do lado a lado se a pessoa foi digitar lá no
 // meio) fica guardado para recebê-lo de volta no fim
@@ -550,13 +566,18 @@ async function tomarFoco(wc) {
 // a ação daquela aba acabou, foi parada ou a página dela foi embora: a autorização some e, se o foco ainda está no jogo da
 // ação (a pessoa não foi para outro lugar), volta para quem o tinha antes da última entrada. Com a página caída (`caiu`), a
 // view perde o foco junto: aí ele volta se não ficou com ninguém. Com `motivo`, o painel deixa de mostrar "rodando" e mostra
-// o motivo. Devolve o tipo da ação encerrada (null se não havia uma daquela aba)
-function encerrarAcao(a, motivo, caiu = false) {
+// o motivo. `resultado` ('ok', 'erro', 'parado' ou 'espera') conta para as missões automáticas; sem ele (página recarregada
+// ou caída no meio), é erro. Devolve o tipo da ação encerrada (null se não havia uma daquela aba)
+function encerrarAcao(a, motivo, caiu = false, resultado = 'erro') {
   if (!acaoAtual || acaoAtual.aba !== a.id) return null;
-  const { tipo, devolver } = acaoAtual, wc = a.view?.webContents, atual = webContents.getFocusedWebContents();
+  const { tipo, devolver, auto } = acaoAtual, wc = a.view?.webContents, atual = webContents.getFocusedWebContents(), nome = pref.nomes[a.id];
   acaoAtual = null;
   if (devolver && !devolver.isDestroyed() && (atual === wc || (caiu && !atual))) devolver.focus();
-  if (motivo && tipo === 'tarefa') avisarFimDaAcao(pref.nomes[a.id], motivo);
+  if (motivo && tipo === 'tarefa') avisarFimDaAcao(nome, motivo, auto);
+  // a entrega do botão também conta quando as missões automáticas estão ligadas: sem isso, o Parar ou um erro dela seriam
+  // seguidos 2 s depois por uma entrega automática da mesma tarefa
+  if (tipo === 'tarefa' && nome && (auto || autoLigado())) autoTentativas.set(nome, Acoes.autoDepois(autoTentativas.get(nome), resultado, Date.now()));
+  if (tipo === 'tarefa') setTimeout(vigiarAuto, 2000);      // a outra conta pode estar esperando a vez
   return tipo;
 }
 // a aba que mandou o pedido de entrada, se é a da ação e está à vista (com a janela aberta); null se não pode
@@ -567,13 +588,62 @@ function abaAutorizada(wc) {
   return r ? { a, r } : null;
 }
 
+// ---------- missões automáticas (teste pedido pelo Brunox em 29/10/2026) ----------
+// Com a opção ligada (config.autoTarefa, aba Ajustes do painel), o app pede sozinho o mesmo "Entregar e seguir" do botão
+// quando a tarefa de uma conta fica pronta. Só na conta que está na tela (aba ativa ou lado a lado, janela aberta e não
+// minimizada): o app não troca de aba nem traz a janela para a frente sozinho, e com a página escondida os cliques não
+// chegam. Espera 10 s sem a pessoa digitar ou clicar no app e não tenta com a mochila cheia. Depois de uma falha, espera
+// 5 min; com 3 falhas na mesma tarefa, ou com o Parar, para até aparecer uma tarefa nova ou a pessoa apertar o botão
+// (acoes.js, AUTO).
+const autoTentativas = new Map();      // nome → { falhas, proxima }: zera quando a leitura mostra uma tarefa em andamento
+let ultimoUso = 0, autoAntes = false;      // ultimoUso: a última tecla ou clique da pessoa no app (ver ligarAtalhos)
+// as entradas que o próprio app manda (o input-event dispara dentro do sendInputEvent): essas não contam como uso
+let mandando = false;
+function mandar(wc, ev) { mandando = true; try { wc.sendInputEvent(ev); } finally { mandando = false; } }
+if (!app.isPackaged) globalThis.lupaTeste = { ultimoUso: () => ultimoUso };      // só para o teste:acao
+const autoLigado = () => !!armazem.get('config').config?.autoTarefa;
+// a espera das missões automáticas no painel (estado 'espera'); a mesma frase não é regravada a cada olhada
+function avisarAuto(nome, texto) {
+  const ant = armazem.get('acao:' + nome)['acao:' + nome];
+  if (ant?.estado === 'espera' && ant.texto === texto && Date.now() - ant.em < 10 * 60e3) return;
+  armazem.set({ ['acao:' + nome]: { tipo: 'tarefa', estado: 'espera', auto: true, texto, em: Date.now() } });
+}
+function vigiarAuto() {
+  if (!armazem || !autoLigado() || emAndamento() || !janela || !janela.isVisible() || janela.isMinimized()) return;
+  const agora = Date.now();
+  for (const a of abas) {
+    const nome = a.tipo === 'jogo' && a.view && pref.nomes[a.id], est = nome && estados.get(nome);
+    if (!est) continue;
+    if (est.tarefa && !est.tarefa.pronta) autoTentativas.delete(nome);      // tarefa nova em andamento: as falhas zeram
+    if (a.view.webContents.isLoadingMainFrame() || a.view.webContents.isCrashed()) continue;      // o preload ainda não ouve o pedido
+    const motivo = Acoes.autoMotivo({ est, reg: autoTentativas.get(nome), agora, aVista: modo() === a.id || modo() === 'lado', ultimoUso });
+    if (motivo === 'mochila') avisarAuto(nome, 'Esperando espaço na mochila: cheia, o Capitão não tem onde pôr o item da tarefa.');
+    if (!motivo && pedirAcao(a, 'tarefa', true)) return;
+  }
+}
+// a opção mudou: as tentativas recomeçam do zero e, desligada no meio de uma entrega automática, ela para
+function mudouAuto() {
+  const ligado = autoLigado();
+  if (ligado === autoAntes) return;
+  autoAntes = ligado;
+  autoTentativas.clear();
+  const a = acaoAtual?.auto && abas.find((x) => x.id === acaoAtual.aba);
+  if (!ligado && a) { a.view?.webContents.send('acao:parar'); encerrarAcao(a, null, false, 'parado'); }
+}
+
 // ---------- atalhos do app ----------
-// só as teclas do atalhos.js são do app: o preventDefault vale só para elas, o resto segue para a página. Fora as duas
-// ações acima, o app não injeta tecla, clique ou comando no jogo
+// só as teclas do atalhos.js são do app: o preventDefault vale só para elas, o resto segue para a página. Fora as ações
+// acima, o app não injeta tecla, clique ou comando no jogo
 function ligarAtalhos(wc) {
+  // as missões automáticas esperam a pessoa parar de digitar e de clicar, em qualquer view; as entradas que o próprio app
+  // manda não contam
+  wc.on('input-event', (_e, input) => {
+    if (!mandando && ['mouseDown', 'rawKeyDown', 'keyDown'].includes(input.type)) ultimoUso = Date.now();
+  });
   wc.on('before-input-event', (e, input) => {
     const acao = atalhoDe(input);
     if (!acao) return;
+    ultimoUso = Date.now();      // o atalho (só keyDown) não chega à página nem ao input-event, mas é uso
     e.preventDefault();
     if (input.isAutoRepeat && !acao.startsWith('zoom')) return;
     executarAtalho(acao);
@@ -663,8 +733,9 @@ function ligarIpc() {
     if (!painel || e.sender !== painel.webContents || !['tarefa', 'parar'].includes(tipo)) return { erro: 'Pedido inválido.' };
     const a = abas.find((x) => x.tipo === 'jogo' && x.view && pref.nomes[x.id] === nome);
     if (!a) return { erro: 'Não achei a aba desse personagem.' };
-    if (tipo === 'parar') { a.view.webContents.send('acao:parar'); encerrarAcao(a); return { ok: true }; }
+    if (tipo === 'parar') { a.view.webContents.send('acao:parar'); encerrarAcao(a, null, false, 'parado'); return { ok: true }; }
     if (emAndamento()) return { erro: acaoAtual.aba === a.id ? 'Já tem uma ação em andamento nesta conta.' : 'A outra conta está no meio de uma ação: espere ela terminar.' };
+    autoTentativas.delete(nome);      // apertar o botão também solta as missões automáticas paradas nessa tarefa
     if (modo() !== a.id && modo() !== 'lado') ativar(a.id);      // a ação acontece à vista
     return pedirAcao(a, 'tarefa') ? { ok: true } : { erro: 'A aba do jogo não está pronta.' };
   });
@@ -677,7 +748,7 @@ function ligarIpc() {
     // o foco vai para o jogo, como num clique de verdade: com o foco no painel (onde está o botão "Entregar e seguir"), o
     // Chromium descartava o apertar e o soltar e só o mover chegava. Mover, apertar e soltar com um intervalo, como a mão
     await tomarFoco(wc);
-    for (const ev of Acoes.clique(pt)) { if (wc.isDestroyed()) return false; wc.sendInputEvent(ev); await new Promise((ok) => setTimeout(ok, Acoes.INTERVALO)); }
+    for (const ev of Acoes.clique(pt)) { if (wc.isDestroyed()) return false; mandar(wc, ev); await new Promise((ok) => setTimeout(ok, Acoes.INTERVALO)); }
     return true;
   });
   ipcMain.handle('acao:tecla', async (e, p) => {
@@ -685,10 +756,20 @@ function ligarIpc() {
     if (!v || !evs || !Acoes.gastar(acaoAtual)) return false;
     const wc = v.a.view.webContents;
     await tomarFoco(wc);      // a tecla vai para a view em foco
-    for (const ev of evs) { if (wc.isDestroyed()) return false; wc.sendInputEvent(ev); await new Promise((ok) => setTimeout(ok, Acoes.INTERVALO)); }
+    for (const ev of evs) { if (wc.isDestroyed()) return false; mandar(wc, ev); await new Promise((ok) => setTimeout(ok, Acoes.INTERVALO)); }
     return true;
   });
-  ipcMain.handle('acao:fim', (e) => { const a = abaDe(e.sender); if (a) encerrarAcao(a); });
+  // a ação acabou; `estado` ('ok', 'erro', 'parado' ou 'espera') conta para as missões automáticas, e o `texto` de uma
+  // espera delas vai para o painel
+  // a página recebeu o acao:iniciar (sem isso em 5 s, a autorização some: ver pedirAcao)
+  ipcMain.handle('acao:comecou', (e) => { const a = abaDe(e.sender); if (a && acaoAtual?.aba === a.id) acaoAtual.comecou = true; });
+  ipcMain.handle('acao:fim', (e, r) => {
+    const a = abaDe(e.sender);
+    if (!a) return;
+    const estado = ['ok', 'erro', 'parado', 'espera'].includes(r?.estado) ? r.estado : 'erro', nome = pref.nomes[a.id];
+    if (estado === 'espera' && acaoAtual?.aba === a.id && acaoAtual.auto && nome && r.texto) avisarAuto(nome, String(r.texto).slice(0, 300));
+    encerrarAcao(a, null, false, estado);
+  });
   // o botão "Calcular" do Onde gastar o ouro (painel e Central): só simula, não mexe no jogo
   ipcMain.handle('lupa:gastar', (e, { nome } = {}) => {
     if (![painel, central].some((v) => v && e.sender === v.webContents)) return { erro: 'Pedido inválido.' };
@@ -722,14 +803,14 @@ function ligarIpc() {
     for (const fn of ouvintesMud) { try { fn(mud, 'local'); } catch {} }
     let novoEstado = false;
     for (const k of Object.keys(mud)) if (k.startsWith('estado:')) { estados.set(k.slice(7), mud[k].newValue); novoEstado = true; vigiarGasto(k.slice(7), mud[k].newValue); }
-    if (novoEstado) recalcularAlertas();
+    if (novoEstado) { recalcularAlertas(); vigiarAuto(); }
     const pub = semPrivadas(mud);
     if (Object.keys(pub).length) {
       const alvos = [...abas.map((a) => a.view), painel].map((v) => v?.webContents);
       if (mini && !mini.isDestroyed()) alvos.push(mini.webContents);
       for (const wc of alvos) if (wc && !wc.isDestroyed()) wc.send('armazem:mudou', pub);
     }
-    if ('config' in mud) aplicarAcordado();
+    if ('config' in mud) { aplicarAcordado(); mudouAuto(); vigiarAuto(); }
   });
 }
 
@@ -751,6 +832,8 @@ app.whenReady().then(() => {
   criarBandeja();
   recalcularAlertas();
   setInterval(recalcularAlertas, 30e3);      // o "sem leitura" nasce do tempo passando, não de um estado novo
+  autoAntes = autoLigado();
+  setInterval(vigiarAuto, 15e3);      // as esperas das missões automáticas (5 min, 30 s) também acabam com o tempo
   // uma conta que ficou na fila de um app fechado no meio não roda sozinha: volta ao estado anterior
   for (const [k, v] of Object.entries(armazem.get(null))) if (/^(gastar|treino):/.test(k) && ['rodando', 'na-fila'].includes(v?.estado)) armazem.set({ [k]: { ...v, estado: v.assinatura ? 'pronto' : 'erro', erro: v.assinatura ? null : 'A conta parou no meio (o app fechou).', erroEm: 0 } });
   aplicarAcordado();

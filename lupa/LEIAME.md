@@ -33,7 +33,7 @@ de uma linha. Na extensão, tudo continua como descrito aqui.
   O aviso de reinício do servidor aparece em destaque no topo.
 - **Chat:** resumo do loot dos últimos 15 minutos e as mensagens do servidor sem as linhas de loot.
 - **Ajustes:** tema da lateral do jogo, esconder a lista de bônus e as linhas de
-  loot, manter o PC acordado e os avisos (mochila quase cheia, item no chão, morte, pontos livres, nível e, novos: lendário,
+  loot, manter o PC acordado, as missões automáticas (só no app) e os avisos (mochila quase cheia, item no chão, morte, pontos livres, nível e, novos: lendário,
   prêmio diário não pego, diária pronta, Guerra de Guildas, Vilemaw acordada, Covil liberado e reinício do servidor).
 - No topo, a barra de XP com a previsão do próximo nível e o botão **Central**.
 
@@ -57,8 +57,15 @@ sai um pouco otimista na zona em que você morre mais: a Lupa só conta o tempo 
 zona medida, vale o prêmio por minuto pelo tempo do jogo. O tempo que o jogo mostra supõe o mesmo ritmo em toda zona: por
 isso o Desafio da zona de cima parecia render mais. O app faz isso pelos botões do jogo, com cliques e teclas de verdade, e confere a tela a
 cada passo; se algo sair do esperado (mochila cheia, em combate, janela por cima), para e diz onde. O botão Parar
-interrompe no meio. Só roda quando você aperta: nunca sozinho nem em laço. Liberado pelo Brunox em 27/10/2026, que pediu
-também que passasse pela proteção contra bots do jogo.
+interrompe no meio. Roda quando você aperta ou, se você ligar as missões automáticas, sozinho quando a tarefa fica pronta;
+nunca em laço. Liberado pelo Brunox em 27/10/2026, que pediu também que passasse pela proteção contra bots do jogo.
+
+**Missões automáticas (só no app de PC, em teste):** em Ajustes, "Entregar e seguir sozinho quando a tarefa ficar pronta"
+(desligada por padrão; o Brunox pediu para testar em 29/10/2026). O app faz o Entregar e seguir sem você apertar, só na
+conta que está na tela (para as duas, use o Lado a lado) e com a janela à vista: minimizada ou coberta por outra, os
+cliques não chegam ao jogo. Espera você parar de digitar e clicar no app, não tenta com a mochila cheia e, com a coluna do jogo escondida,
+precisa da janela em foco (as teclas B e M). Com 3 erros na mesma tarefa, ou se você apertar Parar, espera a próxima
+tarefa ou o botão.
 
 **Onde gastar o ouro (só no app de PC):** o app testa no motor do próprio jogo o que o seu ouro compra e pode render mais
 caça: forjar cada item equipado em +1, trocar uma carta (da bolsa ou do Mercado), um item do Mercado ou da mochila no
@@ -151,8 +158,8 @@ se a aba fechar, se o navegador descartar a aba para economizar memória ou se o
 
 ## O que ela nunca faz
 
-- Não joga por você. Na extensão, não clica nem aperta teclas; no app, só no **Entregar e seguir** e no **Alt+L**, e só
-  quando você pede.
+- Não joga por você. Na extensão, não clica nem aperta teclas; no app, só no **Entregar e seguir** e no **Alt+L**, quando
+  você pede, e nas **missões automáticas**, se você ligar.
 - Não chama o servidor do jogo. (No app, o Onde gastar o ouro baixa os arquivos públicos do motor, os mesmos que a
   página do jogo carrega, para simular; não manda nada da sua conta.) Tudo fica no `chrome.storage` do seu navegador, inclusive as imagens dos itens, que
   são copiadas da sua própria tela. A única saída é o Lupa Online, e só depois que você entra em Ajustes: aí ela

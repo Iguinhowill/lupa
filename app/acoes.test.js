@@ -34,6 +34,42 @@ test('clique e teclas: só B e M, apertar e soltar', () => {
   for (const k of ['q', 'Enter', '', null, 'bm']) assert.equal(Acoes.tecla(k), null, String(k));
 });
 
+test('missões automáticas: só com a tarefa pronta, leitura recente, conta à vista, sem a pessoa mexendo e com espaço na mochila', () => {
+  const agora = 1e12, pronta = { ts: agora - 2000, tarefa: { pronta: true }, mochila: { usados: 20, total: 34 } };
+  const m = (x) => Acoes.autoMotivo({ est: pronta, agora, aVista: true, ...x });
+  assert.equal(m(), null);
+  assert.equal(m({ est: { ...pronta, tarefa: { pronta: false } } }), 'sem-tarefa');
+  assert.equal(m({ est: { ...pronta, tarefa: null } }), 'sem-tarefa');
+  assert.equal(m({ est: undefined }), 'sem-tarefa');
+  assert.equal(m({ est: { ...pronta, ts: agora - Acoes.AUTO.fresco - 1 } }), 'leitura-velha');
+  assert.equal(m({ est: { ...pronta, ts: undefined } }), 'leitura-velha');
+  assert.equal(m({ aVista: false }), 'fora-da-tela');
+  assert.equal(m({ ultimoUso: agora - 3000 }), 'em-uso');
+  assert.equal(m({ ultimoUso: agora - Acoes.AUTO.semUso }), null);
+  assert.equal(m({ est: { ...pronta, mochila: { usados: 34, total: 34 } } }), 'mochila');
+  assert.equal(m({ est: { ...pronta, mochila: { usados: 0, total: 0 } } }), null, 'mochila não lida não segura');
+  assert.equal(m({ reg: { falhas: Acoes.AUTO.falhas, proxima: 0 } }), 'parado');
+  assert.equal(m({ reg: { falhas: Acoes.AUTO.falhas, proxima: 0 }, est: { ...pronta, mochila: { usados: 34, total: 34 } } }), 'parado', 'parada, a mochila cheia não vira espera');
+  assert.equal(m({ reg: { falhas: 1, proxima: agora + 1 } }), 'aguarda');
+  assert.equal(m({ reg: { falhas: 1, proxima: agora } }), null);
+});
+
+test('missões automáticas: o que cada resultado faz com as próximas tentativas', () => {
+  const agora = 1e12, A = Acoes.AUTO;
+  assert.deepEqual(Acoes.autoDepois(undefined, 'ok', agora), { falhas: 0, proxima: agora + A.depoisOk });
+  assert.deepEqual(Acoes.autoDepois({ falhas: 2, proxima: 0 }, 'ok', agora), { falhas: 0, proxima: agora + A.depoisOk });
+  assert.deepEqual(Acoes.autoDepois({ falhas: 1, proxima: 0 }, 'espera', agora), { falhas: 1, proxima: agora + A.espera }, 'esperar não conta como falha');
+  assert.deepEqual(Acoes.autoDepois(undefined, 'parado', agora).falhas, A.falhas);
+  let r;
+  for (let k = 0; k < A.falhas; k++) {
+    assert.notEqual(Acoes.autoMotivo({ est: { ts: agora, tarefa: { pronta: true } }, reg: r, agora: agora + k * A.pausa, aVista: true }), 'parado');
+    r = Acoes.autoDepois(r, 'erro', agora + k * A.pausa);
+  }
+  assert.deepEqual(r, { falhas: A.falhas, proxima: agora + (A.falhas - 1) * A.pausa + A.pausa });
+  assert.equal(Acoes.autoMotivo({ est: { ts: agora + 1e9, tarefa: { pronta: true } }, reg: r, agora: agora + 1e9, aVista: true }), 'parado');
+  assert.equal(Acoes.autoDepois(r, undefined, agora).falhas, A.falhas + 1, 'sem resultado conta como erro');
+});
+
 test('ofertas: quantidade, tempo, XP, ouro e zona como o jogo escreve', () => {
   const sem = (o) => { const { xpFolga, ...resto } = o; return resto; };
   assert.deepEqual(sem(OFERTA.lerOferta('120 monstros em Fosso do Dragão', '~15 min · 120.3k de XP · 30.1k de ouro · item épico')), { qtd: 120, min: 15, xp: 120300, ouro: 30100, zona: 'Fosso do Dragão' });

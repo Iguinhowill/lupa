@@ -239,6 +239,8 @@ button { font: inherit; color: inherit; }
 .entregar-status { margin: 0; font-size: 13px; }
 .entregar-status.erro { color: var(--laranja); }
 .entregar-status.ok { color: var(--verde); }
+.entregar-status.espera { color: var(--fraco); }
+.entregar-auto { margin-left: 8px; font-size: 11px; font-weight: 600; vertical-align: 1px; }
 /* Onde gastar o ouro (a conta vem do app) */
 .gasto-quando { margin: 0; font-size: 12.5px; }
 .gasto-mudou { color: var(--laranja); }

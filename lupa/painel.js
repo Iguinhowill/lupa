@@ -1,7 +1,8 @@
 // Lupa · painel lateral
 // Casco do painel: lê o storage, escolhe o personagem e desenha as abas com as peças de ui.js.
 // Não fala com o jogo: só lê o storage e grava a configuração. No app, o botão "Entregar e seguir" pede a ação ao app
-// (lupaApp.acao), que é quem clica no jogo; o andamento volta pelo storage (acao:<nome>).
+// (lupaApp.acao), que é quem clica no jogo; o andamento volta pelo storage (acao:<nome>). A chave das missões automáticas
+// (config.autoTarefa, aba Ajustes) só grava a configuração: quem vigia a tarefa e pede a entrega é o main do app.
 'use strict';
 
 const NO_APP = !!globalThis.lupaApp;   // no app de PC a escolha de personagem e a Central ficam nas abas do app
@@ -79,13 +80,14 @@ function agendar() {
 function desenhar(forcar = false) {
   const e = atual();
   desenharTopo(e);
+  if (NO_APP) { const r = document.querySelector('.rodape span'); if (r) r.textContent = rodapeDoApp(config); }
   desenharAbas(e);
   const minuto = Math.floor(Date.now() / 30e3);
   const fatia = aba === 'ajustes' ? [config, nuvem]
     : !e ? null
     : aba === 'ficha' ? [e.ficha, e.mochila, e.pontos, e.zona, e.nivel, e.tarefa === null, planoAbertoChave(), Object.keys(icones).length, menores, gastos[e.nome], gastoAberto, treinos[e.nome]]
     : aba === 'cacada' ? [cacadas[e.nome], semBonus, config.novaSessao, config.novaSessaoPor?.[e.nome], e.bonus, minuto]
-    : aba === 'tarefa' ? [e.tarefa, e.diarias, e.rastreio, config.avisos.tarefa, minuto, acoes[e.nome]]
+    : aba === 'tarefa' ? [e.tarefa, e.diarias, e.rastreio, config.avisos.tarefa, config.autoTarefa, minuto, acoes[e.nome]]
     : aba === 'timers' ? [e.timers, e.rastreio, config.avisos]
     : [e.chat, e.recentes, config.esconderLoot, Object.keys(icones).length];
   // Ajustes não depende do XP; nas outras abas, ele entra para a barra e a caçada andarem
@@ -133,6 +135,11 @@ function desenharAjustes() {
   const av = config.avisos;
   return h('div', { class: 'pilha' },
     secaoNuvem(),
+    ctx.iniciarAcao ? secao('Missões automáticas',
+      chave(config.autoTarefa, 'Entregar e seguir sozinho quando a tarefa ficar pronta (teste)', () => salvarConfig({ autoTarefa: !config.autoTarefa })),
+      nota('Faz o mesmo do botão Entregar e seguir da aba Tarefa: volta à Fonte, entrega ao Capitão, pega a tarefa que mais rende no seu ritmo e viaja para a zona dela. '
+        + 'Só na conta que está na tela (para as duas, use o Lado a lado) e com a janela da Lupa à vista: minimizada ou coberta por outra, os cliques não chegam ao jogo. '
+        + 'Espera você parar de digitar e clicar no app e não tenta com a mochila cheia. Com 3 erros na mesma tarefa, ou se você apertar Parar, espera a próxima tarefa ou o botão.')) : null,
     secao('Lateral do jogo',
       chave(config.tema, 'Tema da Lupa: painéis escuros e botões discretos no lugar do visual do jogo', () => salvarConfig({ tema: !config.tema })),
       chave(config.semBonusLateral, 'Esconder a lista de bônus de XP (Twitch, Kick, voto e guilda estão na aba Timers)', () => salvarConfig({ semBonusLateral: !config.semBonusLateral })),
@@ -157,7 +164,7 @@ function desenharAjustes() {
       nota('Os avisos de bônus (Kick, Twitch, voto, evento e convites) ficam nos sinos da aba Timers; o da tarefa, na aba Tarefa.')),
     secao('Chat do jogo',
       chave(config.esconderLoot, 'Esconder as linhas de loot (aba Servidor)', () => salvarConfig({ esconderLoot: !config.esconderLoot }))),
-    nota('Tudo aqui só muda a aparência da página. Os botões continuam sendo os do jogo, e desligar volta ao visual original na hora.'));
+    nota((ctx.iniciarAcao ? 'Fora as missões automáticas, tudo' : 'Tudo') + ' aqui só muda a aparência da página. Os botões continuam sendo os do jogo, e desligar volta ao visual original na hora.'));
 }
 
 // Lupa Online: o login fica aqui; quem envia é o envio.js no service worker
@@ -195,11 +202,7 @@ function secaoNuvem() {
 }
 
 // ---------- início ----------
-if (NO_APP) {
-  document.getElementById('central')?.setAttribute('hidden', '');
-  const r = document.querySelector('.rodape span');
-  if (r) r.textContent = 'Lê a tela; só clica no jogo quando você aperta Entregar e seguir ou o Alt+L.';
-}
+if (NO_APP) document.getElementById('central')?.setAttribute('hidden', '');      // o rodapé do app vem no desenhar()
 document.getElementById('central')?.addEventListener('click', () => chrome.tabs.create({ url: chrome.runtime.getURL('central.html') }));
 chrome.storage.local.get(null).then((tudo) => { for (const [k, v] of Object.entries(tudo)) guardar(k, v); desenhar(true); });
 chrome.storage.onChanged.addListener((mud, area) => {

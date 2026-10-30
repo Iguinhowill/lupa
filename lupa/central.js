@@ -551,11 +551,13 @@
   }
 
   // ---------- início ----------
-  if (globalThis.lupaApp) { const r = DOC.querySelector('.rodape span'); if (r) r.textContent = 'Lê a tela; só clica no jogo quando você aperta Entregar e seguir ou o Alt+L.'; }
-  chrome.storage.local.get(null).then((tudo) => { for (const [k, v] of Object.entries(tudo)) guardar(k, v); desenhar(); });
+  const rodape = () => { if (globalThis.lupaApp) { const r = DOC.querySelector('.rodape span'); if (r) r.textContent = rodapeDoApp(config); } };
+  rodape();
+  chrome.storage.local.get(null).then((tudo) => { for (const [k, v] of Object.entries(tudo)) guardar(k, v); rodape(); desenhar(); });
   chrome.storage.onChanged.addListener((mud, area) => {
     if (area !== 'local') return;
     for (const [k, { newValue }] of Object.entries(mud)) guardar(k, newValue);
+    if (mud.config) rodape();
     agendar();
   });
   setInterval(() => {

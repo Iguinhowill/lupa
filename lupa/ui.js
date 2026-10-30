@@ -8,8 +8,10 @@
 //     eventos,                // { [nome]: [{ ts, tipo, titulo, texto, item?, raridade?, qual? }] }  (chave "eventos:<nome>")
 //     icones,                 // { chave: dataURL }  (chave "icones")
 //     menores,                // { [chave]: { ouro, gemas, n, em } }  (chave "mercado:menores": menor preço visto no Mercado por versão)
-//     acoes,                  // { [nome]: { tipo, estado: 'rodando'|'ok'|'erro'|'parado', texto, em } }  (chave "acao:<nome>", só no app)
+//     acoes,                  // { [nome]: { tipo, estado: 'rodando'|'ok'|'erro'|'parado'|'espera', texto, auto, em } }  (chave "acao:<nome>", só no app;
+//                             //   auto: veio das missões automáticas; 'espera': elas esperando a janela, o foco ou espaço na mochila)
 //     iniciarAcao(tipo, nome),// só no app: 'tarefa' (Entregar e seguir) ou 'parar'; sem ela o cartão nem aparece
+//                             // (config.autoTarefa: as missões automáticas, em que o app pede a mesma entrega sozinho)
 //     gastos,                 // { [nome]: resultado do Onde gastar o ouro }  (chave "gastar:<nome>", que o app calcula)
 //     treinos,                // { [nome]: resultado dos Pontos e barra }  (chave "treino:<nome>", calculada na mesma rodada)
 //     calcularGasto(nome),    // só no app: pede a conta (botão Calcular); sem ela e sem conta guardada, o cartão nem aparece
@@ -24,7 +26,7 @@
 const COR_RARIDADE = { basico: '#d0d0d0', epico: '#c88aff', lendario: '#ffc040', mitico: '#ff5a78' };
 const PADRAO = {
   esconderLoot: false, tema: true, semBonusLateral: false, semRedes: false, novaSessao: 0,
-  manterAcordado: false, novaSessaoPor: {},
+  manterAcordado: false, novaSessaoPor: {}, autoTarefa: false,
   avisos: { kick: true, twitch: true, voto: true, tarefa: true, evento: true, convites: false, mochila: true, chao: true, morte: true, pontos: true, nivel: true,
     premio: true, diaria: true, guerra: true, vilemaw: true, covil: true, reinicio: true, lendario: true }
 };
@@ -93,6 +95,10 @@ const ICONES = {
 const icone = (nome, tam = 18) => s('svg', { viewBox: '0 0 24 24', width: tam, height: tam, class: 'ico', 'aria-hidden': 'true' }, ICONES[nome].map((d) => s('path', { d })));
 const secao = (titulo, ...filhos) => h('section', { class: 'secao' }, h('h2', { class: 'rotulo' }, titulo), ...filhos);
 const vazio = (texto) => h('p', { class: 'vazio' }, texto);
+// o rodapé do app (painel e Central): quando a Lupa clica no jogo
+const rodapeDoApp = (config) => (config?.autoTarefa
+  ? 'Lê a tela; clica no jogo no Entregar e seguir, no Alt+L e nas missões automáticas, que estão ligadas.'
+  : 'Lê a tela; só clica no jogo quando você aperta Entregar e seguir ou o Alt+L.');
 const nota = (texto) => h('p', { class: 'nota' }, texto);
 const stat = (rot, val, extra = '') => h('div', { class: 'stat ' + extra }, h('span', { class: 'rot' }, rot), h('span', { class: 'val' + (extra.includes('destaque') ? ' ouro' : '') }, val));
 const par = (rot, val) => h('div', { class: 'par' }, h('span', { class: 'rot' }, rot), h('span', { class: 'val' }, val));
@@ -545,22 +551,26 @@ function cartaoHoje(e) {
 
 // ---------- Entregar e seguir (só no app) ----------
 // Com a tarefa pronta, o app volta à Fonte, entrega ao Capitão, aceita a oferta que mais rende no seu ritmo e viaja para a zona
-// dela, pelos botões do próprio jogo (liberado pelo Brunox em 27/10/2026). Aqui só o botão, o Parar e o andamento.
+// dela, pelos botões do próprio jogo (liberado pelo Brunox em 27/10/2026). Com as missões automáticas ligadas (Ajustes; teste
+// pedido por ele em 29/10/2026), o app faz isso sozinho quando a tarefa fica pronta. Aqui só o botão, o Parar e o andamento.
 function cartaoEntregar(e, ctx) {
   if (typeof ctx?.iniciarAcao !== 'function') return null;
-  const t = e.tarefa, a = ctx.acoes?.[e.nome], agora = Date.now();
+  const t = e.tarefa, a = ctx.acoes?.[e.nome], agora = Date.now(), auto = !!ctx.config?.autoTarefa;
   // cada passo atualiza o "em"; sem notícia há 90 s (a espera mais longa, a da janela coberta, é de 1 min), a tentativa
-  // morreu no meio (página recarregada, app fechado)
-  const rodando = a?.estado === 'rodando' && agora - a.em < 90e3, morreu = a?.estado === 'rodando' && !rodando;
-  const recente = a && !rodando && agora - a.em < 15 * 60e3;
+  // morreu no meio (página recarregada, app fechado). A espera das missões automáticas só vale com elas ligadas e a tarefa
+  // pronta (entregue de outro jeito, ela não diz mais nada)
   const pode = !!t?.pronta;
-  const msg = rodando ? [h('p', { class: 'entregar-status', role: 'status' }, a.texto), h('p', { class: 'entregar-status fraco' }, 'Até terminar, o teclado fica com o jogo desta conta.')]
-    : recente ? h('p', { class: 'entregar-status ' + (morreu ? 'erro' : a.estado), role: 'status' }, morreu ? 'A última tentativa parou no meio. Aperte de novo.' : a.texto)
-    : !pode ? h('p', { class: 'entregar-status fraco' }, !t ? 'Sem tarefa: pegue a primeira com o Capitão da Legião.' : 'Fica ativo quando a tarefa ficar pronta.')
+  const rodando = a?.estado === 'rodando' && agora - a.em < 90e3, morreu = a?.estado === 'rodando' && !rodando;
+  const recente = a && !rodando && agora - a.em < 15 * 60e3 && !(a.estado === 'espera' && !(auto && pode));
+  const texto = (x) => (x.auto ? 'Automático · ' : '') + x.texto;
+  const msg = rodando ? [h('p', { class: 'entregar-status', role: 'status' }, texto(a)), h('p', { class: 'entregar-status fraco' }, 'Até terminar, o teclado fica com o jogo desta conta.')]
+    : recente ? h('p', { class: 'entregar-status ' + (morreu ? 'erro' : a.estado), role: 'status' }, morreu ? 'A última tentativa parou no meio. Aperte de novo.' : texto(a))
+    : !pode ? h('p', { class: 'entregar-status fraco' }, !t ? 'Sem tarefa: pegue a primeira com o Capitão da Legião.' : auto ? 'Entrega sozinho quando a tarefa ficar pronta.' : 'Fica ativo quando a tarefa ficar pronta.')
     : null;
   return h('section', { class: 'cartao entregar', 'aria-label': 'Entregar e seguir' },
     h('div', { class: 'linha-topo' },
-      h('span', { class: 'entregar-titulo' }, h('b', null, 'Entregar e seguir'), h('span', { class: 'fraco entregar-sub' }, 'Entrega, pega a que mais rende no seu ritmo e vai caçar.')),
+      h('span', { class: 'entregar-titulo' }, h('b', null, 'Entregar e seguir', auto ? h('span', { class: 'pilula entregar-auto', title: 'Missões automáticas ligadas (aba Ajustes)' }, 'automático') : null),
+        h('span', { class: 'fraco entregar-sub' }, 'Entrega, pega a que mais rende no seu ritmo e vai caçar.')),
       rodando ? h('button', { type: 'button', class: 'botao', onclick: () => ctx.iniciarAcao('parar', e.nome) }, 'Parar')
         : h('button', { type: 'button', class: 'botao principal', disabled: !pode, onclick: () => ctx.iniciarAcao('tarefa', e.nome) }, 'Entregar e seguir')),
     msg);

@@ -4,7 +4,8 @@ App Electron 44.7.0 que mostra o LoL Idle (lolidle.com) com duas contas (em abas
 regra da extensão: **lê a tela**, nunca compra, vende ou faz pedido ao servidor do jogo por fora. Liberado pelo dono do
 jogo (Brunox) em 26/10/2026: não dá vantagem, só otimiza a jogabilidade. A única exceção são as duas **ações que o
 jogador pede** (seção abaixo): o botão "Entregar e seguir" e o Alt+L, liberados por ele em 27/10/2026, inclusive
-passando pela proteção contra bots do jogo. O **Onde gastar o ouro** (seção própria) baixa os arquivos públicos do motor do
+passando pela proteção contra bots do jogo, e as **missões automáticas** (a mesma entrega, pedida pelo app quando a
+tarefa fica pronta, se o jogador ligar a opção; teste pedido pelo Brunox em 29/10/2026). O **Onde gastar o ouro** (seção própria) baixa os arquivos públicos do motor do
 jogo (os mesmos `lolidle.com/js/*.js` que a página carrega) para simular compras numa página isolada; não manda nada da conta
 e não fala com a API do jogo (o simulador do comparador de builds foi aprovado pelo Brunox em 27/10/2026).
 
@@ -19,13 +20,13 @@ O código da Lupa (pasta `../lupa`, que continua sendo também a extensão do Ch
 | `layout.js` | processo principal | contas puras: retângulos de cada view por modo, zoom automático por metade, zoom guardado, janela ainda visível num monitor; casos em `layout.test.js` |
 | `alertas.js` | processo principal | puro: alertas de uma conta a partir do `estado:<nome>` (tarefa, mochila, pontos, prêmio, sem leitura) e notas da versão em texto puro; casos em `alertas.test.js` |
 | `atalhos.js` | processo principal | puro: quais teclas são do app (`atalhoDe`) e a lista mostrada no menu; casos em `alertas.test.js` |
-| `acoes.js` | processo principal | puro: as regras das ações que o jogador pede (tempo e número de entradas por pedido), o ponto do clique com o zoom e as entradas de clique e tecla; casos em `acoes.test.js` |
+| `acoes.js` | processo principal | puro: as regras das ações que o jogador pede (tempo e número de entradas por pedido), o ponto do clique com o zoom, as entradas de clique e tecla e quando as missões automáticas podem tentar (`autoMotivo`, `autoDepois`); casos em `acoes.test.js` |
 | `oferta.js` | preload das abas do jogo | puro: lê o texto das ofertas do Capitão (quantidade, tempo, XP, ouro, zona), o ritmo do jogador por zona (as sessões `cacada:<nome>`) e escolhe a de mais XP por hora caçando com ela; casos em `acoes.test.js` |
 | `gastar.js` | processo principal | puro: o Onde gastar o ouro. Lê a build da ficha, monta as compras (forja +1, carta, item do Mercado, item da mochila, reset de atributos), pede os combates ao simulador em duas etapas e resume quanto cada uma rende e em quantas horas se paga; casos em `gastar.test.js` |
 | `treino.js` | processo principal | puro: os Pontos e barra. Para onde vão os pontos dos próximos 5 níveis (todos numa habilidade ou num atributo) e qual combinação de 4 habilidades aprendidas rende mais na barra, no mesmo simulador; casos em `treino.test.js` |
 | `simulador.js` | processo principal | baixa o motor público do jogo para `userData/motor-jogo/` (de 6 em 6 h, se pedir) e roda os combates dele numa janela escondida e isolada (`lupasim://`, sessão em memória, sandbox, sem rede) |
 | `sim/sim.html`, `sim/sim.js`, `sim/sim-trabalho.js` | janela escondida do simulador | distribui os combates entre alguns Web Workers, que importam o motor e rodam a caçada (sem chefes nem monstro furioso, como o `gerar-tabelas.mjs` do site) |
-| `acao-jogo.js` | preload das abas do jogo | a sequência do "Entregar e seguir" e a setinha do Alt+L: confere a tela, pede cada clique ou tecla ao main e grava o andamento em `acao:<nome>` |
+| `acao-jogo.js` | preload das abas do jogo | a sequência do "Entregar e seguir" (do botão ou das missões automáticas) e a setinha do Alt+L: confere a tela, pede cada clique ou tecla ao main e grava o andamento em `acao:<nome>` |
 | `armazem.js` | processo principal | o `chrome.storage.local` do app: um JSON em `userData/lupa-dados.json`, gravado 1,5 s depois da última mudança e no máximo 10 s depois da primeira; a versão anterior fica em `.bak`, lida se o principal estiver estragado; casos em `armazem.test.js` |
 | `regras.js` | processo principal | regras de navegação da aba do jogo e das janelas de login (`DA_CONTA`, `DO_JOGO`, `NO_LOGIN`, `DO_GOOGLE`, `permitido`); casos em `regras.test.js`, rodar com `npm test` |
 | `shim-jogo.js` | preload das abas do jogo | o objeto `chrome` que o `content.js` usa (só no mundo isolado, nunca exposto à página) |
@@ -107,7 +108,8 @@ mostra a janela.
 ### Atalhos
 
 `before-input-event` em todas as views (casca, jogos, painel, Central), com `preventDefault` **só** nas teclas abaixo; o
-resto chega ao jogo normalmente. Fora das ações que o jogador pede (abaixo), o app não envia tecla, clique ou comando ao jogo.
+resto chega ao jogo normalmente. Fora das ações que o jogador pede e das missões automáticas (abaixo), o app não envia
+tecla, clique ou comando ao jogo.
 
 | Tecla | Ação |
 |---|---|
@@ -147,7 +149,8 @@ Por isso cada clique ou tecla é uma entrada de verdade, `webContents.sendInputE
   volta à Fonte (botão ou B). Repetir é seguro: "entregar", "tarefa" e a oferta somem no instante em que o clique pega (só repetem
   se ele se perdeu), voltar já voltando, falar de novo com o Capitão, escolher a zona de novo e a viagem repetida não mudam
   nada no jogo. A aba Missões (abre e fecha) não repete. O primeiro passo que falha para tudo e vira o erro no painel. O andamento vai para `acao:<nome>` no armazém
-  (`{ tipo, estado: 'rodando' | 'ok' | 'erro' | 'parado', texto, em }`). O Parar (`lupa:acao` tipo `parar`) interrompe.
+  (`{ tipo, estado: 'rodando' | 'ok' | 'erro' | 'parado' | 'espera', texto, auto, em }`; `espera` e `auto` são das missões
+  automáticas, abaixo). O Parar (`lupa:acao` tipo `parar`) interrompe.
 - **Alt+L**: autoriza a aba ativa por 5 s e 1 entrada; o `acao-jogo.js` clica no `#bt-esconder-coluna` do jogo.
 
 Uma ação por vez entre as contas (`acaoAtual` no main): no lado a lado, duas juntas disputariam o foco entre o apertar e o
@@ -158,6 +161,37 @@ saiu, e o painel não fica parado em "rodando"). Durante a ação o teclado fica
 painel avisa); no fim, se ele ainda está lá, volta para quem o tinha antes da última entrada (o painel do botão, ou a outra
 metade do lado a lado se a pessoa foi digitar lá no meio).
 
+### Missões automáticas
+
+Opção da aba Ajustes do painel (só no app), desligada por padrão: "Entregar e seguir sozinho quando a tarefa ficar pronta
+(teste)", `config.autoTarefa`. Pedida pelo Brunox em 29/10/2026 para testar a automação. O main (`vigiarAuto`, a cada estado
+novo, a cada 15 s, ao mudar a opção e 2 s depois de cada entrega) faz o mesmo pedido do botão (`pedirAcao(a, 'tarefa', true)`),
+com a mesma autorização, as mesmas entradas de verdade e a mesma regra de uma ação por vez. Regras (`acoes.js`, `AUTO`):
+
+- Só com a tarefa pronta numa leitura de até 30 s, na conta que está na tela (aba ativa ou lado a lado) e com a janela aberta
+  e não minimizada. O app não troca de aba nem traz a janela para a frente: para as duas contas, o Lado a lado.
+- Espera 10 s sem a pessoa digitar ou clicar no app (evento `input-event` de todas as views, inclusive a da ação, e os
+  atalhos do app; as entradas que o próprio app manda, marcadas em volta de cada `sendInputEvent`, não contam): o foco vai
+  para o jogo da ação, um B ou M digitado no chat no meio viraria atalho do jogo, e o personagem sairia do que ela está
+  fazendo. Não tenta com a mochila cheia (o Capitão recusa a entrega): o painel diz que espera espaço. Não pede com a
+  página principal carregando ou caída (o preload ainda não ouve o pedido). Fora do pacote, `globalThis.lupaTeste.ultimoUso()`
+  deixa o `teste:acao` conferir isso.
+- O `acao-jogo.js` confere a tela antes da primeira entrada e, se não dá, nem começa (`Espera`, resultado `espera`, nova
+  olhada em 30 s, sem contar como falha): a tarefa ainda não aparece pronta na tela (a leitura estava atrasada), a página está
+  escondida (janela coberta) ou a coluna do jogo está escondida com a janela sem foco no Windows (as teclas B e M só chegam
+  com foco). O texto da espera vai pelo `acao:fim` para o main, que o grava no painel só quando muda.
+- Depois de uma entrega, a próxima tentativa espera 1 min (a leitura ainda mostra a tarefa entregue por uns segundos). Erro
+  (inclusive página recarregada ou caída no meio): espera 5 min; com 3 erros na mesma tarefa, para. O Parar também para.
+  Com a opção ligada, a entrega do botão conta do mesmo jeito (sem isso, o Parar ou um erro dela seriam seguidos por uma
+  entrega automática da mesma tarefa 2 s depois).
+  Parado, só volta quando a leitura mostra uma tarefa em andamento (a próxima), quando a pessoa aperta o botão ou quando a
+  opção é desligada e ligada de novo. Desligar no meio de uma entrega automática a interrompe.
+- No painel, o cartão ganha a pílula "automático", e o andamento de uma entrega automática vem com "Automático · " na frente.
+  O rodapé do painel e da Central diz que as missões automáticas estão ligadas.
+
+Todo pedido (do botão, do Alt+L ou automático) espera a página confirmar que o recebeu (`acao:comecou`); sem isso em 5 s
+(página principal carregando, caída), a autorização some: senão ficaria presa os 4 min, recusando o botão das duas contas.
+
 O main só manda a entrada se a aba que pede está autorizada, ainda no prazo e com entradas, e à vista (janela aberta, não
 minimizada, a view no layout). O clique vem em px CSS e vira px da view pelo zoom do jogo; ponto fora da view é recusado.
 Antes de clicar ou apertar, o main dá `focus()` à view do jogo (com o foco no painel, onde fica o botão, o Chromium
@@ -166,7 +200,8 @@ Com a janela coberta por outra (ou a tela travada), o Chromium marca a página c
 o `acao-jogo.js` espera a página voltar à vista (até 1 min, avisando no painel) antes de cada entrada. Teste ponta a ponta: `npm run teste:acao` roda o app de verdade
 contra o jogo falso de `teste-acao/jogo-falso.html` (com a mesma proteção e o mesmo caminho: rastreio, Capitão, ofertas,
 mapa), com zoom 1,2, um pedido duplo e o Alt+L no meio, apertar de novo logo depois, a coluna escondida (teclas), o Alt+L,
-a página recarregando no meio e o Parar; fotos e resultado em `teste-acao/saida/`. Não cobre duas contas ao mesmo tempo. Se o jogo mudar os
+a página recarregando no meio, o Parar e as missões automáticas (ligadas pela chave de Ajustes: a entrega sozinha, que não
+recomeça depois, e o Parar no meio de uma, que não recomeça com a mesma tarefa ainda pronta); fotos e resultado em `teste-acao/saida/`. Não cobre duas contas ao mesmo tempo. Se o jogo mudar os
 botões, atualizar o jogo falso junto.
 
 ## Onde gastar o ouro
@@ -262,11 +297,12 @@ Lupa:
 | `lupa:uaFirefox` | sendSync | → o User-Agent de Firefox (só o preload das páginas do Google usa) |
 | `lupa:acao` | invoke | só do painel: `{ tipo: 'tarefa' \| 'parar', nome }` → `{ ok }` ou `{ erro }` |
 | `lupa:gastar` | invoke | do painel ou da Central: `{ nome }` → `{ ok }` (a rodada grava `gastar:<nome>` e `treino:<nome>`) ou `{ erro }` |
-| `acao:iniciar` | main → jogo | `{ tipo: 'tarefa' \| 'coluna' }`: começa a ação na aba autorizada |
+| `acao:iniciar` | main → jogo | `{ tipo: 'tarefa' \| 'coluna', auto, foco }`: começa a ação na aba autorizada (`auto`: pedida pelas missões automáticas; `foco`: a janela do app em foco no Windows) |
 | `acao:parar` | main → jogo | interrompe o "Entregar e seguir" no próximo passo |
 | `acao:clicar` | invoke | do jogo: `{ x, y }` em px CSS → `true` se mandou o clique |
 | `acao:tecla` | invoke | do jogo: `{ tecla: 'b' \| 'm' }` → `true` se mandou |
-| `acao:fim` | invoke | do jogo: a ação acabou; a autorização da aba some |
+| `acao:comecou` | invoke | do jogo: recebeu o `acao:iniciar` (sem isso em 5 s, o main desiste do pedido) |
+| `acao:fim` | invoke | do jogo: `{ estado: 'ok' \| 'erro' \| 'parado' \| 'espera', texto }`: a ação acabou; a autorização da aba some (o resultado e o texto da espera contam para as missões automáticas) |
 
 Casca:
 
