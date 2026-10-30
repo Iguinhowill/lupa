@@ -8,7 +8,8 @@
 //     eventos,                // { [nome]: [{ ts, tipo, titulo, texto, item?, raridade?, qual? }] }  (chave "eventos:<nome>")
 //     icones,                 // { chave: dataURL }  (chave "icones")
 //     menores,                // { [chave]: { ouro, gemas, n, em } }  (chave "mercado:menores": menor preço visto no Mercado por versão)
-//     acoes,                  // { [nome]: { tipo, estado: 'rodando'|'ok'|'erro'|'parado', texto, em } }  (chave "acao:<nome>", só no app)
+//     acoes,                  // { [nome]: { tipo, estado: 'rodando'|'ok'|'erro'|'parado'|'espera', texto, auto, em } }  (chave "acao:<nome>", só no app;
+//                             //   auto: veio das missões automáticas; 'espera': elas esperando a janela, o foco ou espaço na mochila)
 //     iniciarAcao(tipo, nome),// só no app: 'tarefa' (Entregar e seguir) ou 'parar'; sem ela o cartão nem aparece
 //                             // (config.autoTarefa: as missões automáticas, em que o app pede a mesma entrega sozinho)
 //     gastos,                 // { [nome]: resultado do Onde gastar o ouro }  (chave "gastar:<nome>", que o app calcula)
@@ -556,10 +557,11 @@ function cartaoEntregar(e, ctx) {
   if (typeof ctx?.iniciarAcao !== 'function') return null;
   const t = e.tarefa, a = ctx.acoes?.[e.nome], agora = Date.now(), auto = !!ctx.config?.autoTarefa;
   // cada passo atualiza o "em"; sem notícia há 90 s (a espera mais longa, a da janela coberta, é de 1 min), a tentativa
-  // morreu no meio (página recarregada, app fechado). A espera das missões automáticas some quando elas são desligadas
-  const rodando = a?.estado === 'rodando' && agora - a.em < 90e3, morreu = a?.estado === 'rodando' && !rodando;
-  const recente = a && !rodando && agora - a.em < 15 * 60e3 && !(a.estado === 'espera' && !auto);
+  // morreu no meio (página recarregada, app fechado). A espera das missões automáticas só vale com elas ligadas e a tarefa
+  // pronta (entregue de outro jeito, ela não diz mais nada)
   const pode = !!t?.pronta;
+  const rodando = a?.estado === 'rodando' && agora - a.em < 90e3, morreu = a?.estado === 'rodando' && !rodando;
+  const recente = a && !rodando && agora - a.em < 15 * 60e3 && !(a.estado === 'espera' && !(auto && pode));
   const texto = (x) => (x.auto ? 'Automático · ' : '') + x.texto;
   const msg = rodando ? [h('p', { class: 'entregar-status', role: 'status' }, texto(a)), h('p', { class: 'entregar-status fraco' }, 'Até terminar, o teclado fica com o jogo desta conta.')]
     : recente ? h('p', { class: 'entregar-status ' + (morreu ? 'erro' : a.estado), role: 'status' }, morreu ? 'A última tentativa parou no meio. Aperte de novo.' : texto(a))

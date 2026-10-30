@@ -2,7 +2,7 @@
 // o app de verdade (main.js) abre o jogo falso (jogo-falso.html, servido aqui em 127.0.0.1:8770) com dados numa pasta
 // temporária. O jogo falso tem a mesma proteção contra bots do jogo (clique com isTrusted falso não vale e é contado) e o
 // mesmo caminho: rastreio da tarefa → Capitão → entregar → tarefa → ofertas → mapa → Ir.
-// Também as missões automáticas (a chave da aba Ajustes): a entrega sozinha e o Parar no meio dela.
+// Também as missões automáticas (a chave da aba Ajustes): a entrega sozinha e o Parar no meio dela ou de uma do botão.
 // Uso, na pasta app: `npm run teste:acao`. Sai com código 1 se algo falhar; fotos e resultado.json em teste-acao/saida/.
 // As teclas (B e M com a coluna escondida, e o Alt+L) só chegam com a janela do teste em foco: sem foco, essas partes
 // ficam marcadas como puladas (o Windows não deixa um programa de fundo roubar o foco).
@@ -232,6 +232,22 @@ app.whenReady().then(async () => {
     out.c8depois = (await jogo.executeJavaScript('window.__d')).passos.slice(n8);
     out.c8tarefaPronta = await jogo.executeJavaScript(`document.querySelector('#rastreio-tarefa').classList.contains('pronta')`);
     conferir(out.c8tarefaPronta && !out.c8depois.length && (await acaoDe(painel))?.estado === 'parado', '8) depois do Parar, a automática recomeçou: ' + out.c8depois.join(' → '));
+
+    // 9) com as missões automáticas ligadas, o Parar numa entrega do botão também vale: a automática não a refaz 2 s depois
+    const t9 = Date.now();
+    out.c9inicio = await painel.executeJavaScript(`lupaApp.acao('tarefa', 'Teste 1')`);
+    let a9 = null;
+    for (let k = 0; k < 60 && !(a9?.em >= t9 && a9.estado === 'rodando'); k++) { await espera(250); a9 = await acaoDe(painel); }
+    out.c9parar = await painel.executeJavaScript(`lupaApp.acao('parar', 'Teste 1')`);
+    for (let k = 0; k < 30 && !(a9?.em >= t9 && a9.estado !== 'rodando'); k++) { await espera(300); a9 = await acaoDe(painel); }
+    out.c9parado = a9;
+    await espera(1500);
+    const n9 = (await jogo.executeJavaScript('window.__d')).passos.length;
+    await espera(8000);
+    out.c9depois = (await jogo.executeJavaScript('window.__d')).passos.slice(n9);
+    const fim9 = await acaoDe(painel);
+    conferir(out.c9inicio?.ok && a9?.estado === 'parado' && !a9.auto, '9) o Parar não parou a entrega do botão: ' + JSON.stringify(a9));
+    conferir(!out.c9depois.length && fim9?.estado === 'parado' && !fim9.auto, '9) depois do Parar no botão, a automática recomeçou: ' + out.c9depois.join(' → ') + ' ' + JSON.stringify(fim9));
   } catch (e) { falhas.push(String(e?.stack || e)); }
   Object.assign(out, { falhas, pulados });
   fs.writeFileSync(path.join(SAIDA, 'resultado.json'), JSON.stringify(out, null, 2));

@@ -42,22 +42,24 @@ function tecla(k) {
 }
 
 // ---------- missões automáticas ----------
-// fresco: a leitura da Lupa precisa ser recente; semTeclar: espera a pessoa parar de digitar no app (o foco vai para o jogo
-// da ação, e um B ou M digitado no meio viraria atalho do jogo); espera: nova olhada depois de uma tentativa que nem começou
+// fresco: a leitura da Lupa precisa ser recente; semUso: espera a pessoa parar de digitar e de clicar no app (o foco vai para
+// o jogo da ação, um B ou M digitado no meio viraria atalho do jogo, e o personagem sairia do que ela está fazendo); espera: nova olhada depois de uma tentativa que nem começou
 // (janela coberta, leitura atrasada); pausa: depois de uma falha; falhas: com tantas na mesma tarefa, o automático para até
 // a próxima (ou até o jogador apertar o botão); depoisOk: a leitura ainda mostra a tarefa entregue como pronta por uns segundos
-const AUTO = { fresco: 30e3, semTeclar: 10e3, espera: 30e3, pausa: 5 * 60e3, falhas: 3, depoisOk: 60e3 };
+const AUTO = { fresco: 30e3, semUso: 10e3, espera: 30e3, pausa: 5 * 60e3, falhas: 3, depoisOk: 60e3 };
 // Por que a conta não tenta agora (null = pode). `est` é o último estado:<nome>, `reg` o registro das tentativas dessa tarefa
-// ({ falhas, proxima }), `aVista` se a aba dela está na tela (aba ativa ou lado a lado), `ultimaTecla` a última tecla da pessoa
-function autoMotivo({ est, reg, agora, aVista, ultimaTecla = 0 }) {
+// ({ falhas, proxima }), `aVista` se a aba dela está na tela (aba ativa ou lado a lado), `ultimoUso` a última tecla ou clique
+// da pessoa no app
+function autoMotivo({ est, reg, agora, aVista, ultimoUso = 0 }) {
   const t = est && est.tarefa;
   if (!t || !t.pronta) return 'sem-tarefa';
   if (!(agora - est.ts <= AUTO.fresco)) return 'leitura-velha';
   if (!aVista) return 'fora-da-tela';
-  if (agora - ultimaTecla < AUTO.semTeclar) return 'digitando';
+  if (agora - ultimoUso < AUTO.semUso) return 'em-uso';
+  // parado vem antes da mochila: o painel não troca o "Parado por você" (ou o erro) por uma espera que nunca vai andar
+  if (reg && reg.falhas >= AUTO.falhas) return 'parado';
   const m = est.mochila;      // o Capitão não entrega com a mochila cheia (o item do prêmio não tem onde ir)
   if (m && m.total > 0 && m.usados >= m.total) return 'mochila';
-  if (reg && reg.falhas >= AUTO.falhas) return 'parado';
   if (reg && agora < reg.proxima) return 'aguarda';
   return null;
 }

@@ -170,18 +170,25 @@ com a mesma autorização, as mesmas entradas de verdade e a mesma regra de uma 
 
 - Só com a tarefa pronta numa leitura de até 30 s, na conta que está na tela (aba ativa ou lado a lado) e com a janela aberta
   e não minimizada. O app não troca de aba nem traz a janela para a frente: para as duas contas, o Lado a lado.
-- Espera 10 s sem a pessoa digitar no app (o foco vai para o jogo da ação, e um B ou M digitado no chat no meio viraria
-  atalho do jogo). Não tenta com a mochila cheia (o Capitão recusa a entrega): o painel diz que espera espaço.
+- Espera 10 s sem a pessoa digitar ou clicar no app (evento `input-event` de todas as views, menos as entradas que o app
+  manda na view da ação em andamento): o foco vai para o jogo da ação, um B ou M digitado no chat no meio viraria atalho do
+  jogo, e o personagem sairia do que ela está fazendo. Não tenta com a mochila cheia (o Capitão recusa a entrega): o painel
+  diz que espera espaço. Não pede a uma aba carregando ou caída (o preload ainda não ouve o pedido).
 - O `acao-jogo.js` confere a tela antes da primeira entrada e, se não dá, nem começa (`Espera`, resultado `espera`, nova
   olhada em 30 s, sem contar como falha): a tarefa ainda não aparece pronta na tela (a leitura estava atrasada), a página está
   escondida (janela coberta) ou a coluna do jogo está escondida com a janela sem foco no Windows (as teclas B e M só chegam
   com foco). O texto da espera vai pelo `acao:fim` para o main, que o grava no painel só quando muda.
 - Depois de uma entrega, a próxima tentativa espera 1 min (a leitura ainda mostra a tarefa entregue por uns segundos). Erro
   (inclusive página recarregada ou caída no meio): espera 5 min; com 3 erros na mesma tarefa, para. O Parar também para.
+  Com a opção ligada, a entrega do botão conta do mesmo jeito (sem isso, o Parar ou um erro dela seriam seguidos por uma
+  entrega automática da mesma tarefa 2 s depois).
   Parado, só volta quando a leitura mostra uma tarefa em andamento (a próxima), quando a pessoa aperta o botão ou quando a
   opção é desligada e ligada de novo. Desligar no meio de uma entrega automática a interrompe.
 - No painel, o cartão ganha a pílula "automático", e o andamento de uma entrega automática vem com "Automático · " na frente.
   O rodapé do painel e da Central diz que as missões automáticas estão ligadas.
+
+Todo pedido (do botão, do Alt+L ou automático) espera a página confirmar que o recebeu (`acao:comecou`); sem isso em 5 s
+(página carregando, caída), a autorização some: senão ficaria presa os 4 min, recusando o botão das duas contas.
 
 O main só manda a entrada se a aba que pede está autorizada, ainda no prazo e com entradas, e à vista (janela aberta, não
 minimizada, a view no layout). O clique vem em px CSS e vira px da view pelo zoom do jogo; ponto fora da view é recusado.
@@ -292,6 +299,7 @@ Lupa:
 | `acao:parar` | main → jogo | interrompe o "Entregar e seguir" no próximo passo |
 | `acao:clicar` | invoke | do jogo: `{ x, y }` em px CSS → `true` se mandou o clique |
 | `acao:tecla` | invoke | do jogo: `{ tecla: 'b' \| 'm' }` → `true` se mandou |
+| `acao:comecou` | invoke | do jogo: recebeu o `acao:iniciar` (sem isso em 5 s, o main desiste do pedido) |
 | `acao:fim` | invoke | do jogo: `{ estado: 'ok' \| 'erro' \| 'parado' \| 'espera', texto }`: a ação acabou; a autorização da aba some (o resultado e o texto da espera contam para as missões automáticas) |
 
 Casca:

@@ -182,9 +182,13 @@ function criarJogo(a) {
   // a página recarregou ou caiu no meio de uma entrega: a autorização some na hora. O motivo vai para o painel só quando a
   // página velha já saiu (did-navigate, ou did-fail-load se a recarga falhou): até lá ela ainda roda e gravaria um passo por
   // cima ("rodando" de novo). Navegação cancelada: a página velha continua e grava o próprio erro (o clique dela é recusado)
-  let recarregou = null;
-  const avisarRecarga = () => { if (recarregou) avisarFimDaAcao(recarregou, 'A página do jogo recarregou no meio. Aperte de novo.'); recarregou = null; };
-  wc.on('did-start-navigation', (d) => { if (d.isMainFrame && !d.isSameDocument && encerrarAcao(a) === 'tarefa') recarregou = pref.nomes[a.id]; });
+  let recarregou = null;      // { nome, auto }: de quem era a entrega que a recarga cortou
+  const avisarRecarga = () => { if (recarregou) avisarFimDaAcao(recarregou.nome, 'A página do jogo recarregou no meio. Aperte de novo.', recarregou.auto); recarregou = null; };
+  wc.on('did-start-navigation', (d) => {
+    if (!d.isMainFrame || d.isSameDocument) return;
+    const auto = acaoAtual?.aba === a.id && !!acaoAtual.auto;
+    if (encerrarAcao(a) === 'tarefa') recarregou = { nome: pref.nomes[a.id], auto };
+  });
   wc.on('did-navigate', avisarRecarga);
   wc.on('did-fail-load', (_e, _cod, _desc, _url, principal) => { if (principal) avisarRecarga(); });
   wc.on('did-stop-loading', () => { recarregou = null; });
@@ -530,14 +534,22 @@ function atualizarSelo() {
 // O pedido (botão do painel ou Alt+L) autoriza UMA aba por pouco tempo (Acoes.REGRAS), e só uma ação por vez entre as contas:
 // no lado a lado, duas juntas disputariam o foco entre o apertar e o soltar do mouse. O preload do jogo (acao-jogo.js) pede
 // cada clique ou tecla e o main manda uma entrada de verdade (sendInputEvent), só na aba que está à vista.
-let acaoAtual = null;      // { aba, tipo, ate, resta, devolver, auto }: a ação em andamento (devolver: ver tomarFoco)
+let acaoAtual = null;      // { aba, tipo, ate, resta, devolver, auto, comecou }: a ação em andamento (devolver: ver tomarFoco)
 const emAndamento = () => !!acaoAtual && Date.now() <= acaoAtual.ate;
 // recusa (false) se já tem uma ação em andamento: um segundo pedido não troca nem renova a autorização da primeira.
-// `auto`: pedido pelas missões automáticas, não pelo botão (o preload confere a tela antes e, se não der, nem começa)
+// `auto`: pedido pelas missões automáticas, não pelo botão (o preload confere a tela antes e, se não der, nem começa).
+// A página confirma que recebeu (acao:comecou); sem isso em 5 s (carregando, caída, sem o preload), a autorização some,
+// senão ficaria presa os 4 min recusando o botão das duas contas
 function pedirAcao(a, tipo, auto = false) {
-  if (!a?.view || a.tipo !== 'jogo' || emAndamento()) return false;
-  acaoAtual = { aba: a.id, ...Acoes.autorizacao(tipo), devolver: null, auto };
-  a.view.webContents.send('acao:iniciar', { tipo, auto, foco: !!janela?.isFocused() });
+  const wc = a?.view?.webContents;
+  if (!wc || a.tipo !== 'jogo' || emAndamento() || wc.isLoading() || wc.isCrashed()) return false;
+  const aut = { aba: a.id, ...Acoes.autorizacao(tipo), devolver: null, auto, comecou: false };
+  acaoAtual = aut;
+  wc.send('acao:iniciar', { tipo, auto, foco: !!janela?.isFocused() });
+  setTimeout(() => {
+    if (acaoAtual !== aut || aut.comecou) return;
+    encerrarAcao(a, auto ? null : 'A página do jogo não respondeu (ainda carregando?). Aperte de novo.', false, auto ? 'espera' : 'erro');
+  }, 5000);
   return true;
 }
 const avisarFimDaAcao = (nome, motivo, auto = false) => { if (nome) armazem.set({ ['acao:' + nome]: { tipo: 'tarefa', estado: 'erro', texto: motivo, auto, em: Date.now() } }); };
@@ -562,7 +574,9 @@ function encerrarAcao(a, motivo, caiu = false, resultado = 'erro') {
   acaoAtual = null;
   if (devolver && !devolver.isDestroyed() && (atual === wc || (caiu && !atual))) devolver.focus();
   if (motivo && tipo === 'tarefa') avisarFimDaAcao(nome, motivo, auto);
-  if (auto && nome) autoTentativas.set(nome, Acoes.autoDepois(autoTentativas.get(nome), resultado, Date.now()));
+  // a entrega do botão também conta quando as missões automáticas estão ligadas: sem isso, o Parar ou um erro dela seriam
+  // seguidos 2 s depois por uma entrega automática da mesma tarefa
+  if (tipo === 'tarefa' && nome && (auto || autoLigado())) autoTentativas.set(nome, Acoes.autoDepois(autoTentativas.get(nome), resultado, Date.now()));
   if (tipo === 'tarefa') setTimeout(vigiarAuto, 2000);      // a outra conta pode estar esperando a vez
   return tipo;
 }
@@ -578,10 +592,10 @@ function abaAutorizada(wc) {
 // Com a opção ligada (config.autoTarefa, aba Ajustes do painel), o app pede sozinho o mesmo "Entregar e seguir" do botão
 // quando a tarefa de uma conta fica pronta. Só na conta que está na tela (aba ativa ou lado a lado, janela aberta e não
 // minimizada): o app não troca de aba nem traz a janela para a frente sozinho, e com a página escondida os cliques não
-// chegam. Espera 10 s sem a pessoa digitar no app e não tenta com a mochila cheia. Depois de uma falha, espera 5 min; com 3
+// chegam. Espera 10 s sem a pessoa digitar ou clicar no app e não tenta com a mochila cheia. Depois de uma falha, espera 5 min; com 3
 // falhas na mesma tarefa, ou com o Parar, para até aparecer uma tarefa nova ou a pessoa apertar o botão (acoes.js, AUTO).
 const autoTentativas = new Map();      // nome → { falhas, proxima }: zera quando a leitura mostra uma tarefa em andamento
-let ultimaTecla = 0, autoAntes = false;
+let ultimoUso = 0, autoAntes = false;      // ultimoUso: a última tecla ou clique da pessoa no app (ver ligarAtalhos)
 const autoLigado = () => !!armazem.get('config').config?.autoTarefa;
 // a espera das missões automáticas no painel (estado 'espera'); a mesma frase não é regravada a cada olhada
 function avisarAuto(nome, texto) {
@@ -596,7 +610,8 @@ function vigiarAuto() {
     const nome = a.tipo === 'jogo' && a.view && pref.nomes[a.id], est = nome && estados.get(nome);
     if (!est) continue;
     if (est.tarefa && !est.tarefa.pronta) autoTentativas.delete(nome);      // tarefa nova em andamento: as falhas zeram
-    const motivo = Acoes.autoMotivo({ est, reg: autoTentativas.get(nome), agora, aVista: modo() === a.id || modo() === 'lado', ultimaTecla });
+    if (a.view.webContents.isLoading() || a.view.webContents.isCrashed()) continue;      // o preload ainda não ouve o pedido
+    const motivo = Acoes.autoMotivo({ est, reg: autoTentativas.get(nome), agora, aVista: modo() === a.id || modo() === 'lado', ultimoUso });
     if (motivo === 'mochila') avisarAuto(nome, 'Esperando espaço na mochila: cheia, o Capitão não tem onde pôr o item da tarefa.');
     if (!motivo && pedirAcao(a, 'tarefa', true)) return;
   }
@@ -615,8 +630,14 @@ function mudouAuto() {
 // só as teclas do atalhos.js são do app: o preventDefault vale só para elas, o resto segue para a página. Fora as ações
 // acima, o app não injeta tecla, clique ou comando no jogo
 function ligarAtalhos(wc) {
+  // as missões automáticas esperam a pessoa parar de digitar e de clicar. As entradas que o app manda na view da ação em
+  // andamento não contam; o que a pessoa faz em outra view (a outra metade, o painel) conta
+  wc.on('input-event', (_e, input) => {
+    if (!['mouseDown', 'rawKeyDown', 'keyDown'].includes(input.type)) return;
+    if (emAndamento() && abaDe(wc)?.id === acaoAtual.aba) return;
+    ultimoUso = Date.now();
+  });
   wc.on('before-input-event', (e, input) => {
-    if (input.type === 'keyDown' && !acaoAtual) ultimaTecla = Date.now();      // as missões automáticas esperam a pessoa parar de digitar
     const acao = atalhoDe(input);
     if (!acao) return;
     e.preventDefault();
@@ -736,6 +757,8 @@ function ligarIpc() {
   });
   // a ação acabou; `estado` ('ok', 'erro', 'parado' ou 'espera') conta para as missões automáticas, e o `texto` de uma
   // espera delas vai para o painel
+  // a página recebeu o acao:iniciar (sem isso em 5 s, a autorização some: ver pedirAcao)
+  ipcMain.handle('acao:comecou', (e) => { const a = abaDe(e.sender); if (a && acaoAtual?.aba === a.id) acaoAtual.comecou = true; });
   ipcMain.handle('acao:fim', (e, r) => {
     const a = abaDe(e.sender);
     if (!a) return;

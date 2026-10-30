@@ -201,10 +201,12 @@
   ipcRenderer.on('acao:iniciar', async (_e, { tipo, auto: sozinho = false, foco: f = true } = {}) => {
     if (rodando) return;
     rodando = true; parar = false; auto = !!sozinho; foco = !!f;
+    ipcRenderer.invoke('acao:comecou').catch(() => {});      // sem isso em 5 s, o main desiste do pedido
     const quem = nome();
     let fim = 'erro', espera = '';
     try {
       if (tipo === 'coluna') { await alternarColuna(); fim = 'ok'; }
+      else if (tipo === 'tarefa' && !quem && auto) fim = 'espera';      // a página acabou de abrir: a ficha ainda não apareceu
       else if (tipo === 'tarefa' && quem) {
         // a entrega automática só escreve no painel depois de conferir a tela (senão cada olhada à toa apagaria a última notícia)
         if (!auto) status(quem, { tipo, estado: 'rodando', texto: 'Começando…' });

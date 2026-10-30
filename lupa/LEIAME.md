@@ -63,7 +63,7 @@ nunca em laço. Liberado pelo Brunox em 27/10/2026, que pediu também que passas
 **Missões automáticas (só no app de PC, em teste):** em Ajustes, "Entregar e seguir sozinho quando a tarefa ficar pronta"
 (desligada por padrão; o Brunox pediu para testar em 29/10/2026). O app faz o Entregar e seguir sem você apertar, só na
 conta que está na tela (para as duas, use o Lado a lado) e com a janela à vista: minimizada ou coberta por outra, os
-cliques não chegam ao jogo. Espera você parar de digitar, não tenta com a mochila cheia e, com a coluna do jogo escondida,
+cliques não chegam ao jogo. Espera você parar de digitar e clicar no app, não tenta com a mochila cheia e, com a coluna do jogo escondida,
 precisa da janela em foco (as teclas B e M). Com 3 erros na mesma tarefa, ou se você apertar Parar, espera a próxima
 tarefa ou o botão.
 

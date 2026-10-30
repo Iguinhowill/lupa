@@ -34,7 +34,7 @@ test('clique e teclas: só B e M, apertar e soltar', () => {
   for (const k of ['q', 'Enter', '', null, 'bm']) assert.equal(Acoes.tecla(k), null, String(k));
 });
 
-test('missões automáticas: só com a tarefa pronta, leitura recente, conta à vista, sem digitar e com espaço na mochila', () => {
+test('missões automáticas: só com a tarefa pronta, leitura recente, conta à vista, sem a pessoa mexendo e com espaço na mochila', () => {
   const agora = 1e12, pronta = { ts: agora - 2000, tarefa: { pronta: true }, mochila: { usados: 20, total: 34 } };
   const m = (x) => Acoes.autoMotivo({ est: pronta, agora, aVista: true, ...x });
   assert.equal(m(), null);
@@ -44,11 +44,12 @@ test('missões automáticas: só com a tarefa pronta, leitura recente, conta à 
   assert.equal(m({ est: { ...pronta, ts: agora - Acoes.AUTO.fresco - 1 } }), 'leitura-velha');
   assert.equal(m({ est: { ...pronta, ts: undefined } }), 'leitura-velha');
   assert.equal(m({ aVista: false }), 'fora-da-tela');
-  assert.equal(m({ ultimaTecla: agora - 3000 }), 'digitando');
-  assert.equal(m({ ultimaTecla: agora - Acoes.AUTO.semTeclar }), null);
+  assert.equal(m({ ultimoUso: agora - 3000 }), 'em-uso');
+  assert.equal(m({ ultimoUso: agora - Acoes.AUTO.semUso }), null);
   assert.equal(m({ est: { ...pronta, mochila: { usados: 34, total: 34 } } }), 'mochila');
   assert.equal(m({ est: { ...pronta, mochila: { usados: 0, total: 0 } } }), null, 'mochila não lida não segura');
   assert.equal(m({ reg: { falhas: Acoes.AUTO.falhas, proxima: 0 } }), 'parado');
+  assert.equal(m({ reg: { falhas: Acoes.AUTO.falhas, proxima: 0 }, est: { ...pronta, mochila: { usados: 34, total: 34 } } }), 'parado', 'parada, a mochila cheia não vira espera');
   assert.equal(m({ reg: { falhas: 1, proxima: agora + 1 } }), 'aguarda');
   assert.equal(m({ reg: { falhas: 1, proxima: agora } }), null);
 });

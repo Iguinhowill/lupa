@@ -139,7 +139,7 @@ function desenharAjustes() {
       chave(config.autoTarefa, 'Entregar e seguir sozinho quando a tarefa ficar pronta (teste)', () => salvarConfig({ autoTarefa: !config.autoTarefa })),
       nota('Faz o mesmo do botão Entregar e seguir da aba Tarefa: volta à Fonte, entrega ao Capitão, pega a tarefa que mais rende no seu ritmo e viaja para a zona dela. '
         + 'Só na conta que está na tela (para as duas, use o Lado a lado) e com a janela da Lupa à vista: minimizada ou coberta por outra, os cliques não chegam ao jogo. '
-        + 'Espera você parar de digitar e não tenta com a mochila cheia. Com 3 erros na mesma tarefa, ou se você apertar Parar, espera a próxima tarefa ou o botão.')) : null,
+        + 'Espera você parar de digitar e clicar no app e não tenta com a mochila cheia. Com 3 erros na mesma tarefa, ou se você apertar Parar, espera a próxima tarefa ou o botão.')) : null,
     secao('Lateral do jogo',
       chave(config.tema, 'Tema da Lupa: painéis escuros e botões discretos no lugar do visual do jogo', () => salvarConfig({ tema: !config.tema })),
       chave(config.semBonusLateral, 'Esconder a lista de bônus de XP (Twitch, Kick, voto e guilda estão na aba Timers)', () => salvarConfig({ semBonusLateral: !config.semBonusLateral })),
