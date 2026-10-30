@@ -1,7 +1,8 @@
 // Lupa (app) · as entradas que o app manda ao jogo nas ações que o jogador pede (puro, testado em acoes.test.js).
 // Só duas ações, liberadas pelo Brunox em 27/10/2026: "Entregar e seguir" (botão do painel) e a setinha da coluna (Alt+L).
-// Cada pedido do jogador autoriza UMA aba por pouco tempo e um número máximo de entradas; o preload do jogo
-// (acao-jogo.js) pede cada clique ou tecla, e o main só manda se a autorização vale.
+// Cada pedido autoriza UMA aba por pouco tempo e um número máximo de entradas; o preload do jogo (acao-jogo.js) pede cada
+// clique ou tecla, e o main só manda se a autorização vale. As missões automáticas (opção da aba Ajustes, teste pedido pelo
+// Brunox em 29/10/2026) fazem o mesmo pedido do botão quando a tarefa fica pronta; as regras de quando podem estão no fim.
 'use strict';
 
 // ms: quanto tempo a autorização vale; entradas: quantos cliques/teclas no máximo (a tarefa tem até 9 passos, e cada um
@@ -40,4 +41,35 @@ function tecla(k) {
   return TECLAS.has(t) ? [{ type: 'keyDown', keyCode: t }, { type: 'keyUp', keyCode: t }] : null;
 }
 
-module.exports = { REGRAS, TECLAS, INTERVALO, autorizacao, gastar, pontoNaView, clique, tecla };
+// ---------- missões automáticas ----------
+// fresco: a leitura da Lupa precisa ser recente; semTeclar: espera a pessoa parar de digitar no app (o foco vai para o jogo
+// da ação, e um B ou M digitado no meio viraria atalho do jogo); espera: nova olhada depois de uma tentativa que nem começou
+// (janela coberta, leitura atrasada); pausa: depois de uma falha; falhas: com tantas na mesma tarefa, o automático para até
+// a próxima (ou até o jogador apertar o botão); depoisOk: a leitura ainda mostra a tarefa entregue como pronta por uns segundos
+const AUTO = { fresco: 30e3, semTeclar: 10e3, espera: 30e3, pausa: 5 * 60e3, falhas: 3, depoisOk: 60e3 };
+// Por que a conta não tenta agora (null = pode). `est` é o último estado:<nome>, `reg` o registro das tentativas dessa tarefa
+// ({ falhas, proxima }), `aVista` se a aba dela está na tela (aba ativa ou lado a lado), `ultimaTecla` a última tecla da pessoa
+function autoMotivo({ est, reg, agora, aVista, ultimaTecla = 0 }) {
+  const t = est && est.tarefa;
+  if (!t || !t.pronta) return 'sem-tarefa';
+  if (!(agora - est.ts <= AUTO.fresco)) return 'leitura-velha';
+  if (!aVista) return 'fora-da-tela';
+  if (agora - ultimaTecla < AUTO.semTeclar) return 'digitando';
+  const m = est.mochila;      // o Capitão não entrega com a mochila cheia (o item do prêmio não tem onde ir)
+  if (m && m.total > 0 && m.usados >= m.total) return 'mochila';
+  if (reg && reg.falhas >= AUTO.falhas) return 'parado';
+  if (reg && agora < reg.proxima) return 'aguarda';
+  return null;
+}
+// o registro depois de uma tentativa: 'ok' só segura a próxima por um minuto; 'espera' (não começou) olha de novo em 30 s;
+// 'parado' (o jogador apertou Parar) para o automático nessa tarefa; erro conta uma falha e espera 5 min
+function autoDepois(reg, resultado, agora) {
+  const r = { falhas: 0, proxima: 0, ...reg };
+  if (resultado === 'ok') return { falhas: 0, proxima: agora + AUTO.depoisOk };
+  if (resultado === 'espera') r.proxima = agora + AUTO.espera;
+  else if (resultado === 'parado') r.falhas = AUTO.falhas;
+  else { r.falhas++; r.proxima = agora + AUTO.pausa; }
+  return r;
+}
+
+module.exports = { REGRAS, TECLAS, INTERVALO, autorizacao, gastar, pontoNaView, clique, tecla, AUTO, autoMotivo, autoDepois };

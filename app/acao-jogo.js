@@ -1,7 +1,9 @@
 // Lupa (app) · ações no jogo, só no app. Liberadas pelo Brunox em 27/10/2026, que pediu também que passassem pela proteção
-// contra bots do jogo. Rodam SÓ quando o jogador pede: o botão "Entregar e seguir" do painel ou o Alt+L. O main autoriza a
-// aba por pouco tempo e cada clique ou tecla é uma entrada de verdade (sendInputEvent), no mesmo lugar em que a pessoa
-// clicaria, pelos botões do próprio jogo. Nada aqui roda sozinho nem em laço.
+// contra bots do jogo. Rodam quando o jogador pede (o botão "Entregar e seguir" do painel ou o Alt+L) ou, com as missões
+// automáticas ligadas na aba Ajustes (teste pedido pelo Brunox em 29/10/2026), quando o main vê a tarefa pronta e pede o
+// mesmo "Entregar e seguir". O main autoriza a aba por pouco tempo e cada clique ou tecla é uma entrada de verdade
+// (sendInputEvent), no mesmo lugar em que a pessoa clicaria, pelos botões do próprio jogo. Nada aqui roda em laço: cada
+// pedido é uma entrega.
 // Entra no preload do jogo depois do content.js (copiar-lupa.mjs): usa o ipcRenderer e o `chrome` do shim-jogo.js e o
 // OFERTA do oferta.js.
 (() => {
@@ -21,7 +23,11 @@
   }
 
   class Parou extends Error {}
-  let parar = false, rodando = false;
+  // a entrega automática não começa (sem nenhuma entrada no jogo) e o main olha de novo daqui a pouco; o `texto` vai pelo
+  // acao:fim para o main, que o põe no painel só quando muda (sem ele, o painel fica como estava)
+  class Espera extends Error { constructor(texto = '') { super(texto); this.texto = texto; } }
+  // `auto`: pedido pelas missões automáticas; `foco`: a janela do app estava em foco no Windows quando o main pediu
+  let parar = false, rodando = false, auto = false, foco = true;
   // espera cond() devolver algo, até `ms`; o Parar do painel interrompe no meio
   async function esperar(cond, ms, passo = 150) {
     const fim = Date.now() + ms;
@@ -98,7 +104,7 @@
   const zona = () => txt($('#hud-local'));
   const palavra = (w) => { const b = $(`#npc-palavras [data-palavra="${w}"]`); return visivel(b) ? b : null; };
   const ultimaFala = () => txt($$('#npc-conversa p.ele').at(-1));
-  const status = (quem, x) => chrome.storage.local.set({ ['acao:' + quem]: { ...x, em: Date.now() } }).catch(() => {});
+  const status = (quem, x) => chrome.storage.local.set({ ['acao:' + quem]: { ...x, auto, em: Date.now() } }).catch(() => {});
   const rastreioTarefa = () => { const b = $('#rastreio-tarefa'); return visivel(b) ? b : null; };
 
   // ---------- Entregar e seguir ----------
@@ -112,10 +118,18 @@
     // confere na tela agora, não na última leitura da Lupa (que demora até 5 s): apertar de novo logo depois de entregar
     // mandaria o personagem de volta para a Fonte à toa
     const t = $('#rastreio-tarefa');
+    // a leitura que fez o main pedir pode estar uns segundos atrasada: na entrega automática, sem tarefa pronta na tela é só esperar
+    if (auto && !(t && !t.hidden && t.classList.contains('pronta'))) throw new Espera();
     if (!t || t.hidden) throw new Error('Sem tarefa: pegue a primeira com o Capitão da Legião; daí em diante o botão entrega e pega as próximas.');
     if (!t.classList.contains('pronta')) {
       const p = txt($('small', t)).match(/^(\d+)\/(\d+)/);
       throw new Error(`A tarefa ainda não terminou${p ? ` (${p[1]}/${p[2]})` : ''}.`);
+    }
+    if (auto) {
+      // ninguém apertou nada: o que não dá para fazer agora nem começa (nenhuma entrada no jogo) e o main olha de novo em 30 s
+      if (document.visibilityState !== 'visible') throw new Espera('Esperando a janela da Lupa ficar à vista: coberta por outra, os cliques não chegam ao jogo.');
+      // com a coluna escondida vão as teclas B e M, que só chegam com a janela do app em foco no Windows
+      if (!foco && ((!mesma(zona(), 'Fonte') && !visivel($('#voltar-base'))) || !visivel($('#abrir-mapa')))) throw new Espera('Esperando a janela da Lupa ganhar o foco: com a coluna do jogo escondida, as teclas B e M só chegam assim. Mostre a coluna (Alt+L) para entregar sem foco.');
     }
 
     if (!mesma(zona(), 'Fonte')) {
@@ -184,21 +198,26 @@
     if (visivel(b)) await clicar(b);
   }
 
-  ipcRenderer.on('acao:iniciar', async (_e, { tipo } = {}) => {
+  ipcRenderer.on('acao:iniciar', async (_e, { tipo, auto: sozinho = false, foco: f = true } = {}) => {
     if (rodando) return;
-    rodando = true; parar = false;
+    rodando = true; parar = false; auto = !!sozinho; foco = !!f;
     const quem = nome();
+    let fim = 'erro', espera = '';
     try {
-      if (tipo === 'coluna') await alternarColuna();
+      if (tipo === 'coluna') { await alternarColuna(); fim = 'ok'; }
       else if (tipo === 'tarefa' && quem) {
-        status(quem, { tipo, estado: 'rodando', texto: 'Começando…' });
+        // a entrega automática só escreve no painel depois de conferir a tela (senão cada olhada à toa apagaria a última notícia)
+        if (!auto) status(quem, { tipo, estado: 'rodando', texto: 'Começando…' });
         status(quem, { tipo, estado: 'ok', texto: await entregarESeguir(quem) });
+        fim = 'ok';
       }
     } catch (e) {
-      if (tipo === 'tarefa' && quem) status(quem, e instanceof Parou ? { tipo, estado: 'parado', texto: 'Parado por você.' } : { tipo, estado: 'erro', texto: String(e?.message || e) });
+      fim = e instanceof Parou ? 'parado' : e instanceof Espera ? 'espera' : 'erro';
+      if (e instanceof Espera) espera = e.texto;
+      else if (tipo === 'tarefa' && quem) status(quem, e instanceof Parou ? { tipo, estado: 'parado', texto: 'Parado por você.' } : { tipo, estado: 'erro', texto: String(e?.message || e) });
     } finally {
-      rodando = false; parar = false; avisar = () => null;
-      ipcRenderer.invoke('acao:fim').catch(() => {});
+      rodando = false; parar = false; auto = false; avisar = () => null;
+      ipcRenderer.invoke('acao:fim', { estado: fim, texto: espera }).catch(() => {});
     }
   });
   ipcRenderer.on('acao:parar', () => { if (rodando) parar = true; });
