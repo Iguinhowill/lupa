@@ -542,7 +542,7 @@ const emAndamento = () => !!acaoAtual && Date.now() <= acaoAtual.ate;
 // senão ficaria presa os 4 min recusando o botão das duas contas
 function pedirAcao(a, tipo, auto = false) {
   const wc = a?.view?.webContents;
-  if (!wc || a.tipo !== 'jogo' || emAndamento() || wc.isLoading() || wc.isCrashed()) return false;
+  if (!wc || a.tipo !== 'jogo' || emAndamento() || wc.isLoadingMainFrame() || wc.isCrashed()) return false;
   const aut = { aba: a.id, ...Acoes.autorizacao(tipo), devolver: null, auto, comecou: false };
   acaoAtual = aut;
   wc.send('acao:iniciar', { tipo, auto, foco: !!janela?.isFocused() });
@@ -592,10 +592,14 @@ function abaAutorizada(wc) {
 // Com a opção ligada (config.autoTarefa, aba Ajustes do painel), o app pede sozinho o mesmo "Entregar e seguir" do botão
 // quando a tarefa de uma conta fica pronta. Só na conta que está na tela (aba ativa ou lado a lado, janela aberta e não
 // minimizada): o app não troca de aba nem traz a janela para a frente sozinho, e com a página escondida os cliques não
-// chegam. Espera 10 s sem a pessoa digitar ou clicar no app e não tenta com a mochila cheia. Depois de uma falha, espera 5 min; com 3
-// falhas na mesma tarefa, ou com o Parar, para até aparecer uma tarefa nova ou a pessoa apertar o botão (acoes.js, AUTO).
+// chegam. Espera 10 s sem a pessoa digitar ou clicar no app e não tenta com a mochila cheia. Depois de uma falha, espera
+// 5 min; com 3 falhas na mesma tarefa, ou com o Parar, para até aparecer uma tarefa nova ou a pessoa apertar o botão
+// (acoes.js, AUTO).
 const autoTentativas = new Map();      // nome → { falhas, proxima }: zera quando a leitura mostra uma tarefa em andamento
 let ultimoUso = 0, autoAntes = false;      // ultimoUso: a última tecla ou clique da pessoa no app (ver ligarAtalhos)
+// as entradas que o próprio app manda (o input-event dispara dentro do sendInputEvent): essas não contam como uso
+let mandando = false;
+function mandar(wc, ev) { mandando = true; try { wc.sendInputEvent(ev); } finally { mandando = false; } }
 const autoLigado = () => !!armazem.get('config').config?.autoTarefa;
 // a espera das missões automáticas no painel (estado 'espera'); a mesma frase não é regravada a cada olhada
 function avisarAuto(nome, texto) {
@@ -610,7 +614,7 @@ function vigiarAuto() {
     const nome = a.tipo === 'jogo' && a.view && pref.nomes[a.id], est = nome && estados.get(nome);
     if (!est) continue;
     if (est.tarefa && !est.tarefa.pronta) autoTentativas.delete(nome);      // tarefa nova em andamento: as falhas zeram
-    if (a.view.webContents.isLoading() || a.view.webContents.isCrashed()) continue;      // o preload ainda não ouve o pedido
+    if (a.view.webContents.isLoadingMainFrame() || a.view.webContents.isCrashed()) continue;      // o preload ainda não ouve o pedido
     const motivo = Acoes.autoMotivo({ est, reg: autoTentativas.get(nome), agora, aVista: modo() === a.id || modo() === 'lado', ultimoUso });
     if (motivo === 'mochila') avisarAuto(nome, 'Esperando espaço na mochila: cheia, o Capitão não tem onde pôr o item da tarefa.');
     if (!motivo && pedirAcao(a, 'tarefa', true)) return;
@@ -630,16 +634,15 @@ function mudouAuto() {
 // só as teclas do atalhos.js são do app: o preventDefault vale só para elas, o resto segue para a página. Fora as ações
 // acima, o app não injeta tecla, clique ou comando no jogo
 function ligarAtalhos(wc) {
-  // as missões automáticas esperam a pessoa parar de digitar e de clicar. As entradas que o app manda na view da ação em
-  // andamento não contam; o que a pessoa faz em outra view (a outra metade, o painel) conta
+  // as missões automáticas esperam a pessoa parar de digitar e de clicar, em qualquer view; as entradas que o próprio app
+  // manda não contam
   wc.on('input-event', (_e, input) => {
-    if (!['mouseDown', 'rawKeyDown', 'keyDown'].includes(input.type)) return;
-    if (emAndamento() && abaDe(wc)?.id === acaoAtual.aba) return;
-    ultimoUso = Date.now();
+    if (!mandando && ['mouseDown', 'rawKeyDown', 'keyDown'].includes(input.type)) ultimoUso = Date.now();
   });
   wc.on('before-input-event', (e, input) => {
     const acao = atalhoDe(input);
     if (!acao) return;
+    if (input.type === 'keyDown') ultimoUso = Date.now();      // o atalho não chega à página (nem ao input-event), mas é uso
     e.preventDefault();
     if (input.isAutoRepeat && !acao.startsWith('zoom')) return;
     executarAtalho(acao);
@@ -744,7 +747,7 @@ function ligarIpc() {
     // o foco vai para o jogo, como num clique de verdade: com o foco no painel (onde está o botão "Entregar e seguir"), o
     // Chromium descartava o apertar e o soltar e só o mover chegava. Mover, apertar e soltar com um intervalo, como a mão
     await tomarFoco(wc);
-    for (const ev of Acoes.clique(pt)) { if (wc.isDestroyed()) return false; wc.sendInputEvent(ev); await new Promise((ok) => setTimeout(ok, Acoes.INTERVALO)); }
+    for (const ev of Acoes.clique(pt)) { if (wc.isDestroyed()) return false; mandar(wc, ev); await new Promise((ok) => setTimeout(ok, Acoes.INTERVALO)); }
     return true;
   });
   ipcMain.handle('acao:tecla', async (e, p) => {
@@ -752,7 +755,7 @@ function ligarIpc() {
     if (!v || !evs || !Acoes.gastar(acaoAtual)) return false;
     const wc = v.a.view.webContents;
     await tomarFoco(wc);      // a tecla vai para a view em foco
-    for (const ev of evs) { if (wc.isDestroyed()) return false; wc.sendInputEvent(ev); await new Promise((ok) => setTimeout(ok, Acoes.INTERVALO)); }
+    for (const ev of evs) { if (wc.isDestroyed()) return false; mandar(wc, ev); await new Promise((ok) => setTimeout(ok, Acoes.INTERVALO)); }
     return true;
   });
   // a ação acabou; `estado` ('ok', 'erro', 'parado' ou 'espera') conta para as missões automáticas, e o `texto` de uma

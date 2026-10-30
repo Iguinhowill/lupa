@@ -170,8 +170,8 @@ com a mesma autorização, as mesmas entradas de verdade e a mesma regra de uma 
 
 - Só com a tarefa pronta numa leitura de até 30 s, na conta que está na tela (aba ativa ou lado a lado) e com a janela aberta
   e não minimizada. O app não troca de aba nem traz a janela para a frente: para as duas contas, o Lado a lado.
-- Espera 10 s sem a pessoa digitar ou clicar no app (evento `input-event` de todas as views, menos as entradas que o app
-  manda na view da ação em andamento): o foco vai para o jogo da ação, um B ou M digitado no chat no meio viraria atalho do
+- Espera 10 s sem a pessoa digitar ou clicar no app (evento `input-event` de todas as views, inclusive a da ação, e os
+  atalhos do app; as entradas que o próprio app manda, marcadas em volta de cada `sendInputEvent`, não contam): o foco vai para o jogo da ação, um B ou M digitado no chat no meio viraria atalho do
   jogo, e o personagem sairia do que ela está fazendo. Não tenta com a mochila cheia (o Capitão recusa a entrega): o painel
   diz que espera espaço. Não pede a uma aba carregando ou caída (o preload ainda não ouve o pedido).
 - O `acao-jogo.js` confere a tela antes da primeira entrada e, se não dá, nem começa (`Espera`, resultado `espera`, nova
@@ -188,7 +188,7 @@ com a mesma autorização, as mesmas entradas de verdade e a mesma regra de uma 
   O rodapé do painel e da Central diz que as missões automáticas estão ligadas.
 
 Todo pedido (do botão, do Alt+L ou automático) espera a página confirmar que o recebeu (`acao:comecou`); sem isso em 5 s
-(página carregando, caída), a autorização some: senão ficaria presa os 4 min, recusando o botão das duas contas.
+(página principal carregando, caída), a autorização some: senão ficaria presa os 4 min, recusando o botão das duas contas.
 
 O main só manda a entrada se a aba que pede está autorizada, ainda no prazo e com entradas, e à vista (janela aberta, não
 minimizada, a view no layout). O clique vem em px CSS e vira px da view pelo zoom do jogo; ponto fora da view é recusado.
